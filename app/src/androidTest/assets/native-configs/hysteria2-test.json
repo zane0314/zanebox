@@ -1,0 +1,68 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-11",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "hop_interval": "10s",
+      "server": "example.org",
+      "password": "password",
+      "down_mbps": 100,
+      "obfs": {
+        "password": "obfs",
+        "type": "salamander"
+      },
+      "up_mbps": 50,
+      "server_ports": [
+        "443:443",
+        "500:600"
+      ],
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h3"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-11",
+      "type": "hysteria2"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-11",
+      "outbounds": ["node-11"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-11",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

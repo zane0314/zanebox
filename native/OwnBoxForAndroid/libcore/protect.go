@@ -1,0 +1,95 @@
+package libcore
+
+// libneko/protect_server 的自实现替代：
+// unix socket 服务端，接收主进程通过 SCM_RIGHTS 发来的 fd，
+// 在 :bg 进程中回调 VpnService.protect。
+// 协议与 sendFdToProtect（nb4a.go）对应：收 fd → 回调 → 回写 1 字节 ack。
+
+import (
+	"io"
+	"log"
+	"net"
+	"os"
+	"time"
+
+	"golang.org/x/sys/unix"
+)
+
+type protectServer struct {
+	listener *net.UnixListener
+	done     chan struct{}
+}
+
+func (p *protectServer) Close() error {
+	err := p.listener.Close()
+	<-p.done
+	return err
+}
+
+// serveProtect 监听 unix socket path（位于 no_backup 目录下）。
+// listen 失败时返回 nil（调用方按不可 protect 降级处理）。
+func serveProtect(path string, callback func(fd int) error) io.Closer {
+	_ = os.Remove(path)
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		log.Println("serveProtect listen failed:", err)
+		return nil
+	}
+	_ = os.Chmod(path, 0600)
+	server := &protectServer{listener: listener, done: make(chan struct{})}
+	go server.loop(callback)
+	return server
+}
+
+func (p *protectServer) loop(callback func(fd int) error) {
+	defer close(p.done)
+	for {
+		conn, err := p.listener.AcceptUnix()
+		if err != nil {
+			return // listener 已关闭
+		}
+		// 并发处理：串行时 JNI protect 回调逐一排队，主进程
+		// sendFdToProtect 的 100ms 超时容易失败 → fd 未 protect，
+		// 测速流量回环进 tun（真机日志可见 tun-in 收到测试包）。
+		go handleProtectConn(conn, callback)
+	}
+}
+
+func handleProtectConn(conn *net.UnixConn, callback func(fd int) error) {
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	// 并发 goroutine 中兜底：单次 protect 失败（如 VPN 关闭中 JNI 回调异常）
+	// 不应击垮整个 :bg 进程。
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("protect: handler panic:", r)
+		}
+	}()
+
+	buf := make([]byte, 1)
+	oob := make([]byte, unix.CmsgSpace(4))
+	_, oobn, _, _, err := conn.ReadMsgUnix(buf, oob)
+	if err != nil {
+		log.Println("protect: read msg failed:", err)
+		return
+	}
+	messages, err := unix.ParseSocketControlMessage(oob[:oobn])
+	if err != nil || len(messages) == 0 {
+		log.Println("protect: parse control message failed:", err)
+		return
+	}
+	fds, err := unix.ParseUnixRights(&messages[0])
+	if err != nil || len(fds) == 0 {
+		log.Println("protect: parse unix rights failed:", err)
+		return
+	}
+
+	for _, fd := range fds {
+		defer unix.Close(fd)
+	}
+	ack := byte(1)
+	if err := callback(fds[0]); err != nil {
+		ack = 0
+	}
+	_, _ = conn.Write([]byte{ack})
+}

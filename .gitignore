@@ -1,0 +1,27 @@
+# Build outputs (keep the packaged debug APK via force-add)
+build/
+.build/
+app/build/
+tests/probe/build/
+.gradle/
+
+# Local SDK paths
+local.properties
+
+# Large toolchains
+.toolchains/
+
+# Internal handoff / acceptance evidence
+.ai/
+reports/
+
+# Upstream test fixtures containing private-key material (kept local only)
+native/sing-box/test/reality_test.go
+native/sing-box/test/brutal_test.go
+native/sing-box/test/ktls_test.go
+native/sing-box/test/config/wireguard.conf
+
+# IDE
+.idea/
+*.iml
+.DS_Store

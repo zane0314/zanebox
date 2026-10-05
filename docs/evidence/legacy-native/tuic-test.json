@@ -1,0 +1,63 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-12",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "password": "password",
+      "congestion_control": "bbr",
+      "zero_rtt_handshake": true,
+      "udp_relay_mode": "native",
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h3"],
+        "insecure": false,
+        "disable_sni": false,
+        "enabled": true
+      },
+      "tag": "node-12",
+      "type": "tuic",
+      "uuid": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-12",
+      "outbounds": ["node-12"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-12",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

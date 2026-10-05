@@ -1,0 +1,134 @@
+package libcore
+
+import (
+	"fmt"
+	"libcore/device"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"strings"
+	_ "unsafe"
+
+	"log"
+
+	"github.com/sagernet/sing-box/option"
+	"golang.org/x/sys/unix"
+)
+
+//go:linkname resourcePaths github.com/sagernet/sing-box/constant.resourcePaths
+var (
+	resourcePaths     []string
+	protectSocketPath string
+)
+
+func GetProtectSocketPath() string {
+	if protectSocketPath != "" {
+		return protectSocketPath
+	}
+	return "protect_path"
+}
+
+func NekoLogPrintln(s string) {
+	log.Println(s)
+}
+
+func NekoLogClear() {
+	platformLog.Truncate()
+}
+
+func ForceGc() {
+	// FreeOSMemory already performs a GC before returning unused pages.
+	go debug.FreeOSMemory()
+}
+
+func InitCore(process, cachePath, internalAssets, externalAssets string,
+	maxLogSizeKb int32, logEnable bool,
+	if1 NB4AInterface, if2 BoxPlatformInterface, if3 LocalDNSTransport,
+) {
+	defer device.DeferPanicToError("InitCore", func(err error) { log.Println(err) })
+	isBgProcess = strings.HasSuffix(process, ":bg")
+
+	// Tune Go runtime memory footprint for mobile environments:
+	// - Set GC percentage to 50 (default 100) to collect garbage earlier and prevent heap explosion.
+	// - Set soft memory limit to 128 MiB so the allocator proactively returns unused spans to OS.
+	debug.SetGCPercent(50)
+	debug.SetMemoryLimit(128 * 1024 * 1024)
+
+	intfNB4A = if1
+	intfBox = if2
+	useProcfs = intfBox.UseProcFS()
+	gLocalDNSTransport = newPlatformTransport(if3, "", option.LocalDNSServerOptions{})
+
+	// Working dir
+	tmp := filepath.Join(cachePath, "../no_backup")
+	os.MkdirAll(tmp, 0755)
+	os.Chdir(tmp)
+	protectSocketPath = filepath.Join(tmp, "protect_path")
+
+	// sing-box fs
+	resourcePaths = append(resourcePaths, externalAssets)
+	externalAssetsPath = externalAssets
+	internalAssetsPath = internalAssets
+
+	// Set up log
+	if maxLogSizeKb < 50 {
+		maxLogSizeKb = 50
+	}
+	setupLog(int(maxLogSizeKb)*1024, filepath.Join(cachePath, "neko.log"), isBgProcess, !logEnable)
+
+	// Set up some component
+	go func() {
+		defer device.DeferPanicToError("InitCore-go", func(err error) { log.Println(err) })
+		device.GoDebug(process)
+
+		// certs
+		pem, err := os.ReadFile(externalAssetsPath + "ca.pem")
+		if err == nil {
+			updateRootCACerts(pem)
+		}
+
+		// bg
+		if isBgProcess {
+			extractAssets()
+		}
+	}()
+}
+
+func sendFdToProtect(fd int, path string) error {
+	socketFd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	if err != nil {
+		return fmt.Errorf("failed to create unix socket: %w", err)
+	}
+	defer unix.Close(socketFd)
+
+	var timeout unix.Timeval
+	// 3 attempts + 25ms backoff stay below the 2s protect budget.
+	timeout.Sec = 0
+	timeout.Usec = 600000
+
+	_ = unix.SetsockoptTimeval(socketFd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &timeout)
+	_ = unix.SetsockoptTimeval(socketFd, unix.SOL_SOCKET, unix.SO_SNDTIMEO, &timeout)
+
+	err = unix.Connect(socketFd, &unix.SockaddrUnix{Name: path})
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	err = unix.Sendmsg(socketFd, nil, unix.UnixRights(fd), nil, 0)
+	if err != nil {
+		return fmt.Errorf("failed to send: %w", err)
+	}
+
+	dummy := []byte{1}
+	n, err := unix.Read(socketFd, dummy)
+	if err != nil {
+		return fmt.Errorf("failed to receive: %w", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("socket closed unexpectedly")
+	}
+	if dummy[0] != 1 {
+		return fmt.Errorf("VPN socket protection rejected")
+	}
+	return nil
+}

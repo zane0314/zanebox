@@ -1,0 +1,57 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-18",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "reuse": true,
+      "obfs_mode": "http",
+      "obfs_host": "host.example",
+      "psk": "fixture-psk",
+      "server_port": 443,
+      "tag": "node-18",
+      "type": "snell",
+      "version": 4,
+      "network": "tcp"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-18",
+      "outbounds": ["node-18"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-18",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

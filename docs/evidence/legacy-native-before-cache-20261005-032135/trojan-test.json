@@ -1,0 +1,68 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-23",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-23",
+      "type": "trojan"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-23",
+      "outbounds": ["node-23"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-23",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

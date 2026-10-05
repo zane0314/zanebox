@@ -1,0 +1,9 @@
+2026-10-05T02:20:31.983669+00:00
+34 configs regenerated from production import + ConfigBuilder; no DNS rule strategy; HY2 mixed singleton/range uses colon syntax.
+app/src/main/java/com/zane/zanebox/backup/BackupJson.kt sha256=443bbca8dc7c9175440addbd169369017c0c1ec8b3e1a3a4ec842b0d90e2b770
+app/src/main/java/com/zane/zanebox/backup/BackupManager.kt sha256=d3e7edf04175518bbcd0579219f628181c25da6806f620b2f0edfda1d84beccc
+app/src/main/java/com/zane/zanebox/backup/LegacyBackup.kt sha256=6b7120b2cbc5920f5ca518ac5bab12fd7b5663bae45fda24ca7ff69dbfc64a53
+app/src/main/java/com/zane/zanebox/backup/LegacyNodeProtocols.kt sha256=e3348611c62d8fa51a9fabf66ac7a0f3ab984d44e3eb46c7df96ebc1a7d9475b
+app/src/main/java/com/zane/zanebox/backup/WebDavClient.kt sha256=577dfc8dbe496590ab3bba470b6d83f0068407c7cb8fdfb4ed74b20eacaf239e
+app/src/main/java/com/zane/zanebox/config/ConfigBuilder.kt sha256=1df0b5c5d63c417c6c023a638da7193cbedc6d919f14733868f2fd913acf2eed
+app/src/main/java/com/zane/zanebox/subscription/SubscriptionParser.kt sha256=57b00f7b367577c4599e719d7b5e138ec695f3f7cfc8f2bbf35d0f80aa2ff19f

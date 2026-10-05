@@ -1,0 +1,76 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-26",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "transport": {
+        "mode": "auto",
+        "path": "/xhttp",
+        "host": "host.example",
+        "x_padding_bytes": "100-200",
+        "no_grpc_header": true,
+        "type": "xhttp"
+      },
+      "tag": "node-26",
+      "type": "vless",
+      "uuid": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-26",
+      "outbounds": ["node-26"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-26",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

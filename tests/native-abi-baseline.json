@@ -1,0 +1,2445 @@
+[
+  {
+    "class": "libcore.BoxInstance",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "__New",
+    "descriptor": "()I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "close",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "preStart",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "queryStats",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "selectOutbound",
+    "descriptor": "(Ljava/lang/String;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "setAsMain",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "setV2rayStats",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "sleep",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "start",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxInstance",
+    "name": "wake",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "autoDetectInterfaceControl",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "findConnectionOwner",
+    "descriptor": "(ILjava/lang/String;ILjava/lang/String;I)I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "openTun",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "packageNameByUid",
+    "descriptor": "(I)Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "uidByPackageName",
+    "descriptor": "(Ljava/lang/String;)I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "useProcFS",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.BoxPlatformInterface",
+    "name": "wifiState",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "__New",
+    "descriptor": "()I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "errnoCode",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "errorCode",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "onCancel",
+    "descriptor": "(Llibcore/Func;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "rawSuccess",
+    "descriptor": "([B)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "success",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.ExchangeContext",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Func",
+    "name": "invoke",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "close",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "keepAlive",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "modernTLS",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "newRequest",
+    "descriptor": "()Llibcore/HTTPRequest;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "pinnedSHA256",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "pinnedTLS12",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "restrictedTLS",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "tryBoxOutbound",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "tryH3Direct",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPClient",
+    "name": "trySocks5",
+    "descriptor": "(ILjava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "allowInsecure",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "execute",
+    "descriptor": "()Llibcore/HTTPResponse;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "setContent",
+    "descriptor": "([B)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "setContentString",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "setHeader",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "setMethod",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "setURL",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPRequest",
+    "name": "setUserAgent",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPResponse",
+    "name": "getContent",
+    "descriptor": "()[B",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPResponse",
+    "name": "getContentString",
+    "descriptor": "()Llibcore/StringBox;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPResponse",
+    "name": "getHeader",
+    "descriptor": "(Ljava/lang/String;)Llibcore/StringBox;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.HTTPResponse",
+    "name": "writeTo",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.InterfaceUpdateListener",
+    "name": "updateDefaultInterface",
+    "descriptor": "(Ljava/lang/String;I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "autoDetectInterfaceControl",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "findConnectionOwner",
+    "descriptor": "(ILjava/lang/String;ILjava/lang/String;I)I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "openTun",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "packageNameByUid",
+    "descriptor": "(I)Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "uidByPackageName",
+    "descriptor": "(Ljava/lang/String;)I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "useProcFS",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyBoxPlatformInterface",
+    "name": "wifiState",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyFunc",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyFunc",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyFunc",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyFunc",
+    "name": "invoke",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "close",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "keepAlive",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "modernTLS",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "newRequest",
+    "descriptor": "()Llibcore/HTTPRequest;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "pinnedSHA256",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "pinnedTLS12",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "restrictedTLS",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "tryBoxOutbound",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "tryH3Direct",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPClient",
+    "name": "trySocks5",
+    "descriptor": "(ILjava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "allowInsecure",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "execute",
+    "descriptor": "()Llibcore/HTTPResponse;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "setContent",
+    "descriptor": "([B)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "setContentString",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "setHeader",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "setMethod",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "setURL",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPRequest",
+    "name": "setUserAgent",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "getContent",
+    "descriptor": "()[B",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "getContentString",
+    "descriptor": "()Llibcore/StringBox;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "getHeader",
+    "descriptor": "(Ljava/lang/String;)Llibcore/StringBox;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyHTTPResponse",
+    "name": "writeTo",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyInterfaceUpdateListener",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyInterfaceUpdateListener",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyInterfaceUpdateListener",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyInterfaceUpdateListener",
+    "name": "updateDefaultInterface",
+    "descriptor": "(Ljava/lang/String;I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "exchange",
+    "descriptor": "(Llibcore/ExchangeContext;[B)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "lookup",
+    "descriptor": "(Llibcore/ExchangeContext;Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "networkHandle",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyLocalDNSTransport",
+    "name": "raw",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNB4AInterface",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyNB4AInterface",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyNB4AInterface",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNB4AInterface",
+    "name": "selector_OnProxySelected",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNB4AInterface",
+    "name": "useOfficialAssets",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNetworkInterfaceIterator",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyNetworkInterfaceIterator",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyNetworkInterfaceIterator",
+    "name": "hasNext",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNetworkInterfaceIterator",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNetworkInterfaceIterator",
+    "name": "length",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyNetworkInterfaceIterator",
+    "name": "next",
+    "descriptor": "()Llibcore/NetworkInterface;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyStringIterator",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyStringIterator",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore$proxyStringIterator",
+    "name": "hasNext",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyStringIterator",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyStringIterator",
+    "name": "length",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore$proxyStringIterator",
+    "name": "next",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "DefaultSimpleDownloadURL",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "DefaultSpeedTestConnections",
+    "descriptor": "J",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "DefaultSpeedTestServerListURL",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "DefaultSpeedTestTimeoutMs",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "FallbackSpeedTestServerListURL",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "InterfaceTypeCellular",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "InterfaceTypeEthernet",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "InterfaceTypeOther",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "InterfaceTypeWIFI",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestModeDownload",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestModeDownloadUpload",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestModeSimpleDownload",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestModeUpload",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageCancelled",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageComplete",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageDiscovery",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageDownload",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageError",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageLatency",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStagePending",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "SpeedTestStageUpload",
+    "descriptor": "Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "_init",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "forceGc",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "getProtectSocketPath",
+    "descriptor": "()Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "initCore",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZLlibcore/NB4AInterface;Llibcore/BoxPlatformInterface;Llibcore/LocalDNSTransport;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "nekoLogClear",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "nekoLogPrintln",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "newHttpClient",
+    "descriptor": "()Llibcore/HTTPClient;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "newSingBoxInstance",
+    "descriptor": "(Ljava/lang/String;Llibcore/LocalDNSTransport;)Llibcore/BoxInstance;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "newSpeedTestSession",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;Llibcore/LocalDNSTransport;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Llibcore/SpeedTestSession;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "newTestSingBoxInstance",
+    "descriptor": "(Ljava/lang/String;Llibcore/LocalDNSTransport;)Llibcore/BoxInstance;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "resetAllConnections",
+    "descriptor": "(Z)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "setNetworkChangeResetConnections",
+    "descriptor": "(Z)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "sha1",
+    "descriptor": "([B)[B",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "sha256Hex",
+    "descriptor": "([B)Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "stunTest",
+    "descriptor": "(Ljava/lang/String;)Llibcore/StunResult;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "touch",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "unxz",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "unzip",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "urlTest",
+    "descriptor": "(Llibcore/BoxInstance;Ljava/lang/String;I)I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "urlTestFull",
+    "descriptor": "(Llibcore/BoxInstance;Ljava/lang/String;I)I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.Libcore",
+    "name": "versionBox",
+    "descriptor": "()Ljava/lang/String;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.LocalDNSTransport",
+    "name": "exchange",
+    "descriptor": "(Llibcore/ExchangeContext;[B)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.LocalDNSTransport",
+    "name": "lookup",
+    "descriptor": "(Llibcore/ExchangeContext;Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.LocalDNSTransport",
+    "name": "networkHandle",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.LocalDNSTransport",
+    "name": "raw",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NB4AInterface",
+    "name": "selector_OnProxySelected",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NB4AInterface",
+    "name": "useOfficialAssets",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "__New",
+    "descriptor": "()I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getAddresses",
+    "descriptor": "()Llibcore/StringIterator;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getDNSServer",
+    "descriptor": "()Llibcore/StringIterator;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getFlags",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getIndex",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getMTU",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getMetered",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getName",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "getType",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setAddresses",
+    "descriptor": "(Llibcore/StringIterator;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setDNSServer",
+    "descriptor": "(Llibcore/StringIterator;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setFlags",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setIndex",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setMTU",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setMetered",
+    "descriptor": "(Z)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setName",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "setType",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterface",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterfaceIterator",
+    "name": "hasNext",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterfaceIterator",
+    "name": "length",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.NetworkInterfaceIterator",
+    "name": "next",
+    "descriptor": "()Llibcore/NetworkInterface;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "__New",
+    "descriptor": "()I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getCancelled",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getDone",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getDownloadBitsPerSecond",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getDownloadBytes",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getError",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getLatencyMs",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getMode",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getProfileKey",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getServerCountry",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getServerID",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getServerName",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getServerSponsor",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getStage",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getUploadBitsPerSecond",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "getUploadBytes",
+    "descriptor": "()J",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setCancelled",
+    "descriptor": "(Z)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setDone",
+    "descriptor": "(Z)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setDownloadBitsPerSecond",
+    "descriptor": "(J)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setDownloadBytes",
+    "descriptor": "(J)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setError",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setLatencyMs",
+    "descriptor": "(J)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setMode",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setProfileKey",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setServerCountry",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setServerID",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setServerName",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setServerSponsor",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setStage",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setUploadBitsPerSecond",
+    "descriptor": "(J)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "setUploadBytes",
+    "descriptor": "(J)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestResult",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "<init>",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;Llibcore/LocalDNSTransport;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "__NewSpeedTestSession",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;Llibcore/LocalDNSTransport;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "cancel",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "close",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "getResult",
+    "descriptor": "()Llibcore/SpeedTestResult;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "start",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.SpeedTestSession",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "__New",
+    "descriptor": "()I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "getValue",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "setValue",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringBox",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringIterator",
+    "name": "hasNext",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringIterator",
+    "name": "length",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StringIterator",
+    "name": "next",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "__New",
+    "descriptor": "()I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "equals",
+    "descriptor": "(Ljava/lang/Object;)Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "getSuccess",
+    "descriptor": "()Z",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "getText",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "hashCode",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "setSuccess",
+    "descriptor": "(Z)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "setText",
+    "descriptor": "(Ljava/lang/String;)V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "libcore.StunResult",
+    "name": "toString",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq$GoObject",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq$GoRef",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRef",
+    "name": "<init>",
+    "descriptor": "(ILgo/Seq$GoObject;Lgo/Seq$GoRefQueue;)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRefQueue$1",
+    "name": "this$0",
+    "descriptor": "Lgo/Seq$GoRefQueue;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRefQueue$1",
+    "name": "<init>",
+    "descriptor": "(Lgo/Seq$GoRefQueue;)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRefQueue$1",
+    "name": "run",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq$GoRefQueue",
+    "name": "refs",
+    "descriptor": "Ljava/util/Collection;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRefQueue",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRefQueue",
+    "name": "access$200",
+    "descriptor": "(Lgo/Seq$GoRefQueue;)Ljava/util/Collection;",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$GoRefQueue",
+    "name": "track",
+    "descriptor": "(ILgo/Seq$GoObject;)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "obj",
+    "descriptor": "Ljava/lang/Object;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "refcnt",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "<init>",
+    "descriptor": "(ILjava/lang/Object;)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "access$100",
+    "descriptor": "(Lgo/Seq$Ref;)I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "access$110",
+    "descriptor": "(Lgo/Seq$Ref;)I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$Ref",
+    "name": "inc",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "keys",
+    "descriptor": "[I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "live",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "next",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "objs",
+    "descriptor": "[Lgo/Seq$Ref;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "grow",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "roundPow2",
+    "descriptor": "(I)I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "get",
+    "descriptor": "(I)Lgo/Seq$Ref;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "put",
+    "descriptor": "(ILgo/Seq$Ref;)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefMap",
+    "name": "remove",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "REF_OFFSET",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "javaObjs",
+    "descriptor": "Lgo/Seq$RefMap;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "javaRefs",
+    "descriptor": "Ljava/util/IdentityHashMap;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "next",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "dec",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "get",
+    "descriptor": "(I)Lgo/Seq$Ref;",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "inc",
+    "descriptor": "(Ljava/lang/Object;)I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq$RefTracker",
+    "name": "incRefnum",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "NULL_REFNUM",
+    "descriptor": "I",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "goRefQueue",
+    "descriptor": "Lgo/Seq$GoRefQueue;",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "log",
+    "descriptor": "Ljava/util/logging/Logger;",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "nullRef",
+    "descriptor": "Lgo/Seq$Ref;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "tracker",
+    "descriptor": "Lgo/Seq$RefTracker;",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "access$000",
+    "descriptor": "()Ljava/util/logging/Logger;",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "decRef",
+    "descriptor": "(I)V",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "destroyRef",
+    "descriptor": "(I)V",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "getRef",
+    "descriptor": "(I)Lgo/Seq$Ref;",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "incGoObjectRef",
+    "descriptor": "(Lgo/Seq$GoObject;)I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "incGoRef",
+    "descriptor": "(ILgo/Seq$GoObject;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "incRef",
+    "descriptor": "(Ljava/lang/Object;)I",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "incRefnum",
+    "descriptor": "(I)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "init",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "setContext",
+    "descriptor": "(Landroid/content/Context;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "setContext",
+    "descriptor": "(Ljava/lang/Object;)V",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Seq",
+    "name": "touch",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Seq",
+    "name": "trackGoRef",
+    "descriptor": "(ILgo/Seq$GoObject;)V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Universe$proxyerror",
+    "name": "refnum",
+    "descriptor": "I",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Universe$proxyerror",
+    "name": "<init>",
+    "descriptor": "(I)V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Universe$proxyerror",
+    "name": "error",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Universe$proxyerror",
+    "name": "getMessage",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Universe$proxyerror",
+    "name": "incRefnum",
+    "descriptor": "()I",
+    "static": false,
+    "visibility": "public"
+  },
+  {
+    "class": "go.Universe",
+    "name": "<init>",
+    "descriptor": "()V",
+    "static": false,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Universe",
+    "name": "_init",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "other"
+  },
+  {
+    "class": "go.Universe",
+    "name": "touch",
+    "descriptor": "()V",
+    "static": true,
+    "visibility": "public"
+  },
+  {
+    "class": "go.error",
+    "name": "error",
+    "descriptor": "()Ljava/lang/String;",
+    "static": false,
+    "visibility": "public"
+  }
+]

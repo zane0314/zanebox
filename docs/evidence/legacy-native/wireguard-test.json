@@ -1,0 +1,66 @@
+{
+  "endpoints": [{
+    "address": [
+      "10.0.0.2/32",
+      "fd00::2/128"
+    ],
+    "peers": [{
+      "public_key": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "pre_shared_key": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+      "address": "example.org",
+      "allowed_ips": [
+        "0.0.0.0/0",
+        "::/0"
+      ],
+      "port": 443,
+      "reserved": "AQID"
+    }],
+    "private_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "tag": "node-14",
+    "type": "wireguard",
+    "mtu": 1420
+  }],
+  "route": {
+    "find_process": true,
+    "final": "node-14",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-14",
+      "outbounds": ["node-14"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-14",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

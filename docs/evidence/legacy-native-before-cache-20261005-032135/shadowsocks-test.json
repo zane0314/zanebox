@@ -1,0 +1,63 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-25",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "method": "aes-128-gcm",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tag": "node-25",
+      "type": "shadowsocks"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-25",
+      "outbounds": ["node-25"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-25",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

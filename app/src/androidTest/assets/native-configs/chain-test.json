@@ -1,0 +1,100 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-15",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "detour": "node-15-chain-1",
+      "server_port": 443,
+      "tag": "node-15",
+      "type": "socks",
+      "version": "5",
+      "username": "fixture-user"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "method": "aes-128-gcm",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tag": "node-15-chain-1",
+      "type": "shadowsocks"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "server_port": 443,
+      "tag": "node-24",
+      "type": "socks",
+      "version": "5",
+      "username": "fixture-user"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "method": "aes-128-gcm",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tag": "node-25",
+      "type": "shadowsocks"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-15",
+      "outbounds": ["node-15"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-15",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

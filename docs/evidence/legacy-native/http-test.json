@@ -1,0 +1,59 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-20",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-20",
+      "type": "http",
+      "username": "fixture-user"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-20",
+      "outbounds": ["node-20"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-20",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

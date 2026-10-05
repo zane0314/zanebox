@@ -1,0 +1,45 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Task :app:verifyNative
+[AnyBox native] fixed Go 1.26.8, NDK 25.0.8775105, gomobile/gobind v0.0.0-20250830135019-17d6af34f6bd checked
+[AnyBox native] native sources unchanged; reusing /Users/zane/Documents/ChatGPT/zane 代理软件/work/zanebox1.0.0/native/OwnBoxForAndroid/libcore/.build/libcore.aar
+{"checked_members": 349, "missing_or_changed": []}
+[AnyBox native] native artifact verified: /Users/zane/Documents/ChatGPT/zane 代理软件/work/zanebox1.0.0/native/OwnBoxForAndroid/libcore/.build/libcore.aar
+
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:compileDebugAidl UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:preDebugUnitTestBuild
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+
+> Task :app:compileDebugKotlin
+w: file:///Users/zane/Documents/ChatGPT/zane%20%E4%BB%A3%E7%90%86%E8%BD%AF%E4%BB%B6/work/zanebox1.0.0/app/src/main/java/com/zane/zanebox/core/NativePlatform.kt:37:12 'val allNetworks: (Array<Network!>..Array<out Network!>)' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 1m 4s
+26 actionable tasks: 6 executed, 20 up-to-date

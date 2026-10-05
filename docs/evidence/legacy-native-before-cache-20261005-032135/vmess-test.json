@@ -1,0 +1,70 @@
+{
+  "route": {
+    "find_process": true,
+    "final": "node-21",
+    "rules": [],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "security": "auto",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-21",
+      "type": "vmess",
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "alter_id": 0
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "default": "node-21",
+      "outbounds": ["node-21"],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "node-21",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [{
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": ["AAAA"]
+    }],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": []
+}

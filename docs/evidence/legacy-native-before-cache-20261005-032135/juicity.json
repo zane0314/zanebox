@@ -1,0 +1,428 @@
+{
+  "endpoints": [{
+    "address": [
+      "10.0.0.2/32",
+      "fd00::2/128"
+    ],
+    "peers": [{
+      "public_key": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "pre_shared_key": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+      "address": "example.org",
+      "allowed_ips": [
+        "0.0.0.0/0",
+        "::/0"
+      ],
+      "port": 443,
+      "reserved": "AQID"
+    }],
+    "private_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "tag": "node-14",
+    "type": "wireguard",
+    "mtu": 1420
+  }],
+  "route": {
+    "find_process": true,
+    "final": "proxy",
+    "rules": [
+      {"action": "sniff"},
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      }
+    ],
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "log": {"level": "info"},
+  "outbounds": [
+    {
+      "server": "example.org",
+      "password": "password",
+      "server_port": 443,
+      "tls": {
+        "utls": {
+          "fingerprint": "chrome",
+          "enabled": true
+        },
+        "server_name": "sni.example",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "insecure": true,
+        "reality": {
+          "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "short_id": "0123456789abcdef",
+          "enabled": true
+        },
+        "enabled": true
+      },
+      "tag": "node-10",
+      "type": "anytls"
+    },
+    {
+      "hop_interval": "10s",
+      "server": "example.org",
+      "password": "password",
+      "down_mbps": 100,
+      "obfs": {
+        "password": "obfs",
+        "type": "salamander"
+      },
+      "up_mbps": 50,
+      "server_ports": [
+        "443:443",
+        "500:600"
+      ],
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h3"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-11",
+      "type": "hysteria2"
+    },
+    {
+      "server": "example.org",
+      "password": "password",
+      "congestion_control": "bbr",
+      "zero_rtt_handshake": true,
+      "udp_relay_mode": "native",
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h3"],
+        "insecure": false,
+        "disable_sni": false,
+        "enabled": true
+      },
+      "tag": "node-12",
+      "type": "tuic",
+      "uuid": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "server_port": 443,
+      "tag": "node-13",
+      "type": "ssh",
+      "user": "user"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "detour": "node-15-chain-1",
+      "server_port": 443,
+      "tag": "node-15",
+      "type": "socks",
+      "version": "5",
+      "username": "fixture-user"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "method": "aes-128-gcm",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tag": "node-15-chain-1",
+      "type": "shadowsocks"
+    },
+    {
+      "server": "example.org",
+      "password": "password",
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-17",
+      "type": "juicity",
+      "uuid": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "server": "example.org",
+      "reuse": true,
+      "obfs_mode": "http",
+      "obfs_host": "host.example",
+      "psk": "fixture-psk",
+      "server_port": 443,
+      "tag": "node-18",
+      "type": "snell",
+      "version": 4,
+      "network": "tcp"
+    },
+    {
+      "server": "example.org",
+      "password": "password",
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-19",
+      "type": "shadowtls",
+      "version": 3
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-20",
+      "type": "http",
+      "username": "fixture-user"
+    },
+    {
+      "server": "example.org",
+      "security": "auto",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-21",
+      "type": "vmess",
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "alter_id": 0
+    },
+    {
+      "server": "example.org",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-22",
+      "type": "vless",
+      "uuid": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "tag": "node-23",
+      "type": "trojan"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "server_port": 443,
+      "tag": "node-24",
+      "type": "socks",
+      "version": "5",
+      "username": "fixture-user"
+    },
+    {
+      "server": "example.org",
+      "password": "fixture-password",
+      "method": "aes-128-gcm",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tag": "node-25",
+      "type": "shadowsocks"
+    },
+    {
+      "server": "example.org",
+      "multiplex": {
+        "padding": false,
+        "protocol": "h2mux",
+        "brutal": {
+          "down_mbps": 0,
+          "up_mbps": 0,
+          "enabled": false
+        },
+        "enabled": false
+      },
+      "server_port": 443,
+      "tls": {
+        "server_name": "sni.example",
+        "alpn": ["h2"],
+        "insecure": false,
+        "enabled": true
+      },
+      "transport": {
+        "mode": "auto",
+        "path": "/xhttp",
+        "host": "host.example",
+        "x_padding_bytes": "100-200",
+        "no_grpc_header": true,
+        "type": "xhttp"
+      },
+      "tag": "node-26",
+      "type": "vless",
+      "uuid": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "outbounds": [
+        "node-10",
+        "node-11",
+        "node-12",
+        "node-13",
+        "node-14",
+        "node-15",
+        "node-17",
+        "node-18",
+        "node-19",
+        "node-20",
+        "node-21",
+        "node-22",
+        "node-23",
+        "node-24",
+        "node-25",
+        "node-26"
+      ],
+      "tag": "group-2",
+      "type": "selector"
+    },
+    {
+      "default": "node-17",
+      "outbounds": [
+        "node-10",
+        "node-11",
+        "node-12",
+        "node-13",
+        "node-14",
+        "node-15",
+        "node-17",
+        "node-18",
+        "node-19",
+        "node-20",
+        "node-21",
+        "node-22",
+        "node-23",
+        "node-24",
+        "node-25",
+        "node-26"
+      ],
+      "tag": "proxy",
+      "type": "selector"
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "proxy",
+        "tag": "dns-remote",
+        "type": "https"
+      },
+      {
+        "inet4_range": "198.18.0.0/15",
+        "tag": "dns-fake",
+        "type": "fakeip"
+      }
+    ],
+    "final": "dns-remote",
+    "rules": [
+      {
+        "action": "predefined",
+        "rcode": "NOERROR",
+        "query_type": ["AAAA"]
+      },
+      {
+        "server": "dns-fake",
+        "inbound": [
+          "tun-in",
+          "mixed-in"
+        ],
+        "action": "route",
+        "query_type": ["A"]
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "experimental": {"clash_api": {"external_controller": "127.0.0.1:9090"}},
+  "inbounds": [
+    {
+      "strict_route": true,
+      "stack": "mixed",
+      "address": ["172.19.0.1/30"],
+      "auto_route": true,
+      "tag": "tun-in",
+      "type": "tun",
+      "mtu": 1500
+    },
+    {
+      "listen_port": 2080,
+      "tag": "mixed-in",
+      "type": "mixed",
+      "listen": "127.0.0.1"
+    }
+  ]
+}
