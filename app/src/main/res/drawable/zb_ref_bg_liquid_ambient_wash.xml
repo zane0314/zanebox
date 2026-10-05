@@ -1,0 +1,19 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/bg_liquid_ambient_wash.xml. -->
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#662563eb" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="0.0" android:centerY="0.08" android:gradientRadius="680.0dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#597c3aed" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="1.0" android:centerY="0.04" android:gradientRadius="720.0dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#4d059669" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="1.0" android:centerY="1.0" android:gradientRadius="760.0dp" />
+        </shape>
+    </item>
+</layer-list>

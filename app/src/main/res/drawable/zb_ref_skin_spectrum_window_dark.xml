@@ -1,0 +1,10 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/skin_spectrum_window.xml. -->
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#10272d" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/zb_ref_bg_liquid_ambient_wash_dark" />
+</layer-list>

@@ -1,0 +1,78 @@
+appId: com.zane.zanebox
+---
+# 前置：smoke/editors 已创建 UI-fixture、UI-group、UI-rule、UI-merge；代理保持断开。
+- launchApp
+
+# 设置 → 应用选择：取消自动选择后再确认，确认后必须有非零选中数并保存。
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: select_apps
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: select_apps
+- extendedWaitUntil:
+    visible:
+      id: apps_auto
+    timeout: 30000
+- tapOn:
+    id: apps_auto
+- tapOn: 取消
+- tapOn:
+    id: apps_auto
+- tapOn: 选择
+- assertVisible: "已选择 [1-9][0-9]* 个应用"
+- assertVisible:
+    id: apps_selection_count
+- tapOn:
+    id: apps_save
+
+# 路由规则：第一次取消保持 UI-rule，第二次确认删除全部规则。
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_rules
+- tapOn:
+    id: rules_menu
+- tapOn: 重置全部规则
+- tapOn: 取消
+- assertVisible: UI-rule
+- tapOn:
+    id: rules_menu
+- tapOn: 重置全部规则
+- tapOn: 确认
+- assertVisible: 暂无路由规则
+
+# 订阅管理：UI-group 是第二个空基础组；复制/导出只反馈无内容，不打开系统 chooser。
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_groups
+- scrollUntilVisible:
+    element:
+      text: UI-group
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: manage_group_menu_.*
+    index: 1
+- tapOn: 复制订阅链接
+- assertVisible: 没有可复制的内容
+- tapOn:
+    id: manage_group_menu_.*
+    index: 1
+- tapOn: 导出节点
+- assertVisible: 没有可导出的节点
+- takeScreenshot: reports/ui-1.0.2/current/function-actions

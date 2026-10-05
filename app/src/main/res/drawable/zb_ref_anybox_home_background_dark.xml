@@ -1,0 +1,79 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/anybox_home_background.xml. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#eef2ff"
+                android:centerColor="#e9edfc"
+                android:endColor="#e4eafb"
+                android:angle="270.0" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.0"
+                android:centerY="0.0"
+                android:gradientRadius="560.0dp"
+                android:startColor="#0c588dff"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.50"
+                android:centerY="0.0"
+                android:gradientRadius="500.0dp"
+                android:startColor="#16526fff"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="1.0"
+                android:centerY="0.06"
+                android:gradientRadius="400.0dp"
+                android:startColor="#66ffffff"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.50"
+                android:centerY="1.0"
+                android:gradientRadius="650.0dp"
+                android:startColor="#105b7cff"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.62"
+                android:centerY="0.24"
+                android:gradientRadius="300.0dp"
+                android:startColor="#1fffffff"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.12"
+                android:centerY="0.70"
+                android:gradientRadius="260.0dp"
+                android:startColor="#1affffff"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/zb_ref_anybox_home_background_arcs_dark" />
+</layer-list>

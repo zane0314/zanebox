@@ -1,0 +1,146 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: select_apps
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: select_apps
+- assertVisible:
+    id: apps_search
+- assertVisible:
+    id: apps_system
+- assertVisible:
+    id: apps_invert
+- assertVisible:
+    id: apps_clear
+- assertVisible:
+    id: apps_copy
+- assertVisible:
+    id: apps_import
+- assertVisible:
+    id: apps_mode_off
+- assertVisible:
+    id: apps_mode_include
+- assertVisible:
+    id: apps_mode_exclude
+- tapOn:
+    id: apps_system
+- assertVisible:
+    id: apps_system
+    checked: true
+- tapOn:
+    id: apps_system
+- assertVisible:
+    id: apps_system
+    checked: false
+- tapOn:
+    id: apps_invert
+- tapOn:
+    id: apps_clear
+- tapOn:
+    id: apps_mode_include
+- tapOn:
+    id: apps_mode_exclude
+- tapOn:
+    id: apps_copy
+- tapOn:
+    id: apps_import
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_groups
+- scrollUntilVisible:
+    element:
+      text: UI-group
+    direction: DOWN
+    timeout: 60000
+- tapOn: UI-group
+- tapOn:
+    id: group_order
+- tapOn: 按延迟
+- assertVisible: 按延迟
+- tapOn:
+    id: group_selector
+- tapOn:
+    id: group_type
+- tapOn: 订阅分组
+- scrollUntilVisible:
+    element:
+      id: group_auto_update
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_auto_update
+- scrollUntilVisible:
+    element:
+      id: group_auto_update_delay
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_auto_update_delay
+- scrollUntilVisible:
+    element:
+      id: group_connected_only
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_connected_only
+- scrollUntilVisible:
+    element:
+      id: group_user_agent
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_user_agent
+- scrollUntilVisible:
+    element:
+      id: group_force_resolve
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_force_resolve
+- scrollUntilVisible:
+    element:
+      id: group_deduplication
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_deduplication
+- scrollUntilVisible:
+    element:
+      id: group_server_dns
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_server_dns
+- scrollUntilVisible:
+    element:
+      id: group_filter_mode
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_filter_mode
+- scrollUntilVisible:
+    element:
+      id: group_filter_regex
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: group_filter_regex
+- takeScreenshot: reports/ui-1.0.2/current/extended-editors
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible: 节点

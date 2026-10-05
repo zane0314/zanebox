@@ -1,0 +1,20 @@
+appId: com.zane.proxy
+---
+- assertVisible: 软件设置
+- takeScreenshot: reports/ui-1.0.2/baseline/general-maestro
+- tapOn: 界面皮肤
+- takeScreenshot: reports/ui-1.0.2/baseline/skin-picker-maestro
+- back
+- back
+- assertVisible: 全部设置
+- takeScreenshot: reports/ui-1.0.2/baseline/settings-maestro
+- back
+- assertVisible: 节点
+- takeScreenshot: reports/ui-1.0.2/baseline/nodes-maestro
+- tapOn:
+    id: com.zane.proxy:id/home_toolbar_routing
+- takeScreenshot: reports/ui-1.0.2/baseline/smart-maestro
+- back
+- tapOn:
+    id: com.zane.proxy:id/home_add
+- takeScreenshot: reports/ui-1.0.2/baseline/add-menu-maestro

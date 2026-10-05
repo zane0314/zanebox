@@ -9,6 +9,8 @@ import java.util.Locale
 
 internal enum class NodeSortMode { DEFAULT, LATENCY, NAME }
 
+internal fun nodeTestLabel(node:Node):String=when { node.status==1 || node.ping == -2->"失败";node.ping>=0->"${node.ping} ms";else->"未测试" }
+
 internal fun nodeSortMode(data:AppData,group:Group):NodeSortMode {
     data.settings["sort_group_${group.id}"]?.toBooleanStrictOrNull()?.let { return if(it)NodeSortMode.LATENCY else NodeSortMode.DEFAULT }
     if(data.settings["sort_mode_group_${group.id}"]=="name")return NodeSortMode.NAME

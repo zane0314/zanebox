@@ -154,11 +154,20 @@ class BackupTest {
         }
         fun int(v:Int)=ByteBuffer.allocate(4).putInt(v).array()
         val settings=org.json.JSONArray()
-        listOf("logLevel" to 3,"tunImplementation" to 0,"ipv6Mode" to 2,"trafficSniffing" to 1).forEach { (key,value)->settings.put(preference(key,3,int(value))) }
+        listOf("logLevel" to 3,"tunImplementation" to 0,"ipv6Mode" to 2,"trafficSniffing" to 1,"isAutoConnect" to 1,"profileTrafficStatistics" to 1,"networkChangeResetConnections" to 0,"enableClashAPI" to 1,"enableFakeDns" to 0,"nightTheme" to 1).forEach { (key,value)->settings.put(preference(key,3,int(value))) }
         settings.put(preference("proxyApps",1,byteArrayOf(1))).put(preference("bypass",1,byteArrayOf(0))).put(preference("individual",5,"com.example.app".toByteArray()))
+        settings.put(preference("connectionTestURL",5,"https://example.test/204".toByteArray())).put(preference("appTheme",5,"#123456".toByteArray())).put(preference("appLanguage",5,"zh-CN".toByteArray()))
+        settings.put(preference("domain_strategy_for_remote",5,"auto".toByteArray())).put(preference("domain_strategy_for_direct",5,"prefer_ipv4".toByteArray())).put(preference("domain_strategy_for_server",5,"ipv6_only".toByteArray()))
         val frames=ByteArrayOutputStream().apply { listOf("a","中文").forEach { val raw=it.toByteArray();write(int(raw.size));write(raw) } }.toByteArray();settings.put(preference("unknownSet",6,frames))
         val root=JSONObject().put("version",1).put("profiles",org.json.JSONArray()).put("groups",org.json.JSONArray()).put("rules",org.json.JSONArray()).put("settings",settings)
         val data=manager.`import`(root.toString().toByteArray());assertEquals("debug",data.setting("logLevel"));assertEquals("gvisor",data.setting("tunStack"));assertEquals("prefer_ipv6",data.setting("dnsStrategy"));assertEquals("include",data.setting("perAppMode"));assertTrue(data.bool("perAppEnabled"));assertEquals("com.example.app",data.setting("perAppPackages"));assertEquals(2,org.json.JSONArray(data.setting("unknownSet")).length());assertTrue(data.settings.containsKey("legacy.setting.logLevel"))
+        assertTrue(data.bool("autoStart"));assertTrue(data.bool("statsEnabled"));assertFalse(data.bool("networkReset"));assertTrue(data.bool("clashApi"));assertFalse(data.bool("fakeDns"));assertEquals("https://example.test/204",data.setting("testUrl"));assertEquals("",data.setting("dnsStrategyRemote"));assertEquals("prefer_ipv4",data.setting("dnsStrategyDirect"));assertEquals("ipv6_only",data.setting("dnsStrategyServer"));assertEquals("dark",data.setting("theme"));assertEquals("#123456",data.setting("appTheme"));assertEquals("zh-CN",data.setting("appLanguage"))
+        listOf("isAutoConnect","profileTrafficStatistics","connectionTestURL","enableClashAPI","networkChangeResetConnections","enableFakeDns","domain_strategy_for_remote","domain_strategy_for_direct","domain_strategy_for_server","nightTheme","appTheme","appLanguage").forEach { assertTrue("保留旧设置 $it",data.settings.containsKey(it)) }
+        listOf(0 to "system",1 to "dark",2 to "light",3 to "system").forEach { (mode,expected) ->
+            val modeSettings=org.json.JSONArray().put(preference("nightTheme",3,int(mode)))
+            val modeRoot=JSONObject().put("version",1).put("profiles",org.json.JSONArray()).put("groups",org.json.JSONArray()).put("rules",org.json.JSONArray()).put("settings",modeSettings)
+            assertEquals(expected,manager.`import`(modeRoot.toString().toByteArray()).setting("theme"))
+        }
     }
 
     @Test fun originalSubscriptionSecondsAndGroupUserOrderMigrateExactly() {

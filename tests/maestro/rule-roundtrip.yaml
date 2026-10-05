@@ -1,0 +1,121 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_rules
+- scrollUntilVisible:
+    element:
+      text: UI-rule
+    direction: DOWN
+    timeout: 60000
+- tapOn: UI-rule
+- scrollUntilVisible:
+    element:
+      id: rule_advanced
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: rule_advanced
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '{"port":[8443],"port_range":["1000:1002"],"source_port_range":["2000:2002"],"network":["tcp"],"ip_is_private":true}'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: rule_port
+    direction: DOWN
+    timeout: 60000
+- assertVisible: 8443\n1000:1002
+- scrollUntilVisible:
+    element:
+      id: rule_source_port
+    direction: DOWN
+    timeout: 60000
+- assertVisible: 2000:2002
+- tapOn:
+    id: rule_save
+- tapOn: UI-rule
+- scrollUntilVisible:
+    element:
+      id: rule_port
+    direction: DOWN
+    timeout: 60000
+- assertVisible: 8443\n1000:1002
+- scrollUntilVisible:
+    element:
+      id: rule_port
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: rule_port
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '80'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: rule_source_port
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: rule_source_port
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- tapOn:
+    id: rule_save
+- tapOn: UI-rule
+- scrollUntilVisible:
+    element:
+      id: rule_port
+    direction: DOWN
+    timeout: 60000
+- assertVisible: '80'
+- assertNotVisible: 1000:1002
+- scrollUntilVisible:
+    element:
+      id: rule_source_port
+    direction: DOWN
+    timeout: 60000
+- assertNotVisible: 2000:2002
+- takeScreenshot: reports/ui-1.0.2/current/rule-advanced-roundtrip
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

@@ -22,7 +22,7 @@ suspend fun SubscriptionUpdater.update(store:ZaneStore,group:Group,context:Conte
     val started=store.update { begin(it,group,request,System.currentTimeMillis()) }
     val baseline=started.groups.first { it.id==group.id }
     try {
-        val fetched=SubscriptionClient.fetch(baseline.subscriptionUrl,options.customUserAgent)
+        val fetched=SubscriptionClient.fetch(baseline.subscriptionUrl,options.customUserAgent,started.settings)
         val parsed=prepare(SubscriptionParser.parse(fetched.body),options,started.bool("ipv6",false),started.setting("dnsStrategyServer",started.setting("domainStrategy"))) { host -> withTimeoutOrNull(10000) { resolve(context,host) } ?: error("节点 DNS 解析超时") }
         store.update { apply(it,baseline,parsed,fetched.userInfo,System.currentTimeMillis()) { store.nextId() } }.groups.first { it.id==group.id }
     } catch(e:CancellationException) {

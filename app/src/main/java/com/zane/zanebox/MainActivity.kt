@@ -13,6 +13,7 @@ class MainActivity : ComponentActivity() {
     private val notifications=registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
         model = ViewModelProvider(this)[AppViewModel::class.java]
         setContent { ZaneApp(model) }
         if(savedInstanceState==null) importIntent(intent)

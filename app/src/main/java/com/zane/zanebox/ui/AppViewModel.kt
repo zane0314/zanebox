@@ -41,18 +41,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { service.events.collect { message.value = it; withContext(Dispatchers.IO) { store.reload() } } }
         viewModelScope.launch { service.testResults.collect { withContext(Dispatchers.IO) { store.reload() } } }
     }
-    fun task(block: suspend () -> Unit) { viewModelScope.launch {
+    fun task(onError:(String)->Unit={},block: suspend () -> Unit) { viewModelScope.launch {
         taskCount++; busy.value = true
-        try { withContext(Dispatchers.IO) { block() } } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(e: Exception) { message.value = e.message ?: "操作失败" }
+        try { withContext(Dispatchers.IO) { block() } } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(e: Exception) { val error=e.message ?: "操作失败";message.value=error;onError(error) }
         finally { taskCount--; busy.value = taskCount>0 }
     } }
-    fun edit(block: (AppData) -> AppData) = task {
+    fun edit(onSaved:()->Unit={},onError:(String)->Unit={},block: (AppData) -> AppData) = task(onError) {
         store.update { block(it).withEnabledSelection() }
-        message.value = "已保存，请点击右上方应用修改"
+        message.value = "已保存，请应用修改使配置生效"
+        withContext(Dispatchers.Main){onSaved()}
     }
     fun setting(key: String, value: String) {
-        if (key == "browseGroupId" || key == "theme" || key == "fontScale") task { store.update { it.copy(settings=it.settings+(key to value)) } }
+        if(key=="ipv6Mode") { require(value in listOf("ipv4_only","prefer_ipv4","prefer_ipv6","ipv6_only"));edit { it.copy(settings=it.settings+("ipv6Mode" to value)+("ipv6" to (value!="ipv4_only").toString())+("dnsStrategy" to value)) };return }
+        if (key == "browseGroupId" || key == "theme" || key == "fontScale" || key == "uiSkin" || key == "launcherIcon" || key == "appTheme" || key == "appLanguage" || key == "showBottomBar" || key == "alwaysShowAddress" || key == "hideFromRecentApps" || key == "confirmProfileDelete") task { store.update { it.copy(settings=it.settings+(key to value)) } }
         else edit { it.copy(settings = it.settings + (key to value)) }
+    }
+    fun resetSettings()=edit { it.copy(settings=emptyMap()) }
+    fun saveNode(node:Node,onSaved:()->Unit={},onError:(String)->Unit={})=task(onError) {
+        val before=store.snapshot()
+        val target=node.groupId.takeIf { id->before.groups.any { it.id==id } } ?: store.nextId()
+        val saved=node.copy(id=node.id.takeIf { it>0 } ?: store.nextId(),groupId=target,
+            order=before.nodes.firstOrNull { it.id==node.id }?.order ?: before.nodes.size)
+        val outbound=org.json.JSONObject(saved.outbound)
+        if(outbound.optString("type") in listOf("vless","vmess","tuic","juicity"))require(outbound.optString("uuid").isNotBlank()) { "UUID 不能为空" }
+        if(outbound.optString("type") in listOf("trojan","hysteria2","tuic","juicity","anytls"))require(outbound.optString("password").isNotBlank()) { "密码不能为空" }
+        fun insert(data:AppData)=data.copy(groups=if(data.groups.any { it.id==target })data.groups else data.groups+Group(target,"手动节点"),
+            nodes=data.nodes.filter { it.id!=saved.id }+saved).withEnabledSelection()
+        service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(insert(before),com.zane.zanebox.config.Purpose.TEST,saved.id))
+        store.update(::insert)
+        message.value="节点已保存，请点击应用修改"
+        withContext(Dispatchers.Main) { onSaved() }
+    }
+    fun factoryReset()=task { service.restore(AppData());message.value="正在清除应用配置" }
+    fun clearCache()=task {
+        require(service.snapshot.value.state !in 1..3) { "清除缓存前请先断开连接" }
+        getApplication<Application>().cacheDir.listFiles()?.forEach { require(it.deleteRecursively()) { "缓存清除失败" } }
+        message.value="缓存已清除"
     }
     fun importText(text: String, groupId: Long = -1) = task { importNow(text,if(groupId<0) store.snapshot().browseGroupId else groupId) }
     private fun importNow(text: String, groupId: Long = 0) = insertParsed(SubscriptionParser.parseReport(text),groupId)
@@ -89,7 +113,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun updateGroup(group: Group) = task { updateGroupNow(group) }
+    fun updateAllGroups() {
+        val groups=data.value.groups.filter { it.enabled && it.subscriptionUrl.isNotBlank() }
+        if(groups.isEmpty())message.value="没有可更新的订阅" else groups.forEach(::updateGroup)
+    }
     private suspend fun updateGroupNow(group:Group) {
+        require(group.subscriptionUrl.isNotBlank()) { "当前分组没有订阅地址" }
         val context=getApplication<Application>()
         val options=SubscriptionOptions.parse(group.options)
         val connected=service.snapshot.value.state==2 || (options.updateWhenConnectedOnly && SubscriptionScheduler.connectionCheck(context))
@@ -97,23 +126,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         SubscriptionScheduler.reconcile(context,store.snapshot())
         message.value="订阅已更新，请点击应用修改"
     }
-    fun saveGroup(group:Group,fetch:Boolean) = task { SubscriptionOptions.parse(group.options);store.update { d->d.copy(groups=d.groups.filter{it.id!=group.id}+group).withEnabledSelection() }; message.value="组已保存，请点击应用修改"; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }
+    fun saveGroup(group:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { SubscriptionOptions.parse(group.options);store.update { d->
+        val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}") else emptySet()
+        d.copy(groups=d.groups.filter{it.id!=group.id}+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
+    }; message.value="组已保存，请点击应用修改"; withContext(Dispatchers.Main){onSaved()}; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }
     private fun dav():WebDavClient { val d=store.snapshot();return WebDavClient(d.setting("webdavUrl"),d.setting("webdavUser"),d.setting("webdavPassword")) }
-    fun listWebdav() = task { webdavEntries.value=dav().list() }
+    fun listWebdav() = task { webdavEntries.value=dav().list();message.value="WebDAV 连接成功：${webdavEntries.value.size} 个备份" }
     fun uploadWebdav() = task { dav().upload(BackupManager(getApplication()).export(store.snapshot()));webdavEntries.value=dav().list();message.value="云备份已上传" }
     fun restoreWebdav(entry:WebDavEntry) = task { service.restore(BackupManager(getApplication()).`import`(dav().download(entry)));message.value="云备份已验证，正在应用" }
-    fun deleteWebdav(entry:WebDavEntry) = task { dav().delete(entry);webdavEntries.value=dav().list() }
-    fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetch(d.setting("smartUrl.$key")).body;store.update { it.copy(settings=it.settings+("smartRules.$key" to content)) };message.value="分流列表已更新，请点击应用修改" }
-    fun deleteNode(id:Long) = edit { d ->
-        val remaining=d.nodes.filter { it.id!=id }
-        d.copy(nodes=remaining,groups=d.groups.map{it.copy(frontProxy=if(it.frontProxy==id)0 else it.frontProxy,landingProxy=if(it.landingProxy==id)0 else it.landingProxy)},settings=cleanSmartTargets(if(d.selectedNodeId==id)d.settings+("selectedNodeId" to (remaining.firstOrNull()?.id ?: 0).toString())else d.settings,setOf("node:$id")),
-            rules=d.rules.map { if(it.outbound=="node:$id")it.copy(outbound="proxy")else it },
-            merges=d.merges.map { it.copy(nodeIds=it.nodeIds-id,selectedId=if(it.selectedId==id)0 else it.selectedId) })
+    fun deleteWebdav(entry:WebDavEntry) = task { dav().delete(entry);webdavEntries.value=dav().list();message.value="云备份已删除" }
+    fun updateAllSmartRules() {
+        val keys=data.value.settings.filterKeys { it.startsWith("smartUrl.") }.filterValues { it.isNotBlank() }.keys
+        if(keys.isEmpty())message.value="没有配置远程规则源" else keys.forEach { updateSmart(it.substringAfter('.')) }
+    }
+    private fun stageAsset(kind:String,bytes:ByteArray) {
+        com.zane.zanebox.config.geoAssetCode(kind,bytes)
+        val name="asset-${java.util.UUID.randomUUID()}-$kind.db"
+        val file=android.util.AtomicFile(java.io.File(getApplication<Application>().noBackupFilesDir,name))
+        val output=file.startWrite();try { output.write(bytes);file.finishWrite(output) } catch(e:Exception) { file.failWrite(output);throw e }
+        service.installAsset(name)
+    }
+    fun downloadAsset(kind:String)=task {
+        require(service.snapshot.value.state !in 1..3) { "更新资源前请先断开连接" }
+        val data=store.snapshot();val url=com.zane.zanebox.config.routeAssetUrl(kind,data)
+        stageAsset(kind,SubscriptionClient.fetchBytes(url,settings=data.settings));message.value="资源已下载，正在进行内核校验"
+    }
+    fun importAsset(kind:String,uri:Uri)=task {
+        require(service.snapshot.value.state !in 1..3) { "导入资源前请先断开连接" }
+        val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
+        stageAsset(kind,bytes);message.value="资源已导入，正在进行内核校验"
+    }
+    fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { it.copy(settings=it.settings+("smartRules.$key" to content)+("smartUpdated.$key" to System.currentTimeMillis().toString())) };message.value="分流列表已更新，请点击应用修改" }
+    fun selectSmartTarget(key:String,value:String)=edit { d ->
+        val assets=mapOf("youtube" to listOf("YouTube"),"telegram" to listOf("Telegram"),"netflix" to listOf("Netflix"),"disney" to listOf("Disney"),"tiktok" to listOf("TikTok"),"x" to listOf("Twitter"),"meta" to listOf("Instagram","Facebook"),"spotify" to listOf("Spotify"),"google" to listOf("Google"),"ai" to listOf("OpenAI"))
+        var settings=d.settings+("smart.$key.target" to value)
+        if(value!="off" && !d.settings.containsKey("smartRules.$key")) assets[key]?.let { names ->
+            val text=names.joinToString("\n"){name->getApplication<Application>().assets.open("anybox-rules/$name.list").bufferedReader().use{it.readText()}}
+            settings=settings+("smartRules.$key" to text)
+        }
+        d.copy(settings=settings)
+    }
+    fun deleteNode(id:Long)=edit { removeNodes(it,setOf(id)) }
+    fun clearGroup(id:Long)=edit { d->removeNodes(d,d.nodes.filter{it.groupId==id}.map{it.id}.toSet()) }
+    private fun removeNodes(d:AppData,ids:Set<Long>):AppData {
+        val remaining=d.nodes.filter{it.id !in ids}
+        return d.copy(nodes=remaining,groups=d.groups.map{it.copy(frontProxy=if(it.frontProxy in ids)0 else it.frontProxy,landingProxy=if(it.landingProxy in ids)0 else it.landingProxy)},
+            settings=cleanSmartTargets(if(d.selectedNodeId in ids)d.settings+("selectedNodeId" to (remaining.firstOrNull()?.id ?:0).toString())else d.settings,ids.map{"node:$it"}.toSet()),
+            rules=d.rules.map{if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in ids)it.copy(outbound="proxy")else it},
+            merges=d.merges.map{it.copy(nodeIds=it.nodeIds.filter{n->n !in ids},selectedId=if(it.selectedId in ids)0 else it.selectedId)})
     }
     fun deleteGroup(id:Long) = edit { d ->
         val removed=d.nodes.filter { it.groupId==id }.map { it.id }.toSet();val remaining=d.nodes.filter { it.groupId!=id }
         d.copy(groups=d.groups.filter{it.id!=id}.map{it.copy(frontProxy=if(it.frontProxy in removed)0 else it.frontProxy,landingProxy=if(it.landingProxy in removed)0 else it.landingProxy)},nodes=remaining,
-            settings=cleanSmartTargets(d.settings,setOf("group:$id")+removed.map{"node:$it"})+("selectedGroupId" to if(d.selectedGroupId==id)"0" else d.selectedGroupId.toString())+("selectedNodeId" to if(d.selectedNodeId in removed)(remaining.firstOrNull()?.id ?: 0).toString() else d.selectedNodeId.toString()),
+            settings=cleanSmartTargets(d.settings,setOf("group:$id")+removed.map{"node:$it"})+("browseGroupId" to if(d.browseGroupId==id)"0" else d.browseGroupId.toString())+("smartSourceGroupId" to if(d.setting("smartSourceGroupId")==id.toString())"0" else d.setting("smartSourceGroupId","0"))+("selectedGroupId" to if(d.selectedGroupId==id)"0" else d.selectedGroupId.toString())+("selectedNodeId" to if(d.selectedNodeId in removed)(remaining.firstOrNull()?.id ?: 0).toString() else d.selectedNodeId.toString()),
             rules=d.rules.map { if(it.outbound=="group:$id" || removed.any { n -> it.outbound=="node:$n" })it.copy(outbound="proxy")else it },
             merges=d.merges.map { it.copy(groupIds=it.groupIds-id,nodeIds=it.nodeIds.filter{n->n !in removed},selectedId=if(it.selectedId in removed)0 else it.selectedId) })
     }
@@ -126,8 +191,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val bytes = getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
         service.restore(BackupManager(getApplication()).`import`(bytes)); message.value = "备份已验证，正在应用"
     }
-    fun backup(uri: Uri) = task { getApplication<Application>().contentResolver.openOutputStream(uri)!!.use { it.write(BackupManager(getApplication()).export(store.snapshot())) }; message.value="备份已保存" }
-    fun export(uri: Uri) = task { val d=store.snapshot(); getApplication<Application>().contentResolver.openOutputStream(uri)!!.bufferedWriter().use { out -> out.write(shareText(d.nodes)) }; message.value="节点已导出" }
+    fun backup(uri: Uri,scope:com.zane.zanebox.backup.BackupScope=com.zane.zanebox.backup.BackupScope()) = task { val bytes=BackupManager(getApplication()).export(com.zane.zanebox.backup.backupSelection(store.snapshot(),scope));getApplication<Application>().contentResolver.openOutputStream(uri)!!.use { it.write(bytes) }; message.value="备份已保存" }
+    fun shareBackup(scope:com.zane.zanebox.backup.BackupScope)=task {
+        val context=getApplication<Application>();val file=java.io.File(context.cacheDir,"exports/zanebox-backup.zip").also { it.parentFile!!.mkdirs() }
+        file.writeBytes(BackupManager(context).export(com.zane.zanebox.backup.backupSelection(store.snapshot(),scope)))
+        val uri=androidx.core.content.FileProvider.getUriForFile(context,"${context.packageName}.files",file)
+        withContext(Dispatchers.Main) { context.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).setType("application/zip").putExtra(android.content.Intent.EXTRA_STREAM,uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION),"分享备份").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    fun export(uri: Uri,groupId:Long?=null) = task { val d=store.snapshot();val nodes=d.nodes.filter { groupId==null || it.groupId==groupId };require(nodes.isNotEmpty()) { "没有可导出的节点" };getApplication<Application>().contentResolver.openOutputStream(uri)!!.bufferedWriter().use { out -> out.write(shareText(nodes)) }; message.value="节点已导出" }
     fun saveQr(uri:Uri,bitmap:android.graphics.Bitmap) = task { getApplication<Application>().contentResolver.openOutputStream(uri)!!.use { require(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)) { "保存二维码失败" } };message.value="二维码已保存" }
     fun shareQr(bitmap:android.graphics.Bitmap) = task {
         val context=getApplication<Application>();val folder=java.io.File(context.cacheDir,"exports").apply{mkdirs()};val file=java.io.File(folder,"node-qr.png")
@@ -151,6 +222,8 @@ sealed class PendingImport {
 }
 
 internal fun shareText(nodes:List<Node>):String = if(nodes.all{it.shareLink.isNotBlank()}) nodes.joinToString("\n"){it.shareLink} else org.json.JSONObject().put("outbounds",org.json.JSONArray().apply{nodes.forEach { put(org.json.JSONObject(it.outbound).put("tag",org.json.JSONObject(it.metadata).optString("sourceTag","node-${it.id}").ifBlank{"node-${it.id}"}).put("display_name",it.name)) }}).toString(2)
+
+internal fun subscriptionShareLink(group:Group):String=if(group.subscriptionUrl.isBlank())"" else "sn://subscription?url="+java.net.URLEncoder.encode(group.subscriptionUrl,"UTF-8").replace("+","%20")+"&name="+java.net.URLEncoder.encode(group.name,"UTF-8").replace("+","%20")
 
 private fun mergeMetadata(old:String,fresh:String):String = org.json.JSONObject(old).apply { val incoming=org.json.JSONObject(fresh);incoming.keys().forEach{key->put(key,incoming.get(key))} }.toString()
 

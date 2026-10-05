@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -39,6 +41,10 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     val events:SharedFlow<String> = event
     private val tests=MutableStateFlow<Map<Long,Int>>(emptyMap())
     val testResults:StateFlow<Map<Long,Int>> = tests
+    private val testingState=MutableStateFlow<Set<Long>>(emptySet())
+    val testingNodes:StateFlow<Set<Long>> = testingState
+    private val assetState=MutableStateFlow(0L)
+    val assetRevision:StateFlow<Long> = assetState
     private val logState=MutableStateFlow<List<String>>(emptyList());val logs:StateFlow<List<String>> = logState
     private val ipState=MutableStateFlow("");val exitIp:StateFlow<String> = ipState
     private val trafficState=MutableStateFlow("{}");val traffic:StateFlow<String> = trafficState
@@ -60,12 +66,14 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
         override fun onEvent(kind:String,payload:String) { when(kind) {
             "test" -> { val o=JSONObject(payload);tests.value=tests.value+(o.getLong("id") to o.getInt("ping")) }
+            "testing" -> { val a=JSONArray(payload);testingState.value=(0 until a.length()).map { a.getLong(it) }.toSet() }
+            "assetInstalled" -> { assetState.value++;event.tryEmit(payload) }
             "logs" -> { val a=JSONArray(payload);logState.value=(0 until a.length()).map { a.getString(it) } }
             "ip" -> ipState.value=payload
             "traffic" -> trafficState.value=payload
             "connections" -> connectionState.value=payload
             "speed" -> speedState.value=payload
-            "validation" -> { val o=JSONObject(payload);validationState.value=validationState.value+(o.getString("name") to o.optString("error")) }
+            "validation" -> { val o=JSONObject(payload);validationState.update { it+(o.getString("name") to o.optString("error")) } }
             "panel" -> panelState.value=payload
             "stun" -> stunState.value=payload
             "restored" -> { event.tryEmit("备份已恢复");val o=JSONObject(payload);if(o.optBoolean("modeChanged"))submit { ensureMode();if(o.optBoolean("running"))startRemote() } }
@@ -74,9 +82,13 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     }
     private val connection=object:ServiceConnection {
         override fun onServiceConnected(name:ComponentName,service:IBinder) { remote=IRuntime.Stub.asInterface(service);scope.launch { runCatching { remote?.registerCallback(callback);remote?.getSnapshot()?.let { state.value=RuntimeSnapshot.parse(it) } }.onFailure { event.emit("服务连接失败") } } }
-        override fun onServiceDisconnected(name:ComponentName) { remote=null;state.value=RuntimeSnapshot(error="后台服务已断开") }
+        override fun onServiceDisconnected(name:ComponentName) { remote=null;clearPendingTests();state.value=RuntimeSnapshot(error="后台服务已断开") }
         // A dead binding never reconnects by itself (e.g. after the APK is updated); rebind so later commands work.
-        override fun onBindingDied(name:ComponentName) { remote=null;submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
+        override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
+    }
+    private fun clearPendingTests() {
+        testingState.value=emptySet()
+        if(speedState.value.isNotBlank() && !runCatching { JSONObject(speedState.value).optBoolean("done") }.getOrDefault(true))speedState.value=JSONObject().put("stage","error").put("done",true).put("error","后台服务已断开，请重新测速").toString()
     }
     fun connect() { if(!bound) { boundClass=serviceClass();bound=context.bindService(Intent(context,boundClass),connection,Context.BIND_AUTO_CREATE) } }
     private suspend fun ensureMode() {
@@ -99,7 +111,10 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun selectNode(id:Long)=command("select",id.toString())
     fun testNodes(ids:List<Long>) { tests.value=emptyMap();command("test",JSONArray(ids).toString()) }
     fun cancelTests()=command("cancelTests")
+    fun installAsset(filename:String)=command("asset",filename)
     fun refreshLogs()=command("logs")
+    fun clearLogs()=command("clearLogs")
+    fun systemLogs()=command("systemLogs")
     fun queryExitIp()=command("ip")
     fun refreshTraffic()=command("traffic")
     fun resetTraffic()=command("resetTraffic")
@@ -109,15 +124,22 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun closeAllConnections()=command("closeAllConnections")
     fun speedTest(nodeId:Long,mode:String="simple")=command("speed",JSONObject().put("id",nodeId).put("mode",mode).toString())
     fun cancelSpeedTest()=command("cancelSpeed")
-    fun openPanel()=command("panel")
+    fun openPanel() { panelState.value="";command("panel") }
     fun stun(server:String)=command("stun",server)
     fun cancelStun()=command("cancelStun")
     fun validateConfig(name:String,json:String) { submit {
         val filename="validate-${java.util.UUID.randomUUID()}.json"
         val file=android.util.AtomicFile(java.io.File(context.noBackupFilesDir,filename))
         try { val bytes=json.toByteArray(Charsets.UTF_8);require(bytes.size<=64*1024*1024);val output=file.startWrite();try { output.write(bytes);file.finishWrite(output) } catch(e:Exception) { file.failWrite(output);throw e };ensureMode();remote!!.command("validate",JSONObject().put("file",filename).put("name",name).toString()) }
-        catch(e:Exception) { file.delete();validationState.value=validationState.value+(name to (e.message ?: "验证失败")) }
+        catch(e:Exception) { file.delete();validationState.update { it+(name to (e.message ?: "验证失败")) } }
     } }
+    suspend fun checkConfig(json:String) {
+        val name="save-${java.util.UUID.randomUUID()}"
+        validateConfig(name,json)
+        val error=withTimeout(30000) { validationResults.first { it.containsKey(name) }.getValue(name) }
+        validationState.update { it-name }
+        require(error.isBlank()) { error }
+    }
     fun restore(data:AppData) { submit {
         val name="restore-${java.util.UUID.randomUUID()}.json"
         val stage=android.util.AtomicFile(java.io.File(context.noBackupFilesDir,name))

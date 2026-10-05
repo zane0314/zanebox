@@ -1,0 +1,5 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/ic_mingcute_document_24.xml. -->
+<vector android:tint="#182230" android:height="24.0dp" android:width="24.0dp" android:viewportWidth="24.0" android:viewportHeight="24.0"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="#00000000" android:pathData="M13 21V15.5C13 15.2239 13.2239 15 13.5 15L19 15M9 8L15 8M9 12H10M13.5858 21H6C5.44772 21 5 20.5523 5 20L5 4C5 3.44772 5.44772 3 6 3H18C18.5523 3 19 3.44772 19 4V15.5858C19 15.851 18.8946 16.1054 18.7071 16.2929L14.2929 20.7071C14.1054 20.8946 13.851 21 13.5858 21Z" android:strokeColor="#ffffffff" android:strokeWidth="2.0" android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

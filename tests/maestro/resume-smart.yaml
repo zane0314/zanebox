@@ -1,0 +1,12 @@
+appId: com.zane.zanebox
+---
+- scrollUntilVisible:
+    element:
+      text: UI-fixture
+    direction: DOWN
+    timeout: 60000
+- tapOn: UI-fixture
+- assertVisible: UI-fixture
+- takeScreenshot: reports/ui-1.0.2/current/smart-target
+- tapOn:
+    id: main_back

@@ -1,0 +1,14 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/skin_azure_window.xml. -->
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#0c1119" android:endColor="#080b10" android:angle="180.0" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#3d2f7bf6" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="0.05" android:centerY="0.04" android:gradientRadius="560.0dp" />
+        </shape>
+    </item>
+</layer-list>

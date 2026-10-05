@@ -54,8 +54,24 @@ internal object LegacyBackup {
             val value=when(type) { 1 -> {require(bytes.size==1);(bytes[0].toInt()!=0).toString()};2 -> {require(bytes.size==4);buffer.float.toString()};3 -> {require(bytes.size==4);buffer.int.toString()};4 -> {require(bytes.size==8);buffer.long.toString()};5 -> bytes.toString(Charsets.UTF_8);6 -> stringSet(bytes).toString();else -> null }
             if(value!=null) settings[key]=value
         }
-        val aliases=mapOf("selectedProxy" to "selectedNodeId","selectedGroup" to "selectedGroupId","remoteDns" to "dnsRemote","directDns" to "dnsDirect","enableIPv6" to "ipv6","allowAccess" to "allowLan","enableFakeDns" to "fakeDNS","proxyApps" to "perAppEnabled","individual" to "perAppPackages","webdavUsername" to "webdavUser","webdavServer" to "webdavUrl")
+        val aliases=mapOf(
+            "selectedProxy" to "selectedNodeId","selectedGroup" to "selectedGroupId",
+            "isAutoConnect" to "autoStart","profileTrafficStatistics" to "statsEnabled",
+            "connectionTestURL" to "testUrl","enableClashAPI" to "clashApi",
+            "networkChangeResetConnections" to "networkReset",
+            "remoteDns" to "dnsRemote","directDns" to "dnsDirect","enableIPv6" to "ipv6",
+            "allowAccess" to "allowLan","enableFakeDns" to "fakeDns",
+            "proxyApps" to "perAppEnabled","individual" to "perAppPackages",
+            "webdavUsername" to "webdavUser","webdavServer" to "webdavUrl"
+        )
         aliases.forEach { (old,new) -> settings[old]?.let { settings[new]=it } }
+        listOf("autoStart","statsEnabled","clashApi","networkReset","fakeDns","ipv6","allowLan","perAppEnabled").forEach { key ->
+            settings[key]?.let { value->if(value in listOf("0","1"))settings[key]=(value=="1").toString() }
+        }
+        fun dnsStrategy(value:String) = when(value) { "auto" -> ""; "prefer_ipv6","prefer_ipv4","ipv4_only","ipv6_only" -> value; else -> value }
+        listOf("domain_strategy_for_remote" to "dnsStrategyRemote","domain_strategy_for_direct" to "dnsStrategyDirect","domain_strategy_for_server" to "dnsStrategyServer").forEach { (old,new) -> settings[old]?.let { settings[new]=dnsStrategy(it) } }
+        settings["appTheme"]?.toIntOrNull()?.let { mode->settings["appTheme"]=if(mode==0)"" else com.zane.zanebox.data.themePresetColors.getOrNull(mode-1) ?:settings.getValue("appTheme") }
+        settings["nightTheme"]?.toIntOrNull()?.let { mode -> settings["theme"]=when(mode) { 0,3 -> "system";1 -> "dark";2 -> "light";else -> error("未知旧夜间主题") } }
         settings["logLevel"]?.toIntOrNull()?.let { level -> settings["logLevel"]=when(level) { 0->"panic";1->"warn";2->"info";3->"debug";4->"trace";else->error("未知旧日志等级") } }
         settings["tunImplementation"]?.toIntOrNull()?.let { stack -> settings["tunStack"]=when(stack) { 0->"gvisor";1->"system";2->"mixed";else->error("未知旧TUN实现") } }
         settings["trafficSniffing"]?.toIntOrNull()?.let { settings["sniff"]=(it>0).toString() }

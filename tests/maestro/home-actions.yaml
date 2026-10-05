@@ -1,0 +1,123 @@
+appId: com.zane.zanebox
+---
+# 前置 smoke/editors：基础组内有 UI-fixture；UI-group 是空组。
+- launchApp
+- tapOn:
+    id: search_toggle
+- tapOn:
+    id: node_search
+- setClipboard: no-such-node-1.0.3
+- pasteText
+- hideKeyboard
+- assertVisible: 未找到匹配节点
+- assertNotVisible:
+    id: node_[0-9]+
+- tapOn: 关闭搜索
+- assertVisible: UI-fixture
+- longPressOn:
+    id: group_[0-9]+
+    index: 0
+- assertNotVisible:
+    id: node_[0-9]+
+- longPressOn:
+    id: group_[0-9]+
+    index: 0
+- assertVisible: UI-fixture
+- tapOn:
+    id: node_menu
+- tapOn: 跳转分组…
+- tapOn: UI-group
+- assertVisible:
+    id: group_summary
+- assertVisible: 未找到匹配节点
+- tapOn:
+    id: node_menu
+- tapOn: 更新当前订阅
+- assertVisible: 当前分组没有订阅地址
+- tapOn:
+    id: node_menu
+- tapOn: 测试当前分组延迟
+- assertVisible: 没有可测速的节点
+- tapOn:
+    id: group_all
+- tapOn:
+    id: node_menu
+- tapOn: 全部更新（全部订阅）
+- assertVisible: 没有可更新的订阅
+- tapOn:
+    id: node_menu
+- tapOn: 延迟升序
+- assertVisible: 已保存，请应用修改使配置生效
+- tapOn:
+    id: node_menu
+- tapOn: 默认顺序
+- assertVisible: 已保存，请应用修改使配置生效
+- tapOn:
+    id: node_menu
+- tapOn: 全部测速（全部分组）
+- tapOn:
+    id: node_menu
+- tapOn: 取消测速
+- assertVisible: 测速已取消
+- tapOn:
+    id: node_menu
+- tapOn: 订阅管理
+- assertVisible: 订阅管理
+- assertVisible: UI-group
+- tapOn:
+    id: page_back
+- tapOn:
+    id: add_nodes
+- tapOn: 导入文本
+- tapOn:
+    id: editor_field_0
+- setClipboard: unsupported://example.test
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- assertVisible: 订阅没有可用节点.*
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: network_tools
+- tapOn: 流量统计
+- assertVisible: 累计流量统计
+- tapOn:
+    id: traffic_refresh
+- tapOn:
+    id: traffic_tab_1
+- assertVisible: 暂无域名流量数据
+- tapOn:
+    id: traffic_tab_2
+- assertVisible: 暂无节点流量数据
+- tapOn: 停止统计
+- assertVisible: 统计状态已保存
+- tapOn: 开启统计
+- assertVisible: 统计状态已保存
+- tapOn:
+    id: traffic_reset
+- tapOn: 取消
+- tapOn:
+    id: traffic_reset
+- tapOn: 清零
+- assertVisible: 累计统计已清空
+- tapOn:
+    id: page_back
+- tapOn: 连接监控
+- assertVisible: 暂无活动连接
+- tapOn:
+    id: connections_refresh
+- tapOn:
+    id: connections_close_all
+- tapOn:
+    id: page_back
+- tapOn: Clash 面板
+- assertVisible: 请先连接代理
+- takeScreenshot: reports/ui-1.0.2/current/home-actions
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

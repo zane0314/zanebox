@@ -33,10 +33,10 @@ class AcceptanceTest {
   var result="";waitFor("不同 UID HTTP $expected",15000){result=shell("logcat -d -s ZaneProbe:I");result.contains("$nonce=")};Assert.assertTrue(result,result.contains("$nonce=$expected uid="))
  }
  @Test fun fullAcceptance() {
-  val store=ZaneStore(context);store.replace(AppData())
+  val store=ZaneStore(context);store.replace(AppData(settings=mapOf("appLanguage" to "zh-CN")))
   var scenario=ActivityScenario.launch(MainActivity::class.java)
-  compose.onNodeWithText("点击导入文本、导入文件或手动节点开始使用。").performScrollTo().assertIsDisplayed();shot("empty")
-  compose.onNodeWithContentDescription("导入文本").performScrollTo().performClick()
+  compose.onNodeWithText("暂无节点，点右上角添加节点或订阅").performScrollTo().assertIsDisplayed();shot("empty")
+  compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("导入文本").performClick()
   compose.onNodeWithTag("editor_field_0").performTextInput("{\"outbounds\":[{\"type\":\"socks\",\"tag\":\"香港 A\",\"server\":\"10.0.2.2\",\"server_port\":19081},{\"type\":\"socks\",\"tag\":\"日本 B\",\"server\":\"10.0.2.2\",\"server_port\":19082}]}")
   compose.onNodeWithTag("editor_save").performClick();waitFor("UI导入落盘"){store.snapshot().nodes.size==2}
   val imported=store.snapshot();val a=imported.nodes[0].id;val b=imported.nodes[1].id
@@ -84,12 +84,12 @@ class AcceptanceTest {
    client.stop();waitFor("停止"){client.snapshot.value.state==0};client.start();waitFor("重连",30000){client.snapshot.value.state==2};probe("EXIT_A")
    client.refreshLogs();waitFor("服务日志"){client.logs.value.isNotEmpty()};Assert.assertFalse(client.logs.value.joinToString().contains("FATAL EXCEPTION"))
    scenario.close();store.update{it.copy(nodes=it.nodes.map{n->n.copy(name="长节点名称".repeat(50))},settings=it.settings+("fontScale" to "2.0"))}
-   scenario=ActivityScenario.launch(MainActivity::class.java);compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_$first"));compose.onNodeWithTag("node_$first").assertIsDisplayed();shot("large-font");compose.onNodeWithTag("tab_1").performClick();shot("smart");compose.onNodeWithTag("tab_2").performClick();shot("settings")
+   scenario=ActivityScenario.launch(MainActivity::class.java);compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_$first"));compose.onNodeWithTag("node_$first").assertIsDisplayed();shot("large-font");compose.onNodeWithTag("tab_1").performClick();shot("smart");compose.onNodeWithTag("main_back").performClick();compose.onNodeWithTag("tab_2").performClick();shot("settings")
    scenario.close();store.update{it.copy(settings=it.settings+("fontScale" to "1.0"))};scenario=ActivityScenario.launch(MainActivity::class.java)
-   compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("sort_latency_${g.id}"));compose.onNodeWithTag("sort_latency_${g.id}").performClick();waitFor("延迟排序持久化"){store.snapshot().bool("sort_group_${g.id}")};Assert.assertEquals(first,store.snapshot().selectedNodeId)
-   scenario.recreate();compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("sort_latency_${g.id}"));compose.onNodeWithTag("sort_latency_${g.id}").assertIsSelected();shot("sort-latency")
-   compose.onNodeWithTag("subscription_options_${g.id}").performClick();compose.onNodeWithTag("subscription_options_save").performClick();waitFor("订阅选项落盘"){store.snapshot().groups.single().options.contains("autoUpdateDelay")}
-   compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("network_tools"));compose.onNodeWithTag("network_tools").performClick();compose.onNodeWithTag("stun_server").performTextReplacement("127.0.0.1:invalid");compose.onNodeWithTag("stun_start").performClick();compose.waitUntil(10000){compose.onAllNodesWithTag("stun_result").fetchSemanticsNodes().isNotEmpty()};shot("stun-tools")
+   compose.onNodeWithTag("node_menu").performClick();compose.onNodeWithText("延迟升序").performClick();waitFor("延迟排序持久化"){store.snapshot().bool("sort_group_${g.id}")};Assert.assertEquals(first,store.snapshot().selectedNodeId)
+   scenario.recreate();Assert.assertTrue(store.snapshot().bool("sort_group_${g.id}"));shot("sort-latency")
+   compose.onNodeWithTag("group_${g.id}").performClick();compose.onNodeWithTag("group_menu_${g.id}").performClick();compose.onNodeWithText("订阅选项").performClick();compose.onNodeWithTag("subscription_options_save").performClick();waitFor("订阅选项落盘"){store.snapshot().groups.single().options.contains("autoUpdateDelay")}
+   compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("network_tools"));compose.onNodeWithTag("network_tools").performClick();compose.onNodeWithTag("stun_tool").performClick();compose.onNodeWithTag("stun_server").performTextReplacement("127.0.0.1:invalid");compose.onNodeWithTag("stun_start").performClick();compose.waitUntil(10000){compose.onAllNodesWithTag("stun_result").fetchSemanticsNodes().isNotEmpty()};shot("stun-tools")
   } finally {shell("svc wifi enable");shell("svc data enable");shell("input keyevent 224");File(context.getExternalFilesDir(null),"runtime-last-snapshot.json").writeText(client.snapshot.value.json());File(context.getExternalFilesDir(null),"runtime-events.txt").writeText(events.joinToString("\n"));listOf("neko.log","tun-options.json").forEach { name->val f=File(context.cacheDir,name);if(f.exists())f.copyTo(File(context.getExternalFilesDir(null),name),overwrite=true) };File(context.getExternalFilesDir(null),"vpn-dumpsys.txt").writeText(shell("dumpsys connectivity"));runCatching { shot("last-state") };client.stop();Thread.sleep(1000);client.close();observer.cancel();scenario.close();vm.service.close();store.close()}
  }
 }

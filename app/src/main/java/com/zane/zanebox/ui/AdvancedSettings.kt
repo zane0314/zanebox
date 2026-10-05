@@ -34,7 +34,7 @@ internal fun AdvancedSettings(
             ).forEach { (key, label, default) ->
                 Row(Modifier.fillMaxWidth()) {
                     Text(label, Modifier.weight(1f))
-                    Switch(
+                    UiSwitch(
                         checked = data.bool(key, default),
                         onCheckedChange = { vm.setting(key, it.toString()) },
                         modifier = Modifier.testTag("setting_$key")

@@ -55,3 +55,6 @@ data class AppData(val nodes:List<Node> = emptyList(), val groups:List<Group> = 
         }
     }
 }
+
+/** AnyBox 2.1.9 Theme.getTheme(1..22) colorPrimary values, in the original preference order. */
+internal val themePresetColors=listOf("#f44336","#fb7299","#e91e63","#9c27b0","#673ab7","#3f51b5","#0066cc","#03a9f4","#00bcd4","#009688","#4caf50","#8bc34a","#cddc39","#ffeb3b","#ffc107","#ff9800","#ff5722","#795548","#9e9e9e","#607d8b","#2b2b2b","#00b96b")

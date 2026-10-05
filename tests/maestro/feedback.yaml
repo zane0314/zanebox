@@ -1,0 +1,21 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: network_tools
+- tapOn:
+    id: tools_backup_tab
+- scrollUntilVisible:
+    element:
+      text: 从 WebDAV 恢复
+    direction: DOWN
+    timeout: 30000
+- tapOn: 从 WebDAV 恢复
+- takeScreenshot: reports/ui-1.0.2/current/webdav-feedback
+- assertVisible: WebDAV地址无效
+- tapOn:
+    id: webdav_refresh
+- assertVisible: WebDAV地址无效
+- takeScreenshot: reports/ui-1.0.2/current/webdav-feedback-repeat

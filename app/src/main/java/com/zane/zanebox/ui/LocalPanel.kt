@@ -10,8 +10,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -23,10 +21,11 @@ import java.net.URI
 @Composable
 internal fun LocalPanelDialog(vm:AppViewModel,onDismiss:()->Unit) {
     val url by vm.service.panelUrl.collectAsStateWithLifecycle()
+    val runtime by vm.service.snapshot.collectAsStateWithLifecycle()
     val context=LocalContext.current
     val lifecycle=LocalLifecycleOwner.current.lifecycle
     val webView=remember(context){WebView(context)}
-    val origin=remember(url){runCatching{URI(url)}.getOrNull()?.takeIf{it.host=="127.0.0.1" && it.scheme=="http" && it.port>0 && it.userInfo==null}}
+    val origin=remember(url,runtime.state){runCatching{URI(url)}.getOrNull()?.takeIf{runtime.state==2 && it.host=="127.0.0.1" && it.scheme=="http" && it.port>0 && it.userInfo==null}}
     val currentStorageOrigin by rememberUpdatedState(origin?.let { "${it.scheme}://${it.host}:${it.port}" })
     fun allowed(value:String):Boolean {
         val target=runCatching{URI(value)}.getOrNull() ?: return false
@@ -70,20 +69,18 @@ internal fun LocalPanelDialog(vm:AppViewModel,onDismiss:()->Unit) {
         }
         onDispose { }
     }
-    Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Surface(Modifier.fillMaxWidth().fillMaxHeight(.9f).padding(12.dp),shape=MaterialTheme.shapes.large) {
-            Column {
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                    Text("本地 YACD",Modifier.padding(16.dp),style=MaterialTheme.typography.titleMedium)
-                    TextButton(onClick=onDismiss){Text("关闭")}
-                }
-                if(origin==null)Text("正在准备本地面板；请先连接并启用 Clash API。",Modifier.padding(16.dp))
-                else AndroidView(
-                    factory={webView},
-                    update={view->if(view.tag!=url){view.tag=url;view.loadUrl(url)}},
-                    modifier=Modifier.fillMaxWidth().weight(1f).testTag("yacd_panel")
-                )
-            }
+    UiPage("本地 YACD", onDismiss) { padding ->
+        if (origin == null) {
+            Text(
+                if(runtime.state==2)"正在准备本地面板；需要启用 Clash API 或流量统计。" else "请先连接代理后再打开本地面板。",
+                Modifier.fillMaxSize().padding(padding).padding(16.dp)
+            )
+        } else {
+            AndroidView(
+                factory = { webView },
+                update = { view -> if (view.tag != url) { view.tag = url; view.loadUrl(url) } },
+                modifier = Modifier.fillMaxSize().padding(padding).testTag("yacd_panel")
+            )
         }
     }
 }

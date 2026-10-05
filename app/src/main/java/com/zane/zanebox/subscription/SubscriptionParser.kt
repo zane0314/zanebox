@@ -25,18 +25,20 @@ object SubscriptionParser {
         return ParseReport(nodes, skips.count, skips.first)
     }
     private fun parseInternal(text: String, depth: Int, skips: Skips): List<ParsedNode> {
+        require(text.isNotBlank()) { "没有可导入的内容" }
         require(text.length <= LIMIT && depth <= 2) { "订阅超过解析限制" }
         if (text.startsWith("{") || text.startsWith("[")) {
             val array = if (text.startsWith("[")) JSONArray(text) else JSONObject(text).let { root ->
                 val outbounds=root.optJSONArray("outbounds"); val endpoints=root.optJSONArray("endpoints")
                 if(outbounds!=null || endpoints!=null) JSONArray().apply { listOfNotNull(outbounds,endpoints).forEach { a -> for(i in 0 until a.length()) put(a.get(i)) } }
-                else root.optJSONArray("proxies") ?: JSONArray().put(root)
+                else root.optJSONArray("proxies") ?: root.optJSONArray("servers") ?: JSONArray().put(root)
             }
             return (0 until array.length()).mapNotNull { index -> skips.attempt {
                 val obj = array.getJSONObject(index)
+                if(!obj.has("type") && obj.has("method") && obj.has("server"))obj.put("type","shadowsocks")
                 if (obj.optString("type") in listOf("direct", "block", "dns", "selector", "urltest")) null
                 else if (obj.has("server-port")) clash(jsonMap(obj))
-                else canonical(obj, obj.optString("display_name", obj.optString("name", obj.optString("tag", "节点 ${index + 1}"))))
+                else canonical(obj, obj.optString("display_name", obj.optString("name", obj.optString("remarks",obj.optString("tag", "节点 ${index + 1}")))))
             } }
         }
         if (text.contains("proxies:") && !text.lineSequence().first().contains("://")) {
@@ -59,6 +61,7 @@ object SubscriptionParser {
         require(obj.optString("type").isNotBlank()) { "节点缺少协议" }
         val metadata=JSONObject(); if(obj.has("tag")) metadata.put("sourceTag", obj.getString("tag"))
         obj.remove("name"); obj.remove("display_name"); obj.remove("tag")
+        if(obj.optString("type")=="shadowsocks") { obj.remove("id");obj.remove("remarks") }
         require(obj.has("server") || obj.optString("type") in listOf("wireguard", "tailscale")) { "节点缺少服务器" }
         return ParsedNode(name.ifBlank { obj.optString("server", "节点") }, obj.toString(), link, metadata.toString())
     }
@@ -85,9 +88,9 @@ object SubscriptionParser {
             return canonical(o, v.optString("ps", "VMess"), raw)
         }
         if (scheme == "ss") return shadowsocks(raw)
-        val uri = ShareUri.parse(raw); val q = uri.query; val type = when (scheme) { "hy2", "hysteria2" -> "hysteria2"; "socks", "socks5" -> "socks"; "https" -> "http"; else -> scheme }
+        val uri = ShareUri.parse(raw); val q = uri.query; val type = when (scheme) { "hy2", "hysteria2" -> "hysteria2"; "socks", "socks4", "socks4a", "socks5" -> "socks"; "https" -> "http"; else -> scheme }
         require(type in listOf("vless", "trojan", "hysteria", "hysteria2", "tuic", "socks", "http", "ssh", "anytls", "shadowtls", "juicity", "snell")) { "暂不支持分享协议 $scheme；可导入完整 sing-box JSON" }
-        val o = JSONObject().put("type", type).put("server", uri.host).put("server_port", if (uri.port > 0) uri.port else if (scheme == "http") 80 else 443)
+        val o = JSONObject().put("type", type).put("server", uri.host).put("server_port", if (uri.port > 0) uri.port else when(type) { "socks"->1080;"ssh"->22;"http"->if(scheme=="https")443 else 80;else->443 })
         val user = decoded(uri.rawUserInfo.orEmpty()); val parts = user.split(':', limit = 2)
         when (type) {
             "vless" -> { require(user.isNotBlank()) { "VLESS 缺少 UUID" }; o.put("uuid", user); q["flow"]?.takeIf { it.isNotBlank() }?.let { o.put("flow", it) } }
@@ -102,7 +105,7 @@ object SubscriptionParser {
                 when { !password.isNullOrBlank() -> o.put("obfs", password); obfs.isBlank() || obfs == "none" -> Unit; obfs == "xplus" -> error("Hysteria 混淆缺少密码"); else -> o.put("obfs", obfs) }
             }
             "tuic", "juicity" -> { require(parts.size == 2) { "TUIC 缺少密码" }; o.put("uuid", parts[0]).put("password", parts[1]); if(type == "tuic") { o.put("congestion_control", q["congestion_control"] ?: "cubic"); q["udp_relay_mode"]?.let { o.put("udp_relay_mode", it) } } else q["pinned_certchain_sha256"]?.let { o.put("pin_cert_sha256", it) } }
-            else -> { if (parts[0].isNotEmpty()) o.put("username", parts[0]); if (parts.size > 1) o.put("password", parts[1]); if (type == "socks") o.put("version", "5") }
+            else -> { if (parts[0].isNotEmpty()) o.put(if(type=="ssh")"user" else "username", parts[0]); if (parts.size > 1) o.put("password", parts[1]); if (type == "socks") o.put("version",when(scheme){"socks4"->"4";"socks4a"->"4a";else->"5"}) }
         }
         val security = q["security"] ?: if (type in listOf("trojan", "anytls", "hysteria", "hysteria2", "tuic", "shadowtls", "juicity") || scheme == "https") "tls" else "none"
         if (security in listOf("tls", "reality", "xtls")) {
@@ -144,7 +147,7 @@ object SubscriptionParser {
         when (val t = q["type"] ?: "tcp") {
             "tcp", "none", "" -> if (q["headerType"] == "http") o.put("transport", httpTransport(q["path"], splitHosts(q["host"])))
             "ws" -> o.put("transport", webSocket(q["path"], q["host"], q["ed"]?.toIntOrNull(), q["eh"]))
-            "httpupgrade" -> { val tr = JSONObject().put("type", t).put("path", q["path"] ?: "/"); q["host"]?.takeIf { it.isNotEmpty() }?.let { tr.put("headers", JSONObject().put("Host", it)) }; o.put("transport", tr) }
+            "httpupgrade" -> { val tr = JSONObject().put("type", t).put("path", q["path"] ?: "/"); q["host"]?.takeIf { it.isNotEmpty() }?.let { tr.put("host", it) }; o.put("transport", tr) }
             "http", "h2" -> o.put("transport", httpTransport(q["path"] ?: "/", splitHosts(q["host"])))
             "grpc" -> o.put("transport", JSONObject().put("type", "grpc").put("service_name", q["serviceName"] ?: q["path"] ?: ""))
             "xhttp", "splithttp" -> { val extra = q["extra"]?.let { JSONObject(it) } ?: JSONObject(); o.put("transport", extra.put("type", "xhttp").put("path", q["path"] ?: "/").put("host", q["host"] ?: "").put("mode", q["mode"] ?: "auto")) }
@@ -190,7 +193,7 @@ object SubscriptionParser {
         val type = when (s("type")) { "ss" -> "shadowsocks"; "socks5" -> "socks"; else -> s("type") }
         require(type in listOf("shadowsocks", "vmess", "vless", "trojan", "socks", "http", "hysteria", "hysteria2", "tuic", "anytls", "wireguard", "ssh", "snell", "juicity")) { "Clash 协议 $type 暂不兼容；请使用 sing-box JSON" }
         val o = JSONObject().put("type", type).put("server", s("server")).put("server_port", s("port", s("server-port")).toInt())
-        val keys = mapOf("password" to "password", "uuid" to "uuid", "flow" to "flow", "username" to "username", "udp-relay-mode" to "udp_relay_mode", "congestion-controller" to "congestion_control")
+        val keys = mapOf("password" to "password", "uuid" to "uuid", "flow" to "flow", "username" to if(type=="ssh")"user" else "username", "udp-relay-mode" to "udp_relay_mode", "congestion-controller" to "congestion_control")
         keys.forEach { (from, to) -> m[from]?.let { o.put(to, it) } }
         // Clash reuses "cipher" for both the Shadowsocks method and the VMess security; never cross them.
         if (type == "shadowsocks") m["cipher"]?.let { o.put("method", it) }

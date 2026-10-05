@@ -1,0 +1,24 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/skin_prism_window.xml. -->
+<layer-list
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#0a0c12" android:endColor="#06070a" android:angle="315.0" android:centerColor="#08090d" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#7f3f5bcc" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="0.02" android:centerY="0.06" android:gradientRadius="620.0dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#661a7bff" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="0.98" android:centerY="0.02" android:gradientRadius="660.0dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:startColor="#4d0ea676" android:endColor="@android:color/transparent" android:angle="0.0" android:type="radial" android:centerX="1.0" android:centerY="1.0" android:gradientRadius="700.0dp" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,35 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: Pixel
+- assertVisible: Pixel
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: Node N
+- assertVisible: Node N
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: Channel Gate
+- assertVisible: Channel Gate
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: Confluence
+- assertVisible: Confluence
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: Launch Path
+- assertVisible: Launch Path
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: zanebox
+- assertVisible: zanebox
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

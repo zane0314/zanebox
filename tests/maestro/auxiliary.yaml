@@ -1,0 +1,68 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: network_tools
+- tapOn:
+    id: stun_tool
+- tapOn:
+    id: stun_server
+- eraseText
+- setClipboard: 127.0.0.1:invalid
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: stun_start
+- extendedWaitUntil:
+    visible:
+      id: stun_result|stun_error
+    timeout: 15000
+- takeScreenshot: reports/ui-1.0.2/current/stun
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_logs
+- assertVisible: 日志
+- takeScreenshot: reports/ui-1.0.2/current/logs
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_about
+- assertVisible: 关于 zanebox
+- tapOn: 开源许可与致谢
+- assertVisible: 开源许可
+- takeScreenshot: reports/ui-1.0.2/current/licenses
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      text: 备份与恢复
+    direction: DOWN
+    timeout: 60000
+- tapOn: 备份与恢复
+- assertVisible: 本地备份
+- takeScreenshot: reports/ui-1.0.2/current/backup
+- scrollUntilVisible:
+    element:
+      text: WebDAV 设置
+    direction: DOWN
+    timeout: 60000
+- tapOn: WebDAV 设置
+- assertVisible: 测试连接
+- takeScreenshot: reports/ui-1.0.2/current/webdav
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

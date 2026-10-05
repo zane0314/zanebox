@@ -1,0 +1,917 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- assertVisible:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*(代理未连接|代理已连接|连接中|断开中).*
+    timeout: 30000
+- runFlow:
+    when:
+      visible: .*(连接中).*
+    commands:
+    - extendedWaitUntil:
+        visible: 代理未连接|代理已连接
+        timeout: 30000
+- runFlow:
+    when:
+      visible: .*(代理已连接|断开).*
+    commands:
+    - tapOn:
+        id: connect_toggle
+    - extendedWaitUntil:
+        visible: 代理未连接
+        timeout: 30000
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_appLanguage
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- assertVisible: 简体中文
+- scrollUntilVisible:
+    element:
+      id: setting_uiSkin
+    direction: UP
+    timeout: 60000
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 天青留白
+- scrollUntilVisible:
+    element:
+      id: setting_launcherIcon
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_launcherIcon
+- tapOn: Pixel
+- scrollUntilVisible:
+    element:
+      id: setting_appTheme
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_appTheme
+- tapOn:
+    id: theme_color_1
+- assertVisible: '#f44336'
+- scrollUntilVisible:
+    element:
+      id: setting_theme
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_theme
+- tapOn: 深色
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fontScale
+- tapOn: 更大
+- scrollUntilVisible:
+    element:
+      id: setting_autoStart
+    direction: UP
+    timeout: 60000
+- tapOn:
+    id: setting_autoStart
+- scrollUntilVisible:
+    element:
+      id: setting_statsEnabled
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_statsEnabled
+- scrollUntilVisible:
+    element:
+      id: setting_showDirectSpeed
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_showDirectSpeed
+- scrollUntilVisible:
+    element:
+      id: setting_showGroupInNotification
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_showGroupInNotification
+- scrollUntilVisible:
+    element:
+      id: setting_confirmProfileDelete
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_confirmProfileDelete
+- scrollUntilVisible:
+    element:
+      id: setting_alwaysShowAddress
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_alwaysShowAddress
+- scrollUntilVisible:
+    element:
+      id: setting_meteredNetwork
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_meteredNetwork
+- scrollUntilVisible:
+    element:
+      id: setting_acquireWakeLock
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_acquireWakeLock
+- scrollUntilVisible:
+    element:
+      id: setting_hideFromRecentApps
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_hideFromRecentApps
+- scrollUntilVisible:
+    element:
+      id: setting_logLevel
+    direction: DOWN
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_logLevel
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_logLevel
+- tapOn: debug
+- scrollUntilVisible:
+    element:
+      id: setting_globalCustomConfig
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_globalCustomConfig
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '{"log":{"timestamp":true}}'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- assertVisible: '{"log":{"timestamp":true}}'
+- scrollUntilVisible:
+    element:
+      id: setting_serviceMode
+    direction: UP
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_serviceMode
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_serviceMode
+- tapOn: 本地代理
+- assertVisible: 本地代理
+- scrollUntilVisible:
+    element:
+      id: setting_tunStack
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_tunStack
+- tapOn: 系统
+- scrollUntilVisible:
+    element:
+      id: setting_mtu
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_mtu
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '1400'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- assertVisible: '1400'
+- scrollUntilVisible:
+    element:
+      id: setting_speedInterval
+    direction: DOWN
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_speedInterval
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: setting_speedInterval
+- scrollUntilVisible:
+    element:
+      id: setting_fragmentLength
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: setting_fragmentLength
+- scrollUntilVisible:
+    element:
+      id: setting_fragmentInterval
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: setting_fragmentInterval
+- scrollUntilVisible:
+    element:
+      id: setting_routeMode
+    direction: UP
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_routeMode
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_routeMode
+- tapOn: 全局
+- scrollUntilVisible:
+    element:
+      id: setting_perAppEnabled
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_perAppEnabled
+- scrollUntilVisible:
+    element:
+      id: setting_perAppMode
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_perAppMode
+- tapOn: 仅代理已选应用
+- scrollUntilVisible:
+    element:
+      id: setting_bypassLan
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_bypassLan
+- scrollUntilVisible:
+    element:
+      id: setting_bypassLanInCore
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_bypassLanInCore
+- scrollUntilVisible:
+    element:
+      id: setting_concurrentDial
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_concurrentDial
+- scrollUntilVisible:
+    element:
+      id: setting_sniff
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_sniff
+- scrollUntilVisible:
+    element:
+      id: setting_resolveDestination
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_resolveDestination
+- scrollUntilVisible:
+    element:
+      id: setting_ipv6Mode
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_ipv6Mode
+- tapOn: 优先 IPv4
+- scrollUntilVisible:
+    element:
+      id: setting_rulesProvider
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_rulesProvider
+- tapOn: Loyalsoldier
+- scrollUntilVisible:
+    element:
+      id: setting_rulesGeositeUrl
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_rulesGeositeUrl
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: https://example.com/geosite.srs
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_rulesGeoipUrl
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_rulesGeoipUrl
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: https://example.com/geoip.db
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_rulesUpdateInterval
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_rulesUpdateInterval
+- tapOn: 6 小时
+- scrollUntilVisible:
+    element:
+      id: setting_urlTestInterval
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_urlTestInterval
+- tapOn: 1 分钟
+- scrollUntilVisible:
+    element:
+      id: setting_urlTestTolerance
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_urlTestTolerance
+- tapOn: 10 ms
+- scrollUntilVisible:
+    element:
+      id: setting_enableTLSFragment
+    direction: DOWN
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_enableTLSFragment
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_enableTLSFragment
+- scrollUntilVisible:
+    element:
+      id: setting_fragmentLength
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: setting_fragmentLength
+- scrollUntilVisible:
+    element:
+      id: setting_fragmentInterval
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: setting_fragmentInterval
+- scrollUntilVisible:
+    element:
+      id: setting_dnsRemote
+    direction: DOWN
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_dnsRemote
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_dnsRemote
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: https://1.1.1.1/dns-query
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_dnsStrategyRemote
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_dnsStrategyRemote
+- tapOn: 优先 IPv4
+- scrollUntilVisible:
+    element:
+      id: setting_dnsDirect
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_dnsDirect
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: local
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_dnsStrategyDirect
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_dnsStrategyDirect
+- tapOn: 仅 IPv4
+- scrollUntilVisible:
+    element:
+      id: setting_dnsStrategyServer
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_dnsStrategyServer
+- tapOn: 优先 IPv6
+- scrollUntilVisible:
+    element:
+      id: setting_enableDnsRouting
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_enableDnsRouting
+- scrollUntilVisible:
+    element:
+      id: setting_fakeDns
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fakeDns
+- scrollUntilVisible:
+    element:
+      id: setting_dnsHosts
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_dnsHosts
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: 198.18.0.2 example.com
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_allowLan
+    direction: DOWN
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_allowLan
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_allowLan
+- scrollUntilVisible:
+    element:
+      id: setting_shareEnabled
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_shareEnabled
+- scrollUntilVisible:
+    element:
+      id: setting_sharePort
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_sharePort
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '2081'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_disableMixedInbound
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_disableMixedInbound
+- scrollUntilVisible:
+    element:
+      id: setting_disableMixedInbound
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_disableMixedInbound
+- scrollUntilVisible:
+    element:
+      id: setting_appendHttpProxy
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_appendHttpProxy
+- scrollUntilVisible:
+    element:
+      id: setting_httpProxyBypass
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_httpProxyBypass
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: example.com
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_mixedPort
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_mixedPort
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '2082'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_strictRoute
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_strictRoute
+- scrollUntilVisible:
+    element:
+      id: setting_muxEnabled
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_muxEnabled
+- scrollUntilVisible:
+    element:
+      id: setting_muxProtocol
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_muxProtocol
+- tapOn: smux
+- scrollUntilVisible:
+    element:
+      id: setting_muxMaxStreams
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_muxMaxStreams
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '16'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_muxPadding
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_muxPadding
+- scrollUntilVisible:
+    element:
+      id: setting_testUrl
+    direction: DOWN
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_testUrl
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_testUrl
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: https://example.com/204
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_testTimeout
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_testTimeout
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '5000'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_testConcurrency
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_testConcurrency
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '2'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_clashApi
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_clashApi
+- scrollUntilVisible:
+    element:
+      id: setting_apiPort
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_apiPort
+- tapOn:
+    id: editor_field_0
+- longPressOn:
+    id: editor_field_0
+- runFlow:
+    when:
+      visible: "全选|Select all|Select All"
+    commands:
+    - tapOn: "全选|Select all|Select All"
+- eraseText: 1
+- setClipboard: '9090'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- scrollUntilVisible:
+    element:
+      id: setting_networkReset
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_networkReset
+- scrollUntilVisible:
+    element:
+      id: setting_wakeResetConnections
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_wakeResetConnections
+- scrollUntilVisible:
+    element:
+      id: setting_globalAllowInsecure
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_globalAllowInsecure
+- scrollUntilVisible:
+    element:
+      id: setting_allowInsecureOnRequest
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_allowInsecureOnRequest
+- scrollUntilVisible:
+    element:
+      id: setting_appTLSVersion
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_appTLSVersion
+- tapOn: TLS 1.3
+- scrollUntilVisible:
+    element:
+      id: setting_showBottomBar
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_showBottomBar
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_general
+- assertVisible: 简体中文
+- scrollUntilVisible:
+    element:
+      id: setting_serviceMode
+    direction: UP
+    timeout: 60000
+- assertVisible: 本地代理
+- assertVisible: 系统
+- assertVisible: '1400'
+- scrollUntilVisible:
+    element:
+      id: setting_routeMode
+    direction: DOWN
+    timeout: 60000
+- assertVisible: 全局
+- scrollUntilVisible:
+    element:
+      id: setting_ipv6Mode
+    direction: DOWN
+    timeout: 60000
+- assertVisible: 优先 IPv4
+- scrollUntilVisible:
+    element:
+      id: setting_dnsRemote
+    direction: DOWN
+    timeout: 60000
+- assertVisible: https://1.1.1.1/dns-query
+- scrollUntilVisible:
+    element:
+      id: setting_dnsDirect
+    direction: DOWN
+    timeout: 60000
+- assertVisible: local
+- scrollUntilVisible:
+    element:
+      id: setting_httpProxyBypass
+    direction: DOWN
+    timeout: 60000
+- assertVisible: example.com
+- scrollUntilVisible:
+    element:
+      id: setting_mixedPort
+    direction: DOWN
+    timeout: 60000
+- assertVisible: '2082'
+- scrollUntilVisible:
+    element:
+      id: setting_appTLSVersion
+    direction: DOWN
+    timeout: 60000
+- assertVisible: TLS 1.3
+- scrollUntilVisible:
+    element:
+      id: reset_settings
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: reset_settings
+- tapOn: 确认
+- scrollUntilVisible:
+    element:
+      id: setting_appLanguage
+    direction: UP
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: setting_appLanguage
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- assertVisible: 简体中文
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible: 节点
+- stopApp
+- launchApp
+- assertVisible:
+    id: connect_toggle

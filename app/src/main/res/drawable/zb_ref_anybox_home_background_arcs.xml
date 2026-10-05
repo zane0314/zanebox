@@ -1,0 +1,25 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/anybox_home_background_arcs.xml. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="851dp"
+    android:height="1847dp"
+    android:viewportWidth="851"
+    android:viewportHeight="1847">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#66ffffff"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M-32,230 C145,96 324,78 465,118 C654,171 776,301 875,478" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#22ffffff"
+        android:strokeWidth="1.1"
+        android:strokeLineCap="round"
+        android:pathData="M-80,1110 C145,1180 365,1335 555,1528 C675,1650 765,1765 865,1850" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#36ffffff"
+        android:strokeWidth="1.1"
+        android:strokeLineCap="round"
+        android:pathData="M878,1368 C707,1461 556,1630 468,1860" />
+</vector>

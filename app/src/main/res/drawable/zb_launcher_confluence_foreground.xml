@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: /Users/zane/Documents/ChatGPT/zane 代理软件/work/AnyBox-2.0.0-clean-150/apktool_out/res/drawable/launcher_confluence_foreground.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="@android:color/transparent" android:pathData="M29,30 C29,49 44,54 54,54 C64,54 79,59 79,78 M79,30 C79,49 64,54 54,54 C44,54 29,59 29,78" android:strokeColor="#FFE7FFF9" android:strokeWidth="7" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:fillColor="#FFFFD166" android:pathData="M54,45 A9,9 0,1 1,53.9 45" />
+</vector>

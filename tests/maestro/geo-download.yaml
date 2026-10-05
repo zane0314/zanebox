@@ -1,0 +1,24 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_menu
+- tapOn: 路由资产
+- tapOn:
+    id: asset_download_geoip
+- extendedWaitUntil:
+    visible: geoip 已更新并通过内核校验
+    timeout: 60000
+- takeScreenshot: reports/ui-1.0.2/current/geoip-downloaded
+- tapOn:
+    id: asset_download_geosite
+- extendedWaitUntil:
+    visible: geosite 已更新并通过内核校验
+    timeout: 60000
+- takeScreenshot: reports/ui-1.0.2/current/geosite-downloaded
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

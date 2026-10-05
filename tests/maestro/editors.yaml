@@ -1,0 +1,115 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- assertVisible: 节点
+- tapOn:
+    id: add_nodes
+- tapOn: 手动添加
+- tapOn:
+    id: node_save
+- assertVisible: 请输入节点名称
+- tapOn:
+    id: node_name
+- setClipboard: UI-fixture
+- pasteText
+- hideKeyboard
+- tapOn: 协议
+- tapOn: SOCKS
+- tapOn:
+    id: node_field_server
+- tapOn:
+    id: editor_field_0
+- setClipboard: 10.0.2.2
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- tapOn:
+    id: node_field_server_port
+- tapOn:
+    id: editor_field_0
+- eraseText
+- setClipboard: '19081'
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- takeScreenshot: reports/ui-1.0.2/current/node-editor
+- tapOn:
+    id: node_save
+- assertVisible: UI-fixture
+- takeScreenshot: reports/ui-1.0.2/current/nodes-populated
+- tapOn:
+    id: node_menu
+- tapOn: 添加订阅
+- tapOn:
+    id: group_name
+- setClipboard: UI-group
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: group_save
+- assertVisible: UI-group
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_rules
+- tapOn:
+    id: add_rule
+- tapOn:
+    id: rule_name
+- setClipboard: UI-rule
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: rule_target
+- tapOn: 直连
+- tapOn:
+    id: rule_domains
+- setClipboard: example.com
+- pasteText
+- hideKeyboard
+- takeScreenshot: reports/ui-1.0.2/current/rule-editor
+- tapOn:
+    id: rule_save
+- assertVisible: UI-rule
+- tapOn:
+    id: page_back
+- tapOn:
+    id: smart_merges
+- tapOn:
+    id: add_merge
+- tapOn:
+    id: merge_name
+- setClipboard: UI-merge
+- pasteText
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: UI-fixture
+    direction: DOWN
+    timeout: 60000
+- tapOn: UI-fixture
+- takeScreenshot: reports/ui-1.0.2/current/merge-editor
+- tapOn:
+    id: merge_save
+- assertVisible: UI-merge
+- tapOn:
+    id: page_back
+- scrollUntilVisible:
+    element:
+      id: smart_target_ai
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: smart_target_ai
+- scrollUntilVisible:
+    element:
+      text: UI-fixture
+    direction: DOWN
+    timeout: 60000
+- tapOn: UI-fixture
+- assertVisible: UI-fixture
+- takeScreenshot: reports/ui-1.0.2/current/smart-target
+- tapOn:
+    id: main_back

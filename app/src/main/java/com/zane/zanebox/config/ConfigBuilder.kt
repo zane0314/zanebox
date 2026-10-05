@@ -9,10 +9,40 @@ import java.net.URI
 enum class Purpose { MAIN, TEST, EXPORT }
 
 object ConfigBuilder {
-    private val smartServices=listOf("youtube","telegram","netflix","disney","tiktok","x","meta","spotify","google","ai","custom")
+    internal fun normalizeTransportHost(outbound:JSONObject) {
+        val transport=outbound.optJSONObject("transport") ?: return
+        if(transport.optString("type") !in listOf("httpupgrade","xhttp") || transport.optString("host").isNotBlank())return
+        val headers=transport.optJSONObject("headers") ?: return
+        val host=when(val value=headers.opt("Host")) { is String->value;is JSONArray->value.optString(0);else->"" }
+        if(host.isNotBlank()) { transport.put("host",host);headers.remove("Host");if(headers.length()==0)transport.remove("headers") }
+    }
+    fun ruleSetFormat(url:String):String {
+        val path=runCatching { URI(url).path.orEmpty() }.getOrDefault("")
+        return when { path.endsWith(".srs",true)->"binary";path.endsWith(".json",true)->"source";else->"" }
+    }
+    private fun smartServices(data:AppData)=listOf("youtube","telegram","netflix","disney","tiktok","x","meta","spotify","google","ai","custom")+
+        data.settings.keys.filter { it.startsWith("smartCustom.") && it.endsWith(".name") }.map { it.removePrefix("smartCustom.").removeSuffix(".name") }.sorted()
     private val unsupportedSmartTypes=setOf("USER-AGENT", "IP-ASN", "OR")
-    fun warnings(data: AppData): List<String> = smartServices.filter { data.setting("smart.$it.target", "off")!="off" }.flatMap { service ->
-        data.setting("smartRules.$service").lines().map { it.substringBefore(',').trim().uppercase() }.filter { it in unsupportedSmartTypes }.distinct().map { "$service: 当前 sing-box 路由不支持 $it，保留原列表但跳过该匹配；其余域名/IP规则仍生效" }
+    fun warnings(data: AppData): List<String> = smartServices(data).filter { data.setting("smart.$it.target", "off")!="off" }.flatMap { service ->
+        val target=data.setting("smart.$service.target")
+        val missing=if((target=="auto" || target.startsWith("region:")) && smartTargetNodeIds(data,target).isEmpty())listOf("$service: 分流目标没有可用节点，当前使用普通路由") else emptyList()
+        missing+data.setting("smartRules.$service").lines().map { it.substringBefore(',').trim().uppercase() }.filter { it in unsupportedSmartTypes }.distinct().map { "$service: 当前 sing-box 路由不支持 $it，保留原列表但跳过该匹配；其余域名/IP规则仍生效" }
+    }
+
+    fun smartTargetNodeIds(data:AppData,target:String):List<Long> {
+        val active=data.nodes.filter { n->data.groups.any { it.id==n.groupId && it.enabled } && JSONObject(n.outbound).optString("type")!="custom" }
+        val merge=data.merges.firstOrNull { it.id==data.setting("smartSourceMergeId","0").toLongOrNull() }
+        val group=data.setting("smartSourceGroupId","0").toLongOrNull() ?:0
+        val source=if(merge!=null)active.filter { it.id in merge.nodeIds || it.groupId in merge.groupIds } else if(group>0)active.filter { it.groupId==group } else active
+        return when {
+            target=="auto"->source
+            target.startsWith("region:")->source.filter { nodeRegion(data,it.id,it.name)==target.substringAfter(':') }
+            target.startsWith("node:")->active.filter { it.id==target.substringAfter(':').toLongOrNull() }
+            target.startsWith("group:")->active.filter { it.groupId==target.substringAfter(':').toLongOrNull() }
+            target.startsWith("merge:")->data.merges.firstOrNull { it.id==target.substringAfter(':').toLongOrNull() }?.let { m->active.filter { it.id in m.nodeIds || it.groupId in m.groupIds } }.orEmpty()
+            target in listOf("off","proxy")->active.filter { it.id==data.selectedNodeId }.ifEmpty { active.take(1) }
+            else->emptyList()
+        }.map { it.id }
     }
 
     fun build(data: AppData, purpose: Purpose = Purpose.MAIN, testNodeId: Long = 0, runtimeSecret: String = ""): String {
@@ -33,7 +63,18 @@ object ConfigBuilder {
         val out = JSONArray()
         val endpoints = JSONArray()
         fun addOutbound(item: JSONObject) {
+            normalizeTransportHost(item)
+            if(item.optString("type")=="hysteria2")item.optJSONArray("server_ports")?.takeIf { it.length()>0 }?.let { ports ->
+                com.zane.zanebox.subscription.SubscriptionParser.applyHysteriaPorts(item,(0 until ports.length()).joinToString(","){ports.getString(it)})
+            }
+            if(item.optString("type")=="ssh" && item.has("username")) {
+                if(!item.has("user"))item.put("user",item.get("username"))
+                item.remove("username")
+            }
             if(data.bool("globalAllowInsecure",false)) item.optJSONObject("tls")?.put("insecure",true)
+            if(data.bool("enableTLSFragment",false)) item.optJSONObject("tls")?.let { tls ->
+                if(tls.optBoolean("enabled") && !tls.has("fragment") && !tls.optBoolean("record_fragment")) tls.put("fragment",true)
+            }
             if(data.bool("muxEnabled",false) && item.optString("type") in listOf("shadowsocks","vmess","vless","trojan") && !item.has("multiplex")) {
                 val streams=data.setting("muxMaxStreams","8").toInt();require(streams>0) { "Mux流数量无效" };val protocol=data.setting("muxProtocol","h2mux");require(protocol in listOf("h2mux","smux","yamux")) { "Mux协议无效" }
                 item.put("multiplex",JSONObject().put("enabled",true).put("protocol",protocol).put("max_streams",streams).put("padding",data.bool("muxPadding",false)))
@@ -75,7 +116,10 @@ object ConfigBuilder {
             data.groups.filter { it.enabled }.forEach { g ->
                 val members = eligible.filter { it.groupId == g.id && JSONObject(it.outbound).optString("type")!="custom" }.map { "node-${it.id}" }
                 if (members.isNotEmpty()) {
-                    out.put(JSONObject().put("type", "selector").put("tag", groupTag(g.id)).put("outbounds", JSONArray(members)))
+                    val options=JSONObject(g.options)
+                    val selectable=options.optBoolean("groupIsSelector",options.optBoolean("isSelector",true))
+                    val groupDefault="node-${chosen.id}".takeIf { it in members } ?:members.first()
+                    out.put(JSONObject().put("type", "selector").put("tag", groupTag(g.id)).put("outbounds", JSONArray(if(selectable)members else listOf(groupDefault))).put("default",groupDefault))
                     tags.add(groupTag(g.id))
                 }
             }
@@ -84,21 +128,23 @@ object ConfigBuilder {
                 val members = eligible.filter { (it.id in g.nodeIds || it.groupId in g.groupIds) && JSONObject(it.outbound).optString("type")!="custom" }.map { "node-${it.id}" }.distinct()
                 if(members.isEmpty()) return@forEach
                 val item = JSONObject().put("type", g.mode).put("tag", "merge-${g.id}").put("outbounds", JSONArray(members))
-                if (g.mode == "urltest") item.put("url", data.setting("testUrl", "https://www.gstatic.com/generate_204")).put("interval", "5m")
+                if (g.mode == "urltest") urlTestOptions(item,data)
                 else if ("node-${g.selectedId}" in members) item.put("default", "node-${g.selectedId}")
                 out.put(item); tags.add("merge-${g.id}")
             }
         }
+        val selectorGroup=data.groups.firstOrNull { it.id==chosen.groupId && JSONObject(it.options).optBoolean("groupIsSelector",JSONObject(it.options).optBoolean("isSelector",false)) }
         val candidateNodes=if(testing) nodes.filter { it.id==testNodeId } else eligible.filter { JSONObject(it.outbound).optString("type")!="custom" }
         require(candidateNodes.isNotEmpty()) { "没有可用代理候选" }
         val selected = "node-${if (testing) testNodeId else chosen.id}"
         val defaultNode = if (selected in tags) selected else "node-${candidateNodes.first().id}"
-        out.put(JSONObject().put("type", "selector").put("tag", "proxy").put("outbounds", JSONArray(candidateNodes.map { "node-${it.id}" })).put("default", defaultNode))
+        out.put(JSONObject().put("type", "selector").put("tag", "proxy").put("outbounds", JSONArray(candidateNodes.filter { selectorGroup==null || it.groupId==selectorGroup.id }.map { "node-${it.id}" })).put("default", defaultNode))
         tags.add("proxy")
         val rules = JSONArray()
         if (!testing) {
             if (data.bool("sniff", true)) rules.put(JSONObject().put("action", "sniff"))
             rules.put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
+            if(data.bool("resolveDestination",false)) rules.put(JSONObject().put("action","resolve").put("server","dns-direct"))
             if(data.bool("bypassLanInCore",false)) rules.put(JSONObject().put("ip_is_private",true).put("action","route").put("outbound","direct"))
         }
         val dnsRules = JSONArray()
@@ -112,7 +158,11 @@ object ConfigBuilder {
             else -> error("未知规则目标 $value")
         }.also { require(it == "block" || it in tags) { "规则引用不存在的目标 $value" } }
         if (!testing && mode == "rule") data.rules.filter { it.enabled }.sortedBy { it.order }.forEach { r ->
-            val rule = JSONObject(r.advanced); normalizeAdvanced(rule); val customRule=rule.optJSONObject("customRule");rule.remove("customRule"); require(!rule.has("outbound")) { "高级规则 outbound 必须使用统一目标" }; val domains = mutableListOf<String>(); val suffixes = mutableListOf<String>(); val keywords = mutableListOf<String>(); val regex = mutableListOf<String>(); val setTags = mutableListOf<String>()
+            val rule = JSONObject(r.advanced); normalizeAdvanced(rule); val customRule=rule.optJSONObject("customRule");rule.remove("customRule"); require(!rule.has("outbound")) { "高级规则 outbound 必须使用统一目标" }; val domains = mutableListOf<String>(); val suffixes = mutableListOf<String>(); val keywords = mutableListOf<String>(); val regex = mutableListOf<String>(); val refs=rule.optJSONArray("rule_set");val setTags=if(refs==null)mutableListOf<String>() else (0 until refs.length()).map{refs.getString(it)}.toMutableList()
+            setTags.filter{it.startsWith("geosite:") || it.startsWith("geoip:")}.forEach { value->
+                val kind=value.substringBefore(':');val code=value.substringAfter(':');require(code.matches(Regex("[a-zA-Z0-9_-]+"))) { "规则集名称无效" }
+                sets[value]=JSONObject().put("type","local").put("tag",value).put("format","binary").put("path","$kind:$code")
+            }
             r.domains.lines().flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.forEach { value ->
                 when {
                     value.startsWith("geosite:") || value.startsWith("geoip:") -> {
@@ -132,7 +182,7 @@ object ConfigBuilder {
             if (suffixes.isNotEmpty()) rule.put("domain_suffix", JSONArray(suffixes))
             if (keywords.isNotEmpty()) rule.put("domain_keyword", JSONArray(keywords))
             if (regex.isNotEmpty()) rule.put("domain_regex", JSONArray(regex))
-            if (setTags.isNotEmpty()) rule.put("rule_set", JSONArray(setTags))
+            if (setTags.isNotEmpty()) rule.put("rule_set", JSONArray(setTags.distinct()))
             fun values(s: String) = s.split(Regex("[\\s,]+" )).filter { it.isNotBlank() }
             if (values(r.packages).isNotEmpty()) rule.put("package_name", JSONArray(values(r.packages)))
             if (values(r.ipCidrs).isNotEmpty()) rule.put("ip_cidr", JSONArray(values(r.ipCidrs)))
@@ -141,7 +191,7 @@ object ConfigBuilder {
             if (dest == "block") rule.put("action", "reject") else if(rule.optString("action", "route")=="route") rule.put("action", "route").put("outbound", dest)
             if(customRule!=null) mergeJson(rule,customRule)
             (if(r.prioritize) priorityRules else ordinaryRules).put(rule)
-            if (dest == "direct") {
+            if (dest == "direct" && data.bool("enableDnsRouting",true)) {
                 val d=JSONObject()
                 listOf("domain","domain_suffix","domain_keyword","domain_regex").forEach { key -> if(rule.has(key)) d.put(key,rule.get(key)) }
                 val domainSets=setTags.filter { it.startsWith("geosite:") }
@@ -152,19 +202,41 @@ object ConfigBuilder {
         fun append(source: JSONArray) { for(i in 0 until source.length()) rules.put(source.get(i)) }
         append(priorityRules)
         if(!testing && mode=="rule") {
-            val sourceMerge=data.merges.find { it.id==data.setting("smartSourceMergeId", "0").toLongOrNull() }
-            val sourceNodes=if(sourceMerge==null) candidateNodes else candidateNodes.filter { it.id in sourceMerge.nodeIds || it.groupId in sourceMerge.groupIds }
-            smartServices.forEach serviceLoop@ { service ->
+            smartServices(data).forEach serviceLoop@ { service ->
                 val choice=data.setting("smart.$service.target", "off")
                 if(choice!="off") {
                     val dest=when {
                         choice=="auto" || choice.startsWith("region:") -> {
-                            val candidates=if(choice=="auto") sourceNodes else sourceNodes.filter { nodeRegion(data, it.id, it.name)==choice.substringAfter(':') }
+                            val ids=smartTargetNodeIds(data,choice).toSet()
+                            val candidates=candidateNodes.filter { it.id in ids }
                             if(candidates.isEmpty()) return@serviceLoop
                             val tag="smart-$service"
-                            out.put(JSONObject().put("type", "urltest").put("tag", tag).put("outbounds", JSONArray(candidates.map { "node-${it.id}" })).put("url", data.setting("testUrl", "https://www.gstatic.com/generate_204")).put("interval", "5m")); tags.add(tag); tag
+                            out.put(urlTestOptions(JSONObject().put("type", "urltest").put("tag", tag).put("outbounds", JSONArray(candidates.map { "node-${it.id}" })),data)); tags.add(tag); tag
                         }
                         else -> { if(choice.startsWith("node:") && candidateNodes.none { it.id.toString()==choice.substringAfter(':') }) return@serviceLoop;runCatching { target(choice) }.getOrElse { return@serviceLoop } }
+                    }
+                    val packages=data.setting("smartCustom.$service.packages").lines().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                    if(packages.isNotEmpty()) {
+                        require(packages.all { it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")) }) { "自定义应用包名无效" }
+                        val appRule=JSONObject().put("package_name",JSONArray(packages))
+                        rules.put(if(dest=="block")appRule.put("action","reject") else appRule.put("action","route").put("outbound",dest))
+                    }
+                    val smartUrl=data.setting("smartUrl.$service")
+                    val format=ruleSetFormat(smartUrl)
+                    if(format.isNotBlank()) {
+                        val tag="smart-set-$service"
+                        val body=data.setting("smartRules.$service")
+                        val set=if(format=="source" && body.isNotBlank())JSONObject().put("type","inline").put("tag",tag).put("rules",JSONObject(body).getJSONArray("rules"))
+                        else {
+                            // A fragment changes the native cache URL hash without altering the server request.
+                            val url=smartUrl.substringBefore('#')+"#zanebox-update="+data.setting("smartUpdated.$service","0")
+                            val interval=when(data.setting("rulesUpdateInterval","24h")){"off"->"876000h";"3d"->"72h";"7d"->"168h";else->data.setting("rulesUpdateInterval","24h")}
+                            JSONObject().put("type","remote").put("tag",tag).put("format",format).put("url",url).put("download_detour","direct").put("update_interval",interval)
+                        }
+                        sets[tag]=set
+                        val setRule=JSONObject().put("rule_set",JSONArray().put(tag))
+                        rules.put(if(dest=="block")setRule.put("action","reject") else setRule.put("action","route").put("outbound",dest))
+                        return@serviceLoop
                     }
                     data.setting("smartRules.$service", "").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith('#') && !it.startsWith("//") }.forEach { line ->
                         if(line.substringBefore(',').uppercase() in unsupportedSmartTypes) return@forEach
@@ -189,6 +261,7 @@ object ConfigBuilder {
         val rulesText = rules.toString()
         val findProcess = !testing && (data.bool("statsEnabled", true) || listOf("package_name", "process_name", "process_path", "process_path_regex").any { rulesText.contains("\"$it\"") })
         val route = JSONObject().put("rules", rules).put("final", final).put("auto_detect_interface", true).put("find_process", findProcess).put("default_domain_resolver", "dns-direct")
+        if(data.bool("concurrentDial",false))route.put("default_network_strategy","fallback")
         data.setting("domainStrategy").takeIf { it.isNotBlank() }?.let { strategy -> require(strategy in listOf("prefer_ipv4","prefer_ipv6","ipv4_only","ipv6_only")) { "域名解析策略无效" };route.put("default_domain_resolver",JSONObject().put("server","dns-direct").put("strategy",strategy)) }
         val serverStrategy=data.setting("dnsStrategyServer",data.setting("domainStrategy",""))
         require(serverStrategy in listOf("","prefer_ipv4","prefer_ipv6","ipv4_only","ipv6_only")) { "节点服务器DNS策略无效" }
@@ -265,14 +338,20 @@ object ConfigBuilder {
         chosen.let { JSONObject(it.metadata).optJSONObject("customConfig")?.let { custom -> mergeJson(root,custom) } }
         return sanitizeRuntime(root,data,purpose,runtimeSecret)
     }
-    private fun normalizeAdvanced(rule:JSONObject) {
+    private fun urlTestOptions(item:JSONObject,data:AppData):JSONObject {
+        val interval=data.setting("urlTestInterval","5m");require(interval.matches(Regex("[1-9][0-9]*(ms|s|m|h)"))) { "URLTest 间隔无效" }
+        val tolerance=data.setting("urlTestTolerance","5").toInt();require(tolerance in 0..65535) { "URLTest 容差须为 0–65535" }
+        return item.put("url",data.setting("testUrl","https://www.gstatic.com/generate_204")).put("interval",interval).put("tolerance",tolerance)
+    }
+    internal fun normalizeAdvanced(rule:JSONObject) {
         fun split(text:String)=text.split(Regex("[\\s,]+" )).filter { it.isNotBlank() }
         listOf("port","source_port").forEach { key -> (rule.opt(key) as? String)?.let { text ->
             val ports=mutableListOf<Int>();val ranges=mutableListOf<String>()
-            split(text).forEach { value -> if(value.contains(':') || value.contains('-')) { val pair=value.replace('-',':').split(':');require(pair.size==2 && pair.all { it.toIntOrNull() in 1..65535 } && pair[0].toInt()<=pair[1].toInt()) { "端口范围无效" };ranges.add(pair.joinToString(":")) } else ports.add(value.toInt().also { require(it in 1..65535) }) }
+            split(text).forEach { value -> if(value.contains(':') || value.contains('-')) { val pair=value.replace('-',':').split(':');require(pair.size==2 && pair.all { it.toIntOrNull() in 1..65535 } && pair[0].toInt()<=pair[1].toInt()) { "端口范围无效" };ranges.add(pair.joinToString(":")) } else ports.add(value.toInt().also { require(it in 1..65535) { "端口范围无效" } }) }
             rule.remove(key);if(ports.isNotEmpty()) rule.put(key,JSONArray(ports));if(ranges.isNotEmpty()) rule.put("${key}_range",JSONArray(ranges))
         } }
         listOf("source_ip_cidr","protocol","rule_set","network","domain","domain_suffix","domain_keyword","domain_regex","process_name","process_path","package_name").forEach { key -> (rule.opt(key) as? String)?.let { text -> rule.put(key,JSONArray(if(key=="domain_regex") text.lines().map { it.trim() }.filter { it.isNotBlank() } else split(text))) } }
+        rule.optJSONArray("network")?.let { values->require((0 until values.length()).all { values.getString(it) in listOf("tcp","udp") }) { "网络须为 tcp 或 udp" } }
     }
     internal fun mergeJson(base:JSONObject,custom:JSONObject) {
         custom.keys().asSequence().toList().forEach { rawKey ->
@@ -335,7 +414,7 @@ object ConfigBuilder {
         return JSONObject().apply { map.forEach { (domain,ips) -> put(domain,JSONArray(ips.distinct())) } }
     }
     private fun nodeRegion(data: AppData, id: Long, name: String): String {
-        data.setting("nodeRegion.$id").takeIf { it.isNotBlank() }?.let { return it }
+        data.setting("nodeRegion.$id").trim().lowercase(java.util.Locale.ROOT).takeIf { it.isNotBlank() }?.let { return it }
         val hints=mapOf("hk" to listOf("香港","HK","Hong Kong","🇭🇰"), "us" to listOf("美国","US","United States","🇺🇸"), "kr" to listOf("韩国","KR","Korea","🇰🇷"), "jp" to listOf("日本","JP","Japan","🇯🇵"), "sg" to listOf("新加坡","SG","Singapore","🇸🇬"), "tw" to listOf("台湾","TW","Taiwan","🇹🇼"))
         return hints.entries.firstOrNull { (_, words) -> words.any { name.contains(it, ignoreCase=true) } }?.key ?: ""
     }

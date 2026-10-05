@@ -23,6 +23,8 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
     @Volatile var tun:ParcelFileDescriptor?=null
     /** Android defaults VPN networks to metered on API 29+; the original app exposed this as meteredNetwork (default off). */
     @Volatile var metered:Boolean=false
+    @Volatile var httpProxyPort:Int=0
+    @Volatile var httpProxyBypass:List<String> = emptyList()
     @Volatile private var underlying:Network?=null
     private val available=ConcurrentHashMap<Network,LinkProperties>()
     private val monitors=ConcurrentHashMap<Long,InterfaceUpdateListener>()
@@ -92,6 +94,7 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
         }
         dnsServers.forEach { builder.addDnsServer(it) }
         if(Build.VERSION.SDK_INT>=29) builder.setMetered(metered)
+        if(Build.VERSION.SDK_INT>=29 && httpProxyPort>0) builder.setHttpProxy(android.net.ProxyInfo.buildDirectProxy("127.0.0.1",httpProxyPort,httpProxyBypass))
         val included=strings("IncludePackage")
         if(included.isNotEmpty())(included+context.packageName).distinct().forEach { builder.addAllowedApplication(it) }
         strings("ExcludePackage").filterNot { it==context.packageName }.forEach { builder.addDisallowedApplication(it) }

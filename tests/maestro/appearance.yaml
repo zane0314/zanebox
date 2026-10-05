@@ -1,0 +1,146 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- assertVisible: 节点
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_appTheme
+- tapOn:
+    id: theme_color_1
+- assertVisible: '#f44336'
+- tapOn:
+    id: setting_appTheme
+- tapOn:
+    id: theme_color_skin
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 棱镜流光
+- tapOn:
+    id: setting_theme
+- tapOn: 浅色
+- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-浅色-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-浅色-home
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 棱镜流光
+- tapOn:
+    id: setting_theme
+- tapOn: 深色
+- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-深色-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-深色-home
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 天青留白
+- tapOn:
+    id: setting_theme
+- tapOn: 浅色
+- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-浅色-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-浅色-home
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 天青留白
+- tapOn:
+    id: setting_theme
+- tapOn: 深色
+- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-深色-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-深色-home
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 光谱水晶
+- tapOn:
+    id: setting_theme
+- tapOn: 浅色
+- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-浅色-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-浅色-home
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 光谱水晶
+- tapOn:
+    id: setting_theme
+- tapOn: 深色
+- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-深色-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-深色-home
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_theme
+- tapOn: 浅色
+- tapOn:
+    id: setting_fontScale
+- tapOn: 更大
+- takeScreenshot: reports/ui-1.0.2/current/large-font-settings
+- tapOn:
+    id: setting_fontScale
+- tapOn: 标准
+- tapOn:
+    id: setting_appLanguage
+- tapOn: English
+- assertVisible: Settings
+- takeScreenshot: reports/ui-1.0.2/current/english-settings
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- tapOn:
+    id: setting_uiSkin
+- tapOn: 棱镜流光
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

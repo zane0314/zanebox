@@ -1,0 +1,5 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/ic_smart_router.xml. -->
+<vector android:tint="#182230" android:height="24.0dp" android:width="24.0dp" android:viewportWidth="24.0" android:viewportHeight="24.0"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="#00000000" android:pathData="M8.03095 10.4996C8.01052 10.3358 8 10.1689 8 9.99958C8 8.98514 8.37764 8.05889 9 7.35376M15.9691 10.4996C15.9895 10.3358 16 10.1689 16 9.99958C16 8.98514 15.6224 8.05889 15 7.35376M6 4.70801C4.75527 6.11827 4 7.97076 4 9.99966C4 10.3383 4.02104 10.6721 4.06189 10.9997M18 4.70801C19.2447 6.11827 20 7.97076 20 9.99966C20 10.3383 19.979 10.6721 19.9381 10.9997M12 9.99963V15M5 19.9996H19C19.5523 19.9996 20 19.5519 20 18.9996V15.9996C20 15.4473 19.5523 14.9996 19 14.9996H5C4.44772 14.9996 4 15.4473 4 15.9996V18.9996C4 19.5519 4.44772 19.9996 5 19.9996Z" android:strokeColor="#ffffffff" android:strokeWidth="2.0" android:strokeLineCap="round" />
+</vector>

@@ -1,0 +1,6 @@
+appId: com.zane.proxy
+---
+- assertVisible: 全部设置
+- tapOn: VPN、DNS、TUN 与应用行为
+- assertVisible: 应用设置
+- takeScreenshot: reports/ui-1.0.2/baseline/general-maestro

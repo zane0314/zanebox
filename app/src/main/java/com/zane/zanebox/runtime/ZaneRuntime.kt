@@ -7,6 +7,8 @@ import android.app.Service
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -68,6 +70,12 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private var notificationText=""
     private var inForeground=false
     private var channelReady=false
+    private var wakeLock:android.os.PowerManager.WakeLock?=null
+    private val wakeReceiver=object:BroadcastReceiver() {
+        override fun onReceive(context:Context,intent:Intent) {
+            if(intent.action==Intent.ACTION_SCREEN_ON && current.get().state==2 && store.snapshot().bool("wakeResetConnections",false))dispatch("wakeReset","")
+        }
+    }
     private val connectionBytes=LinkedHashMap<String,Pair<Long,Long>>()
     private val counters=JSONObject().put("apps",JSONObject()).put("domains",JSONObject()).put("nodes",JSONObject())
     private val binder=object:IRuntime.Stub() {
@@ -87,6 +95,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         }
         platform.initialize()
         engine=SingBoxEngine(platform)
+        androidx.core.content.ContextCompat.registerReceiver(this,wakeReceiver,IntentFilter(Intent.ACTION_SCREEN_ON),androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         val saved=store.snapshot().setting("trafficData")
         if(saved.isNotBlank()) runCatching { val data=JSONObject(saved);listOf("apps","domains","nodes").forEach { counters.put(it,data.optJSONObject(it) ?: JSONObject()) } }
         scope.launch { for((action,payload) in commands) execute(action,payload) }
@@ -118,18 +127,22 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 "restore" -> access.withLock { restoreData(payload) }
                 "validate" -> { val args=JSONObject(payload);val name=args.getString("name");val filename=args.getString("file");require(filename.matches(Regex("validate-[0-9a-f-]{36}\\.json")));val file=File(noBackupFilesDir,filename);val error=try { require(file.length() in 1..64*1024*1024L);engine.validate(file.readText());"" } catch(e:Exception) { safeError(e) } finally { file.delete() };event("validation",JSONObject().put("name",name).put("error",error).toString()) }
                 "test" -> startTests(JSONArray(payload))
-                "cancelTests" -> { tests?.cancel();engine.cancelTests();event("message","测速已取消") }
+                "cancelTests" -> { tests?.cancel();engine.cancelTests();event("testing","[]");event("message","测速已取消") }
                 "logs" -> { val log=File(cacheDir,"neko.log");event("logs",JSONArray(if(log.exists()) log.readLines().takeLast(500) else emptyList<String>()).toString()) }
+                "clearLogs" -> { File(cacheDir,"neko.log").writeText("");event("logs","[]") }
+                "systemLogs" -> { val process=ProcessBuilder("logcat","-d","-t","500").redirectErrorStream(true).start();val lines=process.inputStream.bufferedReader().use { it.readLines().takeLast(500) };process.waitFor();event("logs",JSONArray(lines).toString()) }
+                "wakeReset" -> access.withLock { if(current.get().state==2)Libcore.resetAllConnections(true) }
+                "asset" -> access.withLock { installAsset(payload) }
                 "ip" -> queryIp()
                 "traffic" -> event("traffic",trafficJson())
                 "resetTraffic" -> { synchronized(counters) { listOf("apps","domains","nodes").forEach { counters.put(it,JSONObject()) } };persistTraffic();event("traffic",trafficJson());event("message","累计统计已清空") }
                 "stats" -> { store.update { it.copy(settings=it.settings+("statsEnabled" to payload.toBoolean().toString())) };event("message","统计状态已保存") }
                 "connections" -> event("connections",api("/connections"))
-                "panel" -> { check(current.get().state==2) { "请先连接代理" };val port=apiPort;event("panel","http://127.0.0.1:$port/ui/#/?hostname=http%3A%2F%2F127.0.0.1%3A$port&secret=${ownerSecret()}") }
+                "panel" -> { check(current.get().state==2) { "请先连接代理" };check(store.snapshot().bool("clashApi",false) || store.snapshot().bool("statsEnabled",true)) { "请先启用 Clash API 或流量统计" };api("/version");val port=apiPort;event("panel","http://127.0.0.1:$port/ui/#/?hostname=http%3A%2F%2F127.0.0.1%3A$port&secret=${ownerSecret()}") }
                 "closeConnection" -> { require(payload.matches(Regex("[a-zA-Z0-9-]{1,128}")));api("/connections/$payload","DELETE");event("connections",api("/connections")) }
                 "closeAllConnections" -> { api("/connections","DELETE");event("connections",api("/connections")) }
                 "speed" -> startSpeed(JSONObject(payload))
-                "cancelSpeed" -> { speed?.cancel();speedJob?.cancel();event("message","速度测试已取消") }
+                "cancelSpeed" -> { speed?.cancel();speedJob?.cancel();event("speed",JSONObject().put("stage","cancelled").put("done",true).put("error","速度测试已取消").toString());event("message","速度测试已取消") }
                 "stun" -> startStun(payload)
                 "cancelStun" -> { stunVersion++;stunJob?.cancel();event("stun",JSONObject().put("running",false).put("error","已取消").toString()) }
             } } catch(e:TimeoutCancellationException) { event("message","操作超时，请重试");if(action=="start")owner.stopSelf() }
@@ -178,10 +191,16 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             withTimeout(30000) { while(!File(filesDir,"core-assets/yacd/index.html").isFile)delay(50) }
             val data=store.snapshot();val config=runtimeConfig(data)
             platform.metered=data.bool("meteredNetwork",false)
+            val httpProxy=data.bool("appendHttpProxy",false)
+            require(!httpProxy || !data.bool("disableMixedInbound",false)) { "追加 HTTP 代理需要开启本地 mixed 入口" }
+            require(!httpProxy || Build.VERSION.SDK_INT>=29) { "追加 HTTP 代理需要 Android 10 或更新版本" }
+            platform.httpProxyPort=if(httpProxy)data.setting("mixedPort","2080").toInt() else 0
+            platform.httpProxyBypass=data.setting("httpProxyBypass").split(Regex("[\\s,;]+" )).filter { it.isNotBlank() }
             apiPort=data.setting("apiPort","9090").toIntOrNull() ?: 9090
             engine.validate(config)
             Libcore.setNetworkChangeResetConnections(data.bool("networkReset",true))
             engine.start(config)
+            if(data.bool("acquireWakeLock",false))wakeLock=(getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"zanebox:proxy").apply { setReferenceCounted(false);acquire() }
             lastProxySelection=engine.configuredProxyDefault
             sessionTx=0;sessionRx=0
             val snapshot=RuntimeSnapshot(state=2,started=SystemClock.elapsedRealtime(),generation=current.get().generation)
@@ -192,12 +211,36 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             if(warnings.isNotEmpty()) event("message",warnings.joinToString("\n")) else event("message","已连接")
         } catch(e:Exception) { failed(e);throw e }
     }
+    private suspend fun installAsset(filename:String) {
+        require(filename.matches(Regex("asset-[0-9a-f-]{36}-(geoip|geosite)\\.db"))) { "资源暂存名无效" }
+        val stage=File(noBackupFilesDir,filename)
+        try {
+            check(current.get().state !in 1..3) { "更新资源前请先断开连接" }
+            withTimeout(30000) { while(!File(filesDir,"core-assets/yacd/index.html").isFile)delay(50) }
+            require(stage.length() in 16..64*1024*1024L)
+            val bytes=stage.readBytes();val kind=filename.substringAfterLast('-').removeSuffix(".db")
+            val code=com.zane.zanebox.config.geoAssetCode(kind,bytes)
+            val asset=AtomicFile(File(filesDir,"core-assets/$kind.db"))
+            val previous=if(asset.baseFile.exists())asset.openRead().use { it.readBytes() } else null
+            fun write(content:ByteArray) { val output=asset.startWrite();try { output.write(content);asset.finishWrite(output) } catch(e:Exception) { asset.failWrite(output);throw e } }
+            write(bytes)
+            try {
+                val config=JSONObject().put("outbounds",JSONArray().put(JSONObject().put("type","direct").put("tag","direct")))
+                    .put("route",JSONObject().put("final","direct").put("rule_set",JSONArray().put(JSONObject().put("type","local").put("tag","asset-check").put("format","binary").put("path","$kind:$code")))
+                        .put("rules",JSONArray().put(JSONObject().put("rule_set",JSONArray().put("asset-check")).put("action","route").put("outbound","direct"))))
+                engine.validate(config.toString())
+            } catch(e:Exception) { if(previous!=null)write(previous)else asset.delete();throw e }
+            event("assetInstalled","$kind 已更新并通过内核校验")
+        } finally { stage.delete() }
+    }
     private fun failed(error:Exception) {
+        releaseWakeLock()
         sampler?.cancel();ruleUpdates?.cancel();runCatching { engine.close() }
         publish(RuntimeSnapshot(state=4,generation=current.get().generation,error=safeError(error)))
         foregroundStop()
     }
     private fun stopCore(terminal:Boolean=true) {
+        releaseWakeLock()
         if(current.get().state==0) { if(terminal) { foregroundStop();owner.stopSelf() };return }
         val data=store.snapshot();val selections=readSelections(data);syncDefaultSelection(data,selections)
         if(data.bool("statsEnabled",true))runCatching { sampleConnections(api("/connections")) }
@@ -302,7 +345,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             return null
         }
         var tx=0L;var rx=0L
-        traffic.filterKeys { it!="direct" }.forEach { (tag,bytes) ->
+        traffic.filterKeys { it!="direct" || data.bool("showDirectSpeed",false) }.forEach { (tag,bytes) ->
             val (up,down)=bytes
             tx+=up;rx+=down
             if(data.bool("statsEnabled",true))nodeId(tag)?.let { id->addCounter("nodes",id.toString(),up,down,50) }
@@ -350,9 +393,12 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         val data=store.snapshot();val generation=current.get().generation
         val selected=(0 until ids.length()).map { ids.getLong(it) }.distinct()
         require(selected.size<=10000)
+        if(selected.isEmpty()) { event("testing","[]");event("message","没有可测速的节点");return }
         val outbounds=data.nodes.associate { it.id to it.outbound }
+        event("testing",JSONArray(selected).toString())
+        event("message","正在测试 ${selected.size} 个节点")
         tests=scope.launch {
-            val semaphore=Semaphore(data.setting("testConcurrency","4").toInt().coerceIn(1,16))
+            val semaphore=Semaphore((data.setting("testConcurrency","4").toIntOrNull() ?:4).coerceIn(1,16))
             val pending=java.util.concurrent.ConcurrentLinkedQueue<NodeStatusUpdate>()
             // One store transaction per second instead of one full-state rewrite per tested node.
             fun flush() {
@@ -369,6 +415,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                     pending.add(NodeStatusUpdate(id,outbound,ping,if(ping>0)3 else 1))
                 } } } }
             } finally { flusher.cancel();withContext(NonCancellable) { flush() } }
+            event("testing","[]")
             event("message","测速完成：${selected.size} 个节点")
         }
     }
@@ -376,15 +423,19 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         speed?.cancel();speedJob?.cancel()
         val id=request.getLong("id");val mode=when(request.optString("mode")) { "download"->"download";"upload"->"upload";"full"->"download_upload";else->"simple_download" }
         val data=store.snapshot()
+        event("speed",JSONObject().put("stage","connecting").put("done",false).toString())
         speedJob=scope.launch {
-            val session=Libcore.newSpeedTestSession(id.toString(),ConfigBuilder.build(data,Purpose.TEST,id),platform,mode,data.setting("speedTimeout","10000").toInt(),data.setting("speedServerList","https://www.speedtest.net/api/js/servers"),data.setting("speedFallbackList","https://www.speedtest.net/speedtest-servers-static.php"),data.setting("speedDownloadUrl","http://cachefly.cachefly.net/1mb.test"))
-            speed=session
-            try { session.start();while(isActive) {
+            var session:SpeedTestSession?=null
+            try {
+                session=Libcore.newSpeedTestSession(id.toString(),ConfigBuilder.build(data,Purpose.TEST,id),platform,mode,data.setting("speedTimeout","10000").toInt(),data.setting("speedServerList","https://www.speedtest.net/api/js/servers"),data.setting("speedFallbackList","https://www.speedtest.net/speedtest-servers-static.php"),data.setting("speedDownloadUrl","http://cachefly.cachefly.net/1mb.test"))
+                speed=session;session.start();while(isActive) {
                 val result=session.result
                 event("speed",JSONObject().put("stage",result.stage).put("download",result.downloadBitsPerSecond).put("upload",result.uploadBitsPerSecond).put("latency",result.latencyMs).put("error",result.error).put("done",result.done).toString())
                 if(result.done)break
                 delay(300)
-            } } finally { session.cancel();session.close();if(speed===session)speed=null }
+            } } catch(e:CancellationException) { throw e }
+            catch(e:Exception) { event("speed",JSONObject().put("stage","error").put("done",true).put("error",safeError(e)).toString()) }
+            finally { session?.let { runCatching { it.cancel();it.close() };if(speed===it)speed=null } }
         }
     }
     private fun startStun(server:String) {
@@ -425,15 +476,18 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         if(current.get().generation==token)event("ip",ip)
     }
     private fun startRuleUpdates() {
-        ruleUpdates?.cancel();ruleUpdates=scope.launch { delay(30000);while(isActive) {
+        ruleUpdates?.cancel();ruleUpdates=scope.launch {
+            delay(when(store.snapshot().setting("rulesUpdateDelay","30s")){"0s"->0L;"15s"->15000L;"1m"->60000L;"5m"->300000L;else->30000L})
+            while(isActive) {
             val data=store.snapshot();val now=System.currentTimeMillis()
+            val interval=when(data.setting("rulesUpdateInterval","24h")){"off"->Long.MAX_VALUE;"6h"->6L*3600000;"12h"->12L*3600000;"3d"->3L*86400000;"7d"->7L*86400000;else->24L*3600000}
             data.settings.filterKeys { it.startsWith("smartUrl.") }.forEach { (key,url) ->
-                if(url.isNotBlank()) {
+                if(url.isNotBlank() && com.zane.zanebox.subscription.SubscriptionClient.ruleSetFormat(url)!="binary") {
                     val service=key.substringAfter('.');val previous=data.setting("smartUpdated.$service","0").toLongOrNull() ?: 0
-                    if(now-previous>=24*60*60*1000L) runCatching {
-                        val fetched=com.zane.zanebox.subscription.SubscriptionClient.fetch(url)
-                        require(fetched.body.toByteArray().size<=4*1024*1024)
-                        store.update { d->d.copy(settings=d.settings+("smartRules.$service" to fetched.body)+("smartUpdated.$service" to now.toString())) }
+                    if(now-previous>=interval) runCatching {
+                        val content=com.zane.zanebox.subscription.SubscriptionClient.fetchSmartRules(url,data.settings)
+                        require(content.toByteArray().size<=4*1024*1024)
+                        store.update { d->d.copy(settings=d.settings+("smartRules.$service" to content)+("smartUpdated.$service" to now.toString())) }
                         event("message","${service} 规则已更新，应用修改后生效")
                     }.onFailure { event("message","规则更新失败：$service") }
                 }
@@ -443,22 +497,28 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     }
     /** Status changes always go through startForeground; per-second rate text only re-posts when it actually changed. */
     @Synchronized private fun notification(text:String,rate:Boolean=false) {
-        if(rate && (!inForeground || text==notificationText)) return
-        notificationText=text
+        val data=store.snapshot()
+        val group=if(data.bool("showGroupInNotification",false))data.groups.firstOrNull { it.id==data.selectedGroupId }?.name.orEmpty() else ""
+        val title=if(group.isBlank())"zanebox" else "zanebox · $group"
+        val key="$title|$text"
+        if(rate && (!inForeground || key==notificationText)) return
+        notificationText=key
         val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if(!channelReady && Build.VERSION.SDK_INT>=26) { manager.createNotificationChannel(NotificationChannel("proxy","zanebox 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true }
         val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop=PendingIntent.getService(this,1,Intent(this,owner.javaClass).setAction("stop"),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val built=NotificationCompat.Builder(this,"proxy").setSmallIcon(R.drawable.ic_zanebox).setContentTitle("zanebox").setContentText(text).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(0,"断开",stop).build()
+        val built=NotificationCompat.Builder(this,"proxy").setSmallIcon(R.drawable.ic_zanebox).setContentTitle(title).setContentText(text).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(0,"断开",stop).build()
         if(rate) manager.notify(1,built) else { owner.startForeground(1,built);inForeground=true }
     }
     @Synchronized private fun foregroundStop() { inForeground=false;notificationText="";if(Build.VERSION.SDK_INT>=24)owner.stopForeground(Service.STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") owner.stopForeground(true) }
     fun revoke() { dispatch("stop","") }
     fun destroy() {
+        releaseWakeLock();runCatching { unregisterReceiver(wakeReceiver) }
         commands.close();scope.cancel();engine.cancelTests();speed?.cancel()
         // onDestroy runs on the main thread; a start stuck in native code must not turn into an ANR.
         val finished=runBlocking(Dispatchers.IO) { withTimeoutOrNull(4000) { access.withLock { val data=store.snapshot();val selections=readSelections(data);runCatching { recordTraffic(data,engine.close(),selections) };platform.close();persistTraffic() } } }
         if(finished==null) runCatching { platform.close() }
         callbacks.kill();store.close()
     }
+    private fun releaseWakeLock() { wakeLock?.let { if(it.isHeld)it.release() };wakeLock=null }
 }

@@ -32,10 +32,11 @@ class DocumentQrTest {
     @Test fun documentCallbacksQrPixelsAndScannerResultWork() {
         val store=ZaneStore(context)
         val link="socks://10.0.2.2:19081#qr-fixture"
-        store.replace(AppData(nodes=listOf(Node(301,301,"qr-fixture","{\"type\":\"socks\",\"server\":\"10.0.2.2\",\"server_port\":19081}",shareLink=link)),groups=listOf(Group(301,"二维码")),settings=mapOf("serviceMode" to "proxy","selectedNodeId" to "301","selectedGroupId" to "301")))
+        store.replace(AppData(nodes=listOf(Node(301,301,"qr-fixture","{\"type\":\"socks\",\"server\":\"10.0.2.2\",\"server_port\":19081}",shareLink=link)),groups=listOf(Group(301,"二维码")),settings=mapOf("appLanguage" to "zh-CN","serviceMode" to "proxy","selectedNodeId" to "301","selectedGroupId" to "301")))
         val folder=File(context.cacheDir,"exports").apply { mkdirs() }
         val qr=File(folder,"qa-qr-${java.util.UUID.randomUUID()}.png")
         val zip=File(folder,"qa-backup-${java.util.UUID.randomUUID()}.zip")
+        val text=File(folder,"qa-group-${java.util.UUID.randomUUID()}.txt")
         fun uri(file:File)=FileProvider.getUriForFile(context,"${context.packageName}.files",file)
         Intents.init()
         var scenario:ActivityScenario<MainActivity>?=null
@@ -45,7 +46,7 @@ class DocumentQrTest {
             intending(hasAction("com.google.zxing.client.android.SCAN")).respondWith(ActivityResult(Activity.RESULT_OK,Intent().putExtra("SCAN_RESULT","socks://10.0.2.2:19082#scan-fixture").putExtra("SCAN_RESULT_FORMAT","QR_CODE")))
             scenario=ActivityScenario.launch(MainActivity::class.java)
             compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_301"))
-            compose.onNodeWithContentDescription("二维码").performClick()
+            compose.onNodeWithTag("node_menu_301").performClick();compose.onNode(hasText("二维码") and hasAnyAncestor(isPopup())).performClick()
             compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("节点分享二维码").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("保存图片").performClick();waitFor("PNG写入") { qr.length()>100 }
             val bitmap=android.graphics.BitmapFactory.decodeFile(qr.absolutePath);assertNotNull(bitmap)
@@ -57,14 +58,18 @@ class DocumentQrTest {
             @Suppress("DEPRECATION") val send=chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
             assertEquals("image/png",send.type);assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0)
             compose.onNodeWithText("关闭").performClick()
-            compose.onNodeWithTag("page_list").performScrollToNode(hasContentDescription("扫码"))
-            compose.onNodeWithContentDescription("扫码").performClick();waitFor("扫码结果导入") { store.snapshot().nodes.any { it.name=="scan-fixture" } }
+            compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("扫码导入").performClick();waitFor("扫码结果导入") { store.snapshot().nodes.any { it.name=="scan-fixture" } }
             intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT),hasType("application/zip"))).respondWith(ActivityResult(Activity.RESULT_OK,Intent().setData(uri(zip))))
             compose.onNodeWithTag("tab_2").performClick()
-            compose.onNodeWithTag("page_list").performScrollToNode(hasContentDescription("导出备份"))
-            compose.onNodeWithContentDescription("导出备份").performClick();waitFor("ZIP写入") { zip.length()>100 }
+            compose.onNodeWithTag("settings_general").performClick();compose.onNodeWithTag("subpage_list").performScrollToNode(hasText("备份与恢复"));compose.onNodeWithText("备份与恢复").performClick();compose.onNodeWithTag("backup_export").performClick();waitFor("ZIP写入") { zip.length()>100 }
             val saved=BackupManager(context).`import`(zip.readBytes());assertEquals(2,saved.nodes.size)
-            File(context.getExternalFilesDir(null),"document-qr-result.json").writeText("{\"qrPngDecode\":true,\"shareUriGrant\":true,\"scannerCallback\":true,\"documentZipWrite\":true,\"scope\":\"mock picker/scanner results; real Android URI I/O\"}")
+            intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT),hasType("text/plain"))).respondWith(ActivityResult(Activity.RESULT_OK,Intent().setData(uri(text))))
+            compose.onNodeWithTag("page_back").performClick();compose.onNodeWithTag("page_back").performClick()
+            compose.onNodeWithTag("settings_groups").performClick();compose.onNodeWithTag("manage_group_menu_301").performClick();compose.onNodeWithText("导出节点").performClick()
+            waitFor("分组文本写入") { text.length()>0 }
+            assertEquals("qr-fixture",com.zane.zanebox.subscription.SubscriptionParser.parse(text.readText()).single().name)
+            File(context.getExternalFilesDir(null),"group-export-result.txt").writeBytes(text.readBytes())
+            File(context.getExternalFilesDir(null),"document-qr-result.json").writeText("{\"qrPngDecode\":true,\"shareUriGrant\":true,\"scannerCallback\":true,\"documentZipWrite\":true,\"groupDocumentScope\":true,\"scope\":\"mock picker/scanner results; real Android URI I/O\"}")
         } finally { scenario?.close();Intents.release();store.close() }
     }
 }

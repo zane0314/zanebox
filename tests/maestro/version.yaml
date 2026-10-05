@@ -1,0 +1,21 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- assertVisible: 节点
+- takeScreenshot: reports/ui-1.0.2/current/final-home
+- tapOn:
+    id: tab_2
+- scrollUntilVisible:
+    element:
+      id: settings_about
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: settings_about
+- assertVisible: '${VERSION_NAME} / ${VERSION_CODE}'
+- assertVisible: AnyBox 2.1.9
+- takeScreenshot: reports/ui-1.0.2/current/final-about
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

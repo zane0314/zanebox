@@ -35,6 +35,7 @@ class RuntimeRegressionTest {
         val evidence=JSONObject()
         try {
             shell("appops set com.zane.zanebox ACTIVATE_VPN deny")
+            context.getSharedPreferences("runtime",android.content.Context.MODE_PRIVATE).edit().putBoolean("connected",true).commit()
             ins.runOnMainSync { StartReceiver().onReceive(context,Intent(Intent.ACTION_BOOT_COMPLETED)) }
             waitFor("仅代理自动启动，无VPN权限") { if(client.snapshot.value.state==4)fail(client.snapshot.value.error);client.snapshot.value.state==2 }
             assertEquals("EXIT_A",request());evidence.put("proxyAutoStart",true)
@@ -44,6 +45,16 @@ class RuntimeRegressionTest {
             try { panel.connectTimeout=4000;panel.readTimeout=4000;assertEquals(200,panel.responseCode);assertTrue(panel.inputStream.bufferedReader().use { it.readText() }.contains("<html",ignoreCase=true)) } finally { panel.disconnect() }
             evidence.put("yacdAssetServed",true)
             client.refreshConnections();waitFor("连接监控实际API") { JSONObject(client.connections.value).has("connections") };evidence.put("connectionsApi",true)
+            repeat(2) { index ->
+                java.net.Socket("127.0.0.1",2080).use { connection ->
+                    connection.getOutputStream().apply { write("GET http://203.0.113.9:19080/hang HTTP/1.1\r\nHost: 203.0.113.9:19080\r\n\r\n".toByteArray());flush() }
+                    waitFor("挂起请求出现在连接API") { client.refreshConnections();JSONObject(client.connections.value).optJSONArray("connections")?.length()?.let { it>0 }==true }
+                    val id=JSONObject(client.connections.value).getJSONArray("connections").getJSONObject(0).getString("id")
+                    if(index==0)client.closeConnection(id) else client.closeAllConnections()
+                    waitFor("关闭真实代理连接") { client.refreshConnections();JSONObject(client.connections.value).getJSONArray("connections").length()==0 }
+                }
+            }
+            evidence.put("closeSingleAndAllConnections",true)
             store.update { it.copy(settings=it.settings+mapOf("speedTimeout" to "2000","speedDownloadUrl" to "http://10.0.2.2:19080/speed")) }
             client.speedTest(1,"simple")
             waitFor("原生实际吞吐测速",30000) { client.speedResult.value.isNotBlank() && JSONObject(client.speedResult.value).optBoolean("done") }
@@ -85,6 +96,11 @@ class RuntimeRegressionTest {
                 waitFor("快速start-stop顺序") { client.snapshot.value.state==0 && client.snapshot.value.generation>=previous+2 }
             }
             evidence.put("startStopFifo",true)
+            client.setTrafficEnabled(false);waitFor("停止统计写入数据库") { !store.snapshot().bool("statsEnabled",true) }
+            client.setTrafficEnabled(true);waitFor("开启统计写入数据库") { store.snapshot().bool("statsEnabled",false) }
+            client.resetTraffic();waitFor("流量清零持久化") { JSONObject(store.snapshot().setting("trafficData")).getJSONObject("nodes").length()==0 }
+            evidence.put("trafficToggleAndReset",true)
+
             scenario=ActivityScenario.launch(MainActivity::class.java)
             client.start();waitFor("通知验证前连接") { client.snapshot.value.state==2 }
             val notifications=context.getSystemService(android.app.NotificationManager::class.java)
@@ -94,9 +110,15 @@ class RuntimeRegressionTest {
             notification.actions.first { it.title.toString()=="断开" }.actionIntent.send()
             waitFor("通知断开实际服务") { client.snapshot.value.state==0 };evidence.put("notificationStop",true)
             client.start();waitFor("磁贴验证前连接") { client.snapshot.value.state==2 }
-            shell("cmd statusbar add-tile com.zane.zanebox/.runtime.QuickTileService")
-            Thread.sleep(500)
-            val tileResult=shell("cmd statusbar click-tile com.zane.zanebox/.runtime.QuickTileService")
+            val tile="com.zane.zanebox/.runtime.QuickTileService"
+            // Repeated APK installs can leave a tile spec with no live CustomTile in SystemUI.
+            shell("cmd statusbar remove-tile $tile")
+            waitFor("旧磁贴移除") { !shell("settings get secure sysui_qs_tiles").contains(tile) }
+            shell("cmd statusbar add-tile $tile");shell("cmd statusbar expand-settings")
+            waitFor("磁贴实际绑定且显示已连接") {
+                shell("dumpsys activity service com.android.systemui/.SystemUIService").lineSequence().any { it.contains("spec=custom($tile)") && it.contains("state=2") }
+            }
+            val tileResult=shell("cmd statusbar click-tile $tile");shell("cmd statusbar collapse")
             assertFalse(tileResult,tileResult.contains("Unknown command"))
             waitFor("仅代理磁贴停止") { client.snapshot.value.state==0 };evidence.put("proxyTileStop",true)
             repeat(2) { androidx.core.content.ContextCompat.startForegroundService(context,Intent(context,ZaneProxyService::class.java).setAction("stop")) }

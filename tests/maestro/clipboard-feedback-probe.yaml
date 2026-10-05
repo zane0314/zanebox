@@ -1,0 +1,8 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- setClipboard: unsupported://example.test
+- tapOn:
+    id: add_nodes
+- tapOn: 从剪贴板导入
+- takeScreenshot: reports/ui-1.0.2/current/clipboard-feedback-probe

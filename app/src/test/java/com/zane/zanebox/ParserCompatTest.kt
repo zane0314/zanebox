@@ -7,6 +7,25 @@ import org.junit.Test
 import java.util.Base64
 
 class ParserCompatTest {
+    @Test fun blankInputReportsEmptyContentBeforeBase64Decoding() {
+        listOf(""," \n\t","ICA=").forEach { input ->
+            try { SubscriptionParser.parseReport(input);fail("Blank input must be rejected") }
+            catch(e:IllegalArgumentException) { assertEquals("没有可导入的内容",e.message) }
+        }
+    }
+
+    @Test fun sip008ImportsNamesAndNativeShadowsocksFieldsWithoutMetadata() {
+        val report=SubscriptionParser.parseReport("""{"version":1,"servers":[{"id":"fixture-id","remarks":"SIP008","server":"example.test","server_port":8388,"method":"aes-128-gcm","password":"fixture"},{"remarks":"broken"}]}""")
+        assertEquals(1,report.nodes.size);assertEquals(1,report.skipped)
+        val node=report.nodes.single();assertEquals("SIP008",node.name)
+        val o=JSONObject(node.outbound);assertEquals("shadowsocks",o.getString("type"));assertEquals(8388,o.getInt("server_port"));assertFalse(o.has("id"));assertFalse(o.has("remarks"))
+    }
+    @Test fun socksAliasesAndDefaultsReachTheSupportedNativeVersion() {
+        listOf("socks4" to "4","socks4a" to "4a","socks5" to "5").forEach { (scheme,version)->
+            val link="$scheme://fixture@example.test#name";val o=out(IncomingLink.parse(link).text)
+            assertEquals("socks",o.getString("type"));assertEquals(version,o.getString("version"));assertEquals(1080,o.getInt("server_port"))
+        }
+    }
     private fun out(text:String)=JSONObject(SubscriptionParser.parse(text).single().outbound)
 
     @Test fun badLineIsSkippedNotWholeBatch() {

@@ -1,0 +1,24 @@
+appId: com.zane.zanebox
+---
+- scrollUntilVisible:
+    element:
+      id: reset_settings
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: reset_settings
+- tapOn: 确认
+- scrollUntilVisible:
+    element:
+      id: setting_appLanguage
+    direction: UP
+    timeout: 60000
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: connect_toggle

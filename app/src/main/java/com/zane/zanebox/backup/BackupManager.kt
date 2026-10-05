@@ -18,6 +18,16 @@ internal fun InputStream.readBounded(limit:Int = MAX_BACKUP):ByteArray {
     return output.toByteArray()
 }
 internal fun digest(bytes:ByteArray)=MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+data class BackupScope(val configurations:Boolean=true,val rules:Boolean=true,val settings:Boolean=true)
+internal fun backupSelection(data:AppData,scope:BackupScope):AppData {
+    require(scope.configurations || scope.rules || scope.settings) { "至少选择一项备份内容" }
+    val rules=if(scope.rules)data.rules else emptyList()
+    require(scope.configurations || rules.all { it.outbound in listOf("proxy","direct","block") }) { "路由规则引用节点或分组，请同时勾选组与配置" }
+    var settings=if(scope.settings)data.settings else emptyMap()
+    if(!scope.configurations) settings=settings.filterKeys { it !in setOf("selectedNodeId","selectedGroupId","browseGroupId","smartSourceGroupId","smartSourceMergeId") && !it.startsWith("nodeRegion.") && !it.startsWith("sort_group_") && !it.startsWith("sort_mode_group_") }
+        .mapValues { (key,value)->if(key.startsWith("smart.") && key.endsWith(".target") && listOf("node:","group:","merge:").any(value::startsWith))"off" else value }
+    return AppData(if(scope.configurations)data.nodes else emptyList(),if(scope.configurations)data.groups else emptyList(),rules,if(scope.configurations)data.merges else emptyList(),settings).validate()
+}
 /** Does not write to the store. Caller replaces data only after this returns successfully. */
 class BackupManager(@Suppress("UNUSED_PARAMETER") context:Context? = null) {
     fun export(data:AppData):ByteArray {

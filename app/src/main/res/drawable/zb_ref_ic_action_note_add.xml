@@ -1,0 +1,5 @@
+<!-- Adapted from AnyBox 2.1.9 res/drawable/ic_action_note_add.xml. -->
+<vector android:tint="#182230" android:height="24.0dp" android:width="24.0dp" android:viewportWidth="24.0" android:viewportHeight="24.0"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <path android:fillColor="#00000000" android:pathData="M13 3V8.5C13 8.77614 13.2239 9 13.5 9H19M12 12.5V17.5M9.5 15H14.5M13.5858 3H6C5.44772 3 5 3.44772 5 4V20C5 20.5523 5.44772 21 6 21H18C18.5523 21 19 20.5523 19 20V8.41421C19 8.149 18.8946 7.89464 18.7071 7.70711L14.2929 3.29289C14.1054 3.10536 13.851 3 13.5858 3Z" android:strokeColor="#ffffffff" android:strokeWidth="2.0" android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

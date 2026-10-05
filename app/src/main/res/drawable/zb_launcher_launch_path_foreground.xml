@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: /Users/zane/Documents/ChatGPT/zane 代理软件/work/AnyBox-2.0.0-clean-150/apktool_out/res/drawable/launcher_launch_path_foreground.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M58,25 C70,30 77,40 80,52 L62,70 L42,50 Z" />
+    <path android:fillColor="#FFBDEBFF" android:pathData="M62,35 A7,7 0,1 1,61.9 35" />
+    <path android:fillColor="#FFFFD166" android:pathData="M42,50 L32,55 L38,62 L46,58 Z M62,70 L57,80 L50,74 L54,66 Z" />
+    <path android:fillColor="@android:color/transparent" android:pathData="M43,66 C34,70 29,77 28,84" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+</vector>

@@ -1,0 +1,56 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_ai
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: smart_ai
+- scrollUntilVisible:
+    element:
+      text: 规则来源
+    direction: DOWN
+    timeout: 30000
+- tapOn: 规则来源
+- tapOn:
+    id: rule_catalog
+- tapOn: 搜索 Karing 规则
+- setClipboard: OpenAi
+- pasteText
+- hideKeyboard
+- extendedWaitUntil:
+    visible: OpenAi.srs
+    timeout: 45000
+- takeScreenshot: reports/ui-1.0.2/current/online-catalog
+- tapOn: 替换
+- assertVisible: https://raw.githubusercontent.com/KaringX/karing-ruleset/sing/ACL4SSR/OpenAi.srs
+- tapOn:
+    id: rule_source_replace
+- extendedWaitUntil:
+    visible: 已保存，请应用修改使配置生效
+    timeout: 45000
+- takeScreenshot: reports/ui-1.0.2/current/online-source-downloaded
+- tapOn:
+    id: page_back
+- scrollUntilVisible:
+    element:
+      text: 规则来源
+    direction: DOWN
+    timeout: 30000
+- tapOn: 规则来源
+- assertVisible: https://raw.githubusercontent.com/KaringX/karing-ruleset/sing/ACL4SSR/OpenAi.srs
+- tapOn:
+    id: rule_source_delete
+- tapOn: 取消
+- assertVisible:
+    id: rule_source_url
+- tapOn:
+    id: rule_source_delete
+- tapOn: 删除
+- assertVisible: 自定义域名规则
+- tapOn:
+    id: main_back

@@ -18,7 +18,7 @@ internal data class IncomingLink(val text:String="",val subscriptionUrl:String="
                 return IncomingLink(subscriptionUrl=url,name=query["name"].orEmpty().ifBlank { "导入订阅" }.take(256))
             }
             if(scheme=="zanebox" && host=="import")return IncomingLink(text=query["text"] ?: error("导入链接缺少text"))
-            require(scheme in setOf("ss","vmess","vless","trojan","socks","socks4","socks5","http","https","hysteria","hysteria2","hy2","tuic","anytls","ssh","juicity","snell","shadowtls")) { "当前内核不支持此导入协议" }
+            require(scheme in setOf("ss","vmess","vless","trojan","socks","socks4","socks4a","socks5","http","https","hysteria","hysteria2","hy2","tuic","anytls","ssh","juicity","snell","shadowtls")) { "当前内核不支持此导入协议" }
             return IncomingLink(text=value)
         }
     }

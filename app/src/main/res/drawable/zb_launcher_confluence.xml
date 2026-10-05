@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Geometry adapted from the read-only AnyBox baseline:
+     /Users/zane/Documents/ChatGPT/zane 代理软件/work/AnyBox-2.0.0-clean-150/apktool_out/res/drawable/launcher_confluence_foreground.xml -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="rectangle"><solid android:color="#FF0B554F" /></shape></item>
+    <item android:drawable="@drawable/zb_launcher_confluence_foreground" />
+</layer-list>

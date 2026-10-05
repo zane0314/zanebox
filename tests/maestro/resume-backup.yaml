@@ -1,0 +1,26 @@
+appId: com.zane.zanebox
+---
+- scrollUntilVisible:
+    element:
+      text: 备份与恢复
+    direction: DOWN
+    timeout: 60000
+- tapOn: 备份与恢复
+- assertVisible: 本地备份
+- takeScreenshot: reports/ui-1.0.2/current/backup
+- scrollUntilVisible:
+    element:
+      text: WebDAV 设置
+    direction: DOWN
+    timeout: 60000
+- tapOn: WebDAV 设置
+- assertVisible: 测试连接
+- takeScreenshot: reports/ui-1.0.2/current/webdav
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

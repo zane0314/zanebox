@@ -1,0 +1,58 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_menu
+- tapOn: 分流检测
+- assertVisible: 真实链路检测
+- takeScreenshot: reports/ui-1.0.2/current/diagnostic-分流检测
+- tapOn:
+    id: routing_probe_domain
+- setClipboard: invalid:host
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: routing_probe_start
+- assertVisible:
+    id: routing_probe_error
+- tapOn:
+    id: page_back
+- tapOn:
+    id: smart_menu
+- tapOn: 站点分流卡片
+- assertVisible: 站点分流状态
+- takeScreenshot: reports/ui-1.0.2/current/diagnostic-站点分流卡片
+- tapOn:
+    id: page_back
+- tapOn:
+    id: smart_menu
+- tapOn: 规则集预览
+- assertVisible: 规则集预览
+- takeScreenshot: reports/ui-1.0.2/current/diagnostic-规则集预览
+- tapOn:
+    id: page_back
+- tapOn:
+    id: smart_menu
+- tapOn: 域名穿透
+- assertVisible: 当前 API 连接
+- takeScreenshot: reports/ui-1.0.2/current/diagnostic-域名穿透
+- tapOn:
+    id: page_back
+- tapOn:
+    id: smart_menu
+- tapOn: Geo 状态
+- assertVisible: Geo 状态
+- takeScreenshot: reports/ui-1.0.2/current/diagnostic-Geo 状态
+- tapOn:
+    id: page_back
+- tapOn:
+    id: smart_menu
+- tapOn: 路由资产
+- assertVisible: 路由资源更新源
+- takeScreenshot: reports/ui-1.0.2/current/diagnostic-路由资产
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
