@@ -12,7 +12,7 @@ import java.net.Proxy
 
 class AssetDownloadTest {
     @Test fun runtimeEndpointRoundTripsAndOlderSnapshotsRemainReadable() {
-        val value=com.zane.zanebox.runtime.RuntimeSnapshot(state=2,mixedHost="::1",mixedPort=2081)
+        val value=com.zane.zanebox.runtime.RuntimeSnapshot(state=2,mixedHost="::1",mixedPort=2081,pendingManual=true)
         assertEquals(value,com.zane.zanebox.runtime.RuntimeSnapshot.parse(value.json()))
         assertEquals(0,com.zane.zanebox.runtime.RuntimeSnapshot.parse("""{"state":2}""").mixedPort)
     }

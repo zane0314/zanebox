@@ -34,6 +34,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val message = MutableStateFlow("")
     val busy = MutableStateFlow(false)
     private var taskCount=0
+    private var applyJob:kotlinx.coroutines.Job?=null
     val ip get() = service.exitIp
     val webdavEntries=MutableStateFlow<List<WebDavEntry>>(emptyList())
     init {
@@ -48,17 +49,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         try { withContext(Dispatchers.IO) { block() } } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(e: Exception) { val error=e.message ?: "操作失败";message.value=error;onError(error) }
         finally { taskCount--; busy.value = taskCount>0 }
     } }
-    fun edit(onSaved:()->Unit={},onError:(String)->Unit={},block: (AppData) -> AppData) = task(onError) {
+    private suspend fun saved(prefix:String="已保存",autoApply:Boolean=true) {
+        withContext(Dispatchers.Main) {
+            if(service.snapshot.value.state==0 || service.snapshot.value.state==4)message.value=prefix
+            else if(!autoApply)message.value="$prefix，请手动应用修改使配置生效"
+            else {
+                message.value="$prefix，正在自动应用"
+                applyJob?.cancel()
+                applyJob=viewModelScope.launch {kotlinx.coroutines.delay(350);service.autoReload()}
+            }
+        }
+    }
+    fun edit(onSaved:()->Unit={},onError:(String)->Unit={},autoApply:Boolean=true,block: (AppData) -> AppData) = task(onError) {
         store.update { block(it).withEnabledSelection() }
-        message.value = "已保存，请应用修改使配置生效"
+        saved(autoApply=autoApply)
         withContext(Dispatchers.Main){onSaved()}
     }
     fun setting(key: String, value: String) {
         if(key=="ipv6Mode") { require(value in listOf("ipv4_only","prefer_ipv4","prefer_ipv6","ipv6_only"));edit { it.copy(settings=it.settings+("ipv6Mode" to value)+("ipv6" to (value!="ipv4_only").toString())+("dnsStrategy" to value)) };return }
-        if (key == "browseGroupId" || key == "theme" || key == "fontScale" || key == "uiSkin" || key == "launcherIcon" || key == "appLanguage" || key == "showBottomBar" || key == "alwaysShowAddress" || key == "hideFromRecentApps" || key == "confirmProfileDelete") task { store.update { it.copy(settings=it.settings+(key to value)) } }
-        else edit { it.copy(settings = it.settings + (key to value)) }
+        if(settingsApply(key)==SettingsApply.LIVE)task {
+            store.update {it.copy(settings=it.settings+(key to value))}
+            if(key!="browseGroupId")message.value="已保存"
+            if(key in setOf("networkReset","acquireWakeLock"))withContext(Dispatchers.Main){service.refreshSettings()}
+        } else edit(autoApply=settingsApply(key)==SettingsApply.AUTO) { it.copy(settings = it.settings + (key to value)) }
     }
     fun resetSettings()=edit { it.copy(settings=emptyMap()) }
+    fun reorderNodes(ids:List<Long>)=task {store.update{it.reorderNodes(ids)};message.value="节点顺序已保存"}
+    fun reorderGroups(ids:List<Long>)=task {store.update{it.reorderGroups(ids)};message.value="分组顺序已保存"}
+    fun reorderRules(front:Boolean,ids:List<Long>)=edit{it.reorderRules(front,ids)}
     fun saveNode(node:Node,onSaved:()->Unit={},onError:(String)->Unit={})=task(onError) {
         val before=store.snapshot()
         val target=node.groupId.takeIf { id->before.groups.any { it.id==id } } ?: store.nextId()
@@ -68,10 +86,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if(outbound.optString("type") in listOf("vless","vmess","tuic","juicity"))require(outbound.optString("uuid").isNotBlank()) { "UUID 不能为空" }
         if(outbound.optString("type") in listOf("trojan","hysteria2","tuic","juicity","anytls"))require(outbound.optString("password").isNotBlank()) { "密码不能为空" }
         fun insert(data:AppData)=data.copy(groups=if(data.groups.any { it.id==target })data.groups else data.groups+Group(target,"手动节点"),
-            nodes=data.nodes.filter { it.id!=saved.id }+saved).withEnabledSelection()
+            nodes=if(data.nodes.any{it.id==saved.id})data.nodes.map{if(it.id==saved.id)saved else it}else data.nodes+saved).withEnabledSelection()
         service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(insert(before),com.zane.zanebox.config.Purpose.TEST,saved.id))
         store.update(::insert)
-        message.value="节点已保存，请点击应用修改"
+        saved("节点已保存")
         withContext(Dispatchers.Main) { onSaved() }
     }
     fun factoryReset()=task { service.restore(com.zane.zanebox.config.withFactoryRouteDefaults(AppData(),java.util.Locale.getDefault().country));message.value="正在清除应用配置" }
@@ -160,12 +178,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val connected=service.snapshot.value.state==2 || (options.updateWhenConnectedOnly && SubscriptionScheduler.connectionCheck(context))
         SubscriptionUpdater.update(store,group,context,connected)
         SubscriptionScheduler.reconcile(context,store.snapshot())
-        message.value="订阅已更新，请点击应用修改"
+        saved("订阅已更新")
     }
     fun saveGroup(group:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { SubscriptionOptions.parse(group.options);store.update { d->
         val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}") else emptySet()
-        d.copy(groups=d.groups.filter{it.id!=group.id}+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
-    }; message.value="组已保存，请点击应用修改"; withContext(Dispatchers.Main){onSaved()}; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }
+        d.copy(groups=if(d.groups.any{it.id==group.id})d.groups.map{if(it.id==group.id)group else it}else d.groups+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
+    }; saved("组已保存"); withContext(Dispatchers.Main){onSaved()}; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }
     private fun dav():WebDavClient { val d=store.snapshot();return WebDavClient(d.setting("webdavUrl"),d.setting("webdavUser"),d.setting("webdavPassword")) }
     fun listWebdav() = task { webdavEntries.value=dav().list();message.value="WebDAV 连接成功：${webdavEntries.value.size} 个备份" }
     fun uploadWebdav() = task { dav().upload(BackupManager(getApplication()).export(store.snapshot()));webdavEntries.value=dav().list();message.value="云备份已上传" }

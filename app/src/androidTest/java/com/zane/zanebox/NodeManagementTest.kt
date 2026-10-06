@@ -15,7 +15,7 @@ class NodeManagementTest {
         val vm=ViewModelProvider(compose.activity)[AppViewModel::class.java]
         compose.runOnIdle {vm.edit {AppData(nodes=listOf(Node(1,1,"hop","""{"type":"socks","server":"127.0.0.1","server_port":9}"""),Node(2,1,"保留","""{"type":"socks","server":"127.0.0.1","server_port":9}"""),Node(3,2,"链一","""{"type":"chain","node_ids":[1]}"""),Node(4,2,"链二","""{"type":"chain","node_ids":[3]}""")),groups=listOf(Group(1,"hop组",frontProxy=3),Group(2,"链组")),rules=listOf(RouteRule(1,"chain",ipCidrs="203.0.113.9/32",outbound="node:4")),merges=listOf(MergeGroup(1,"汇总",nodeIds=listOf(1,2,3,4),selectedId=4)),settings=mapOf("appLanguage" to "zh-CN","selectedNodeId" to "4","selectedGroupId" to "2","smart.youtube.target" to "node:4","nodeRegion.4" to "jp"))}}
         compose.waitUntil(10000){!vm.busy.value && vm.data.value.nodes.size==4}
-        compose.onNodeWithTag("home_node_delete_1").performClick()
+        compose.onNodeWithTag("node_menu_1").performClick();compose.onNodeWithText("删除").performScrollTo().performClick()
         compose.onNodeWithText("删除 1 个节点？同时删除依赖它们的 2 个代理链。").assertIsDisplayed()
         compose.onNodeWithText("确认").performClick()
         compose.waitUntil(10000){!vm.busy.value && vm.data.value.nodes.size==1}
@@ -31,17 +31,21 @@ class NodeManagementTest {
         }
         fun deleted(count:Int) {compose.waitUntil(10000){!vm.busy.value && vm.data.value.nodes.size==count}}
         seed()
-        compose.onNodeWithTag("home_node_delete_4").performClick();compose.onNodeWithText("取消").performClick();assertEquals(4,vm.data.value.nodes.size)
-        compose.onNodeWithTag("home_node_delete_4").performClick();compose.onNodeWithText("确认").performClick();deleted(3)
-        compose.onNodeWithTag("home_multiselect").performClick()
-        for(id in listOf(1,2))compose.onNodeWithTag("home_node_check_$id").performClick()
+        compose.onNodeWithTag("home_multiselect").assertDoesNotExist()
+        for(id in 1..4)compose.onNodeWithTag("home_node_delete_$id").assertDoesNotExist()
+        compose.onNodeWithTag("node_menu_4").performClick();compose.onNodeWithText("删除").performScrollTo().performClick();compose.onNodeWithText("取消").performClick();assertEquals(4,vm.data.value.nodes.size)
+        compose.onNodeWithTag("node_menu_4").performClick();compose.onNodeWithText("删除").performScrollTo().performClick();compose.onNodeWithText("确认").performClick();deleted(3)
+        compose.onNodeWithTag("node_menu_1").performClick();compose.onNodeWithText("多选").performScrollTo().performClick()
+        compose.onNodeWithTag("home_node_check_1").assertIsOn()
+        compose.onNodeWithTag("home_node_check_2").performClick()
         compose.onNodeWithTag("home_delete_selected").performClick();compose.onNodeWithText("取消").performClick();assertEquals(3,vm.data.value.nodes.size)
         compose.onNodeWithTag("home_delete_selected").performClick();compose.onNodeWithText("确认").performClick();deleted(1)
         assertEquals(3L,vm.data.value.selectedNodeId);assertEquals("proxy",vm.data.value.rules.single().outbound);assertEquals(listOf(3L),vm.data.value.merges.single().nodeIds)
         seed()
         compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("settings_groups").performClick()
         compose.onNodeWithTag("manage_group_nodes_1").performClick()
-        compose.onNodeWithTag("manage_node_delete_4").performClick();compose.onNodeWithText("确认").performClick();deleted(3)
+        compose.onNodeWithTag("manage_node_delete_4").assertDoesNotExist()
+        compose.onNodeWithTag("manage_node_menu_4").performClick();compose.onNodeWithText("删除").performScrollTo().performClick();compose.onNodeWithText("确认").performClick();deleted(3)
         compose.onNodeWithTag("manage_1_multiselect").performClick()
         for(id in listOf(1,2))compose.onNodeWithTag("manage_node_check_$id").performClick()
         compose.onNodeWithTag("manage_1_delete_selected").performClick();compose.onNodeWithText("取消").performClick();assertEquals(3,vm.data.value.nodes.size)

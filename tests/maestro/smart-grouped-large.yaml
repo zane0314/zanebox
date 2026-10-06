@@ -1,18 +1,11 @@
 appId: com.zane.zanebox
 ---
+# 大字号由主控模拟器 driver 设置，本脚本不修改应用字体设置。
 - launchApp
 - tapOn:
     id: tab_2
 - tapOn:
     id: settings_general
-- scrollUntilVisible:
-    element:
-      id: setting_fontScale
-    direction: DOWN
-    timeout: 60000
-- tapOn:
-    id: setting_fontScale
-- tapOn: 最大
 - tapOn:
     id: page_back
 - tapOn:
@@ -39,14 +32,6 @@ appId: com.zane.zanebox
     id: tab_2
 - tapOn:
     id: settings_general
-- scrollUntilVisible:
-    element:
-      id: setting_fontScale
-    direction: DOWN
-    timeout: 60000
-- tapOn:
-    id: setting_fontScale
-- tapOn: 标准
 - tapOn:
     id: page_back
 - tapOn:

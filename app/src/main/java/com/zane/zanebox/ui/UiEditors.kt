@@ -4,18 +4,29 @@ package com.zane.zanebox.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.pm.ApplicationInfo
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.util.LruCache
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zane.zanebox.data.*
 import com.zane.zanebox.config.normalizeSmartTarget
@@ -367,6 +378,46 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
 
 private data class InstalledApp(val name:String,val packageName:String,val system:Boolean,val uid:Int)
 
+private val installedAppIconCache=object: LruCache<String,Bitmap>(2*1024*1024) {
+    override fun sizeOf(key:String,value:Bitmap)=value.byteCount
+}
+
+private fun loadInstalledAppIcon(context:android.content.Context,packageName:String,sizePx:Int):Bitmap? = runCatching {
+    context.packageManager.getApplicationIcon(packageName).let { drawable ->
+        Bitmap.createBitmap(sizePx,sizePx,Bitmap.Config.ARGB_8888).also { bitmap ->
+            drawable.setBounds(0,0,bitmap.width,bitmap.height)
+            drawable.draw(Canvas(bitmap))
+        }
+    }
+}.getOrNull()
+
+@Composable private fun InstalledAppIcon(packageName:String) {
+    val context=LocalContext.current
+    val sizePx=with(LocalDensity.current){40.dp.roundToPx().coerceAtLeast(1)}
+    val cacheKey="$packageName@$sizePx"
+    val bitmap by produceState<Bitmap?>(installedAppIconCache.get(cacheKey),cacheKey) {
+        if(value==null) value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            installedAppIconCache.get(cacheKey) ?: loadInstalledAppIcon(context,packageName,sizePx)?.also { installedAppIconCache.put(cacheKey,it) }
+        }
+    }
+    Box(Modifier.size(40.dp).testTag("app_icon_$packageName"),contentAlignment=Alignment.Center) {
+        bitmap?.let { Image(it.asImageBitmap(),null,Modifier.fillMaxSize().testTag("app_icon_loaded_$packageName")) }
+            ?: Icon(Icons.Outlined.Apps,null,Modifier.size(24.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable private fun InstalledAppRow(app:InstalledApp,selected:Boolean,onSelected:(Boolean)->Unit) {
+    Row(Modifier.fillMaxWidth().testTag("app_${app.packageName}").clickable{onSelected(!selected)}.heightIn(min=68.dp).padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+        InstalledAppIcon(app.packageName)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            Text(uiText(app.name),fontSize=13.sp,lineHeight=18.sp,fontWeight=FontWeight.SemiBold)
+            Text(uiText(app.packageName),fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+        }
+        Checkbox(selected,onCheckedChange=onSelected)
+    }
+}
+
 internal fun autoProxyPackages(installed:Map<String,Int>,names:Set<String>,bypass:Boolean):Set<String> = installed.filter { (name,uid)->(name in names || uid==1000)!=bypass }.keys
 
 @Composable internal fun AppsEditor(initial:Set<String>,onDismiss:()->Unit,modeValue:String="off",onMode:((String)->Unit)?=null,save:(Set<String>)->Unit) {
@@ -405,7 +456,7 @@ internal fun autoProxyPackages(installed:Map<String,Int>,names:Set<String>,bypas
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=4.dp)){Text(uiText("显示系统应用"),Modifier.weight(1f));UiSwitch(showSystem,{showSystem=it},modifier=Modifier.testTag("apps_system"))}
         }}
         item{OutlinedTextField(query,{query=it},label={Text(uiText("搜索名称或包名"))},modifier=Modifier.fillMaxWidth().testTag("apps_search"))}
-        items(visible,key={it.packageName}){app->UiCard{UiRow(app.name,app.packageName,onClick={selected=if(app.packageName in selected)selected-app.packageName else selected+app.packageName},trailing={Checkbox(app.packageName in selected,{selected=if(it)selected+app.packageName else selected-app.packageName})})}}
+        items(visible,key={it.packageName}){app->UiCard{InstalledAppRow(app,app.packageName in selected){checked->selected=if(checked)selected+app.packageName else selected-app.packageName}}}
     }
     if(auto)UiAlertDialog(onDismissRequest={auto=false},title={Text("自动选择代理应用？")},text={Text("将按内置名单选择已安装应用，并替换当前选择。")},confirmButton={TextButton(onClick={
         runCatching { context.assets.open("proxy_packagename.txt").bufferedReader().use { it.readLines() }.map { it.trim() }.toSet() }.onSuccess { names->selected=autoProxyPackages(apps.associate { it.packageName to it.uid },names,mode=="exclude");note="已自动选择 ${selected.size} 个已安装应用" }.onFailure { note="自动选择失败，原选择已保留" };auto=false

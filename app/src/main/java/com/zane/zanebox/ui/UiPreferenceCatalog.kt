@@ -27,7 +27,6 @@ internal fun preferenceSections(data:AppData)=listOf(
         choice("launcherIcon","桌面图标","default","default" to "Link","prism" to "Links · 毛玻璃","pixel" to "Pixel","node_n" to "Node N","channel_gate" to "Channel Gate","confluence" to "Confluence","launch_path" to "Launch Path"),
         choice("theme","夜间模式","system","system" to "跟随系统","light" to "浅色","dark" to "深色"),
         choice("appLanguage","应用语言","",*languages.toTypedArray()),
-        choice("fontScale","字体大小","1.0",".85" to "小","1.0" to "标准","1.15" to "大","1.3" to "更大","1.5" to "特大","2.0" to "最大"),
         choice("serviceMode","服务模式","vpn","vpn" to "VPN","proxy" to "本地代理"),
         choice("tunStack","TUN 实现","mixed","mixed" to "混合","system" to "系统","gvisor" to "gVisor"),
         Preference("mtu","MTU","1500"),

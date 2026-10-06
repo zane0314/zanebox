@@ -66,14 +66,6 @@ appId: com.zane.zanebox
 - tapOn: 深色
 - scrollUntilVisible:
     element:
-      id: setting_fontScale
-    direction: DOWN
-    timeout: 60000
-- tapOn:
-    id: setting_fontScale
-- tapOn: 更大
-- scrollUntilVisible:
-    element:
       id: setting_autoStart
     direction: UP
     timeout: 60000

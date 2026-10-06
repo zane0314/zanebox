@@ -9,6 +9,40 @@ import java.util.Locale
 
 internal enum class NodeSortMode { DEFAULT, LATENCY, NAME }
 
+/** Reorder visible slots without moving hidden records or accepting stale/duplicate IDs. */
+internal fun reorderVisibleIds(current:List<Long>,requested:List<Long>):List<Long> {
+    require(requested.distinct().size==requested.size && current.toSet().containsAll(requested)) { "排序记录已变化，请重试" }
+    val selected=requested.toSet();val next=requested.iterator()
+    return current.map{if(it in selected)next.next() else it}
+}
+
+internal fun AppData.reorderNodes(requested:List<Long>):AppData {
+    require(requested.distinct().size==requested.size && nodes.map{it.id}.toSet().containsAll(requested)) { "节点已变化，请重试" }
+    val orders=mutableMapOf<Long,Int>();var nextSettings=settings
+    val byGroup=nodes.groupBy{it.groupId}
+    groups.forEach { group ->
+        val current=byGroup[group.id].orEmpty().sortedWith(nodeComparator(nodeSortMode(this,group))).map{it.id}
+        val currentIds=current.toSet()
+        val visible=requested.filter{it in currentIds}
+        val reordered=reorderVisibleIds(current,visible)
+        if(reordered!=current) {
+            reordered.forEachIndexed{i,id->orders[id]=i}
+            nextSettings=nextSettings+("sort_group_${group.id}" to "false")
+        }
+    }
+    return copy(nodes=nodes.map{orders[it.id]?.let{order->it.copy(order=order)} ?:it},settings=nextSettings)
+}
+
+internal fun AppData.reorderGroups(requested:List<Long>):AppData {
+    val orders=reorderVisibleIds(groups.sortedBy{it.order}.map{it.id},requested).withIndex().associate{it.value to it.index}
+    return copy(groups=groups.map{it.copy(order=orders.getValue(it.id))})
+}
+
+internal fun AppData.reorderRules(front:Boolean,requested:List<Long>):AppData {
+    val orders=reorderVisibleIds(rules.filter{it.prioritize==front}.sortedBy{it.order}.map{it.id},requested).withIndex().associate{it.value to it.index}
+    return copy(rules=rules.map{orders[it.id]?.let{order->it.copy(order=order)} ?:it})
+}
+
 internal fun nodeTestLabel(node:Node):String=when { node.status==1 || node.ping == -2->"失败";node.ping>=0->"${node.ping} ms";else->"未测试" }
 
 internal fun nodeSortMode(data:AppData,group:Group):NodeSortMode {

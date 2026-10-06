@@ -25,3 +25,8 @@ native/sing-box/test/config/wireguard.conf
 .idea/
 *.iml
 .DS_Store
+
+# Links signing secrets must never be committed
+*.jks
+*.keystore
+**/signing.properties

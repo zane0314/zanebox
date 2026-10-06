@@ -1,6 +1,7 @@
 appId: com.zane.zanebox
 ---
 # Maestro 内部剪贴板用于文本输入；真实系统剪贴板另由 ClipboardImportTest 覆盖。
+# 大字号由主控模拟器 driver 设置，本脚本不修改应用字体设置。
 - launchApp:
     clearState: true
     permissions:
@@ -63,15 +64,19 @@ appId: com.zane.zanebox
     visible: Clipboard-Node
     timeout: 10000
 - tapOn:
-    id: home_node_delete_[0-9]+
+    id: node_menu_[0-9]+
     index: 0
+- tapOn: 删除
 - tapOn: 取消
 - assertVisible: fixture A
-- tapOn:
+- assertNotVisible:
     id: home_multiselect
+- assertNotVisible:
+    id: home_node_delete_[0-9]+
 - tapOn:
-    id: home_node_check_[0-9]+
+    id: node_menu_[0-9]+
     index: 0
+- tapOn: 多选
 - takeScreenshot: reports/ui-1.0.2/current/home-selected-node
 - tapOn:
     id: home_delete_selected
@@ -84,6 +89,11 @@ appId: com.zane.zanebox
 - tapOn:
     id: manage_group_nodes_[0-9]+
     index: 0
+- tapOn:
+    id: manage_node_menu_[0-9]+
+    index: 0
+- tapOn: 删除
+- tapOn: 取消
 - tapOn:
     id: manage_[0-9]+_multiselect
 - tapOn:
@@ -98,13 +108,7 @@ appId: com.zane.zanebox
     id: page_back
 - tapOn:
     id: settings_general
-- scrollUntilVisible:
-    element:
-      id: setting_fontScale
-    direction: DOWN
-- tapOn:
-    id: setting_fontScale
-- tapOn: 最大
+- assertNotVisible: 字体大小
 - tapOn:
     id: page_back
 - tapOn:
@@ -112,9 +116,9 @@ appId: com.zane.zanebox
 - tapOn:
     id: manage_group_nodes_[0-9]+
     index: 0
-- takeScreenshot: reports/ui-1.0.2/current/settings-node-large
+- takeScreenshot: reports/ui-1.0.2/current/settings-node-current
 - tapOn:
     id: page_back
 - tapOn:
     id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/home-auto-large
+- takeScreenshot: reports/ui-1.0.2/current/home-auto-current

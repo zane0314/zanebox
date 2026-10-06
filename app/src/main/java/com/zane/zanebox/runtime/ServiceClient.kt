@@ -25,9 +25,9 @@ import com.zane.zanebox.data.AppData
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class RuntimeSnapshot(val state:Int=0,val started:Long=0,val generation:Long=0,val txRate:Long=0,val rxRate:Long=0,val txTotal:Long=0,val rxTotal:Long=0,val error:String="",val mixedHost:String="127.0.0.1",val mixedPort:Int=0) {
-    fun json():String = JSONObject().put("state",state).put("started",started).put("generation",generation).put("txRate",txRate).put("rxRate",rxRate).put("txTotal",txTotal).put("rxTotal",rxTotal).put("error",error).put("mixedHost",mixedHost).put("mixedPort",mixedPort).toString()
-    companion object { fun parse(s:String):RuntimeSnapshot { val o=JSONObject(s);return RuntimeSnapshot(o.optInt("state"),o.optLong("started"),o.optLong("generation"),o.optLong("txRate"),o.optLong("rxRate"),o.optLong("txTotal"),o.optLong("rxTotal"),o.optString("error"),o.optString("mixedHost","127.0.0.1"),o.optInt("mixedPort")) } }
+data class RuntimeSnapshot(val state:Int=0,val started:Long=0,val generation:Long=0,val txRate:Long=0,val rxRate:Long=0,val txTotal:Long=0,val rxTotal:Long=0,val error:String="",val mixedHost:String="127.0.0.1",val mixedPort:Int=0,val pendingManual:Boolean=false) {
+    fun json():String = JSONObject().put("state",state).put("started",started).put("generation",generation).put("txRate",txRate).put("rxRate",rxRate).put("txTotal",txTotal).put("rxTotal",rxTotal).put("error",error).put("mixedHost",mixedHost).put("mixedPort",mixedPort).put("pendingManual",pendingManual).toString()
+    companion object { fun parse(s:String):RuntimeSnapshot { val o=JSONObject(s);return RuntimeSnapshot(o.optInt("state"),o.optLong("started"),o.optLong("generation"),o.optLong("txRate"),o.optLong("rxRate"),o.optLong("txTotal"),o.optLong("rxTotal"),o.optString("error"),o.optString("mixedHost","127.0.0.1"),o.optInt("mixedPort"),o.optBoolean("pendingManual")) } }
 }
 class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private val context=context.applicationContext
@@ -92,7 +92,9 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         testingState.value=emptySet()
         if(speedState.value.isNotBlank() && !runCatching { JSONObject(speedState.value).optBoolean("done") }.getOrDefault(true))speedState.value=JSONObject().put("stage","error").put("done",true).put("error","后台服务已断开，请重新测速").toString()
     }
-    fun connect() { if(!bound) { boundClass=serviceClass();bound=context.bindService(Intent(context,boundClass),connection,Context.BIND_AUTO_CREATE) } }
+    private fun bind(target:Class<*>) { if(!bound) {boundClass=target;bound=context.bindService(Intent(context,boundClass),connection,Context.BIND_AUTO_CREATE)} }
+    fun connect() {bind(targetClass ?: runningServiceClass(context) ?: serviceClass())}
+    private suspend fun ensureBinding() {connect();withTimeout(20000){while(remote==null)delay(50)}}
     private suspend fun ensureMode() {
         val next=serviceClass()
         if(bound && boundClass!=next) {
@@ -101,15 +103,18 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
             runCatching { remote?.unregisterCallback(callback) };context.unbindService(connection);bound=false;remote=null
             state.value=RuntimeSnapshot()
         }
-        connect()
+        bind(next)
         withTimeout(20000) { while(remote==null)delay(50) }
     }
-    suspend fun readSnapshot():RuntimeSnapshot { ensureMode();return RuntimeSnapshot.parse(remote!!.getSnapshot()) }
-    private fun command(action:String,payload:String="") { submit { ensureMode();remote!!.command(action,payload) } }
+    suspend fun readSnapshot():RuntimeSnapshot { ensureBinding();return RuntimeSnapshot.parse(remote!!.getSnapshot()) }
+    private fun command(action:String,payload:String="") { submit { ensureBinding();remote!!.command(action,payload) } }
     private fun startRemote() { ContextCompat.startForegroundService(context,Intent(context,boundClass).setAction("foreground"));remote!!.command("start","") }
     fun start() { submit { ensureMode();startRemote() } }
     fun stop()=command("stop")
     fun reload() { submit { val changed=boundClass!=serviceClass();val running=state.value.state==2;ensureMode();if(changed && running)startRemote() else remote?.command("reload","") } }
+    // A pending service-mode edit must not silently switch the bound service.
+    fun autoReload() { submit {remote?.command("autoReload","")} }
+    fun refreshSettings() { submit {remote?.command("liveSettings","")} }
     fun selectNode(id:Long)=command("select",id.toString())
     fun selectAuto()=command("selectAuto")
     fun testNodes(ids:List<Long>) { tests.value=emptyMap();command("test",JSONArray(ids).toString()) }
@@ -133,7 +138,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun validateConfig(name:String,json:String) { submit {
         val filename="validate-${java.util.UUID.randomUUID()}.json"
         val file=android.util.AtomicFile(java.io.File(context.noBackupFilesDir,filename))
-        try { val bytes=json.toByteArray(Charsets.UTF_8);require(bytes.size<=64*1024*1024);val output=file.startWrite();try { output.write(bytes);file.finishWrite(output) } catch(e:Exception) { file.failWrite(output);throw e };ensureMode();remote!!.command("validate",JSONObject().put("file",filename).put("name",name).toString()) }
+        try { val bytes=json.toByteArray(Charsets.UTF_8);require(bytes.size<=64*1024*1024);val output=file.startWrite();try { output.write(bytes);file.finishWrite(output) } catch(e:Exception) { file.failWrite(output);throw e };ensureBinding();remote!!.command("validate",JSONObject().put("file",filename).put("name",name).toString()) }
         catch(e:Exception) { file.delete();validationState.update { it+(name to (e.message ?: "验证失败")) } }
     } }
     suspend fun checkConfig(json:String) {
@@ -149,14 +154,17 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         try {
             val bytes=data.validate().toJson().toByteArray(Charsets.UTF_8);require(bytes.size<=64*1024*1024)
             val output=stage.startWrite();try { output.write(bytes);stage.finishWrite(output) } catch(e:Exception) { stage.failWrite(output);throw e }
-            ensureMode();(remote ?: error("后台服务尚未就绪")).command("restore",name)
+            ensureBinding();(remote ?: error("后台服务尚未就绪")).command("restore",name)
         } catch(e:Exception) { stage.delete();event.emit(e.message ?: "恢复失败") }
     } }
     fun close() { commands.close();runCatching { remote?.unregisterCallback(callback) };if(bound) { context.unbindService(connection);bound=false };remote=null;scope.cancel() }
     companion object {
+        private fun runningServiceClass(context:Context):Class<*>? {
+            @Suppress("DEPRECATION") val running=(context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getRunningServices(50).firstOrNull { it.foreground && it.service.packageName==context.packageName && it.service.className in setOf(ZaneVpnService::class.java.name,ZaneProxyService::class.java.name) } ?: return null
+            return if(running.service.className==ZaneProxyService::class.java.name)ZaneProxyService::class.java else ZaneVpnService::class.java
+        }
         suspend fun isConnected(context:Context):Boolean {
-            @Suppress("DEPRECATION") val running=(context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getRunningServices(50).firstOrNull { it.foreground && it.service.className in setOf(ZaneVpnService::class.java.name,ZaneProxyService::class.java.name) } ?: return false
-            val target=if(running.service.className==ZaneProxyService::class.java.name)ZaneProxyService::class.java else ZaneVpnService::class.java
+            val target=runningServiceClass(context) ?: return false
             val client=ServiceClient(context,target)
             return try { withTimeout(5000) { client.readSnapshot().state==2 } } catch(_:Exception) { false } finally { client.close() }
         }

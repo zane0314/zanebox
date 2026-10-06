@@ -114,13 +114,6 @@ appId: com.zane.zanebox
     id: setting_theme
 - tapOn: 浅色
 - tapOn:
-    id: setting_fontScale
-- tapOn: 更大
-- takeScreenshot: reports/ui-1.0.2/current/large-font-settings
-- tapOn:
-    id: setting_fontScale
-- tapOn: 标准
-- tapOn:
     id: setting_appLanguage
 - tapOn: English
 - assertVisible: Settings

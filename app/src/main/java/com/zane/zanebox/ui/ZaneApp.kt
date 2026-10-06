@@ -11,11 +11,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.alpha
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.drop
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
@@ -32,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,7 +54,7 @@ import com.zane.zanebox.runtime.RuntimeSnapshot
 import org.json.JSONObject
 
 internal data class TextEditor(val title:String,val fields:List<Pair<String,String>>,val save:(List<String>)->Unit)
-internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctUntilChangedBy {Triple(it.state,it.generation,it.error)}
+internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctUntilChangedBy {listOf(it.state,it.generation,it.error,it.pendingManual)}
 
 @Composable fun ZaneApp(vm:AppViewModel) {
     val data by vm.data.collectAsStateWithLifecycle()
@@ -100,7 +107,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).appTasks.forEach{runCatching{it.setExcludeFromRecents(data.bool("hideFromRecentApps"))}}
     }
     LaunchedEffect(data.setting("launcherIcon","prism")) { runCatching{applyLauncherIcon(context,data.setting("launcherIcon","prism"))}.onFailure{vm.message.value=it.message ?: "图标切换失败"} }
-    LaunchedEffect(runtime.generation,runtime.state) { if(runtime.state==2)dirty=false }
+    LaunchedEffect(runtime.generation,runtime.state,runtime.pendingManual) { if(runtime.state==2)dirty=runtime.pendingManual }
     fun form(title:String,fields:List<Pair<String,String>>,save:(List<String>)->Unit) {editor=TextEditor(title,fields,save)}
     fun share(text:String) {if(text.isBlank()){vm.message.value="没有可分享的内容";return};runCatching{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text),"分享节点"))}.onFailure { vm.message.value=it.message ?: "分享失败" }}
     fun copy(text:String) {if(text.isBlank()){vm.message.value="没有可复制的内容";return};(context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("zanebox",text));vm.message.value="已复制"}
@@ -142,14 +149,35 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         "默认顺序" to {data.groups.filter{currentGroup==null || it.id==currentGroup.id}.forEach{vm.setting("sort_group_${it.id}","false")}},
         "延迟升序" to {data.groups.filter{currentGroup==null || it.id==currentGroup.id}.forEach{vm.setting("sort_group_${it.id}","true")}},
         "添加订阅" to {groupForm()},"订阅管理" to {subpage="groups"},"跳转分组…" to {selector=true},"导出节点" to {exportNodes(null)})+if(data.bool("showBottomBar",true))emptyList() else listOf("设置" to {page=2},"智能分流" to {page=1},"连接 / 断开" to {toggle()})
-    val displayNodes=remember(data.nodes,data.groups,data.browseGroupId,search,data.settings){data.nodes.filter{((data.browseGroupId==0L && it.groupId in enabledIds) || it.groupId==data.browseGroupId) && (search.isBlank() || it.name.contains(search,true))}
-                                .sortedWith(Comparator{a,b->val g=data.groups.firstOrNull{it.id==a.groupId};if(a.groupId!=b.groupId && currentGroup==null)(g?.order ?:0).compareTo(data.groups.firstOrNull{it.id==b.groupId}?.order ?:0) else nodeComparator(g?.let{nodeSortMode(data,it)} ?: NodeSortMode.DEFAULT).compare(a,b)})}
+    val orderedGroups=remember(data.groups){data.groups.sortedBy{it.order}}
+    val homeGroupIds=remember(orderedGroups){listOf(0L)+orderedGroups.map{it.id}}
+    val pagerGroups=rememberUpdatedState(homeGroupIds)
+    val pager=rememberPagerState(initialPage=homeGroupIds.indexOf(data.browseGroupId).coerceAtLeast(0)){pagerGroups.value.size}
+    val pageScope=rememberCoroutineScope()
+    val latestBrowse by rememberUpdatedState(data.browseGroupId)
+    LaunchedEffect(data.browseGroupId,homeGroupIds) {
+        if(!pager.isScrollInProgress && homeGroupIds.getOrNull(pager.settledPage)!=data.browseGroupId)
+            pager.scrollToPage(homeGroupIds.indexOf(data.browseGroupId).coerceAtLeast(0))
+    }
+    LaunchedEffect(pager,homeGroupIds) {
+        snapshotFlow{pager.settledPage}.drop(1).collect { index ->
+            homeGroupIds.getOrNull(index)?.takeIf{it!=latestBrowse}?.let{vm.setting("browseGroupId",it.toString())}
+        }
+    }
+    val sortSettings=data.settings.filterKeys{it.startsWith("sort_group_") || it.startsWith("sort_mode_group_") || it.startsWith("legacy.preference.anybox_nodes.sort_group_")}
+    val groupNodes=remember(data.nodes,data.groups,search,sortSettings) {
+        val filtered=data.nodes.filter{search.isBlank() || it.name.contains(search,true)}.groupBy{it.groupId}
+        val grouped=orderedGroups.associate{it.id to filtered[it.id].orEmpty().sortedWith(nodeComparator(nodeSortMode(data,it)))}
+        grouped+(0L to orderedGroups.filter{it.enabled}.flatMap{grouped[it.id].orEmpty()})
+    }
     LaunchedEffect(data.browseGroupId,search) { selectingNodes=false;selectedNodes=emptySet() }
     LaunchedEffect(data.nodes) { selectedNodes=selectedNodes.intersect(data.nodes.map{it.id}.toSet()) }
     fun deleteNodes(ids:Set<Long>) {
         if(ids.isEmpty())return
         val chains=com.zane.zanebox.subscription.nodeRemovalIds(data.nodes,ids).size-ids.size
-        confirm=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to { vm.deleteNodes(ids);selectedNodes=emptySet();selectingNodes=false }
+        val action={vm.deleteNodes(ids);selectedNodes=emptySet();selectingNodes=false}
+        if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete",true))action()
+        else confirm=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to action
     }
     BackHandler(selectingNodes) { selectingNodes=false;selectedNodes=emptySet() }
     BackHandler(page!=0 && subpage.isBlank()) {page=0}
@@ -168,7 +196,15 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     actions={if(page==1)SmartMenu(data,vm){subpage=it}},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
                 snackbarHost={if(subpage.isBlank() && !nodeEdit && !groupEdit && !ruleEdit && !mergeEdit && editor==null && info==null && subscriptionOptions==null && speedNode==null)SnackbarHost(snackbar,Modifier.padding(bottom=if(floatingHomeBar)homeBarOverlap else 0.dp))},
                 bottomBar={if(!floatingHomeBar && dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},Modifier.navigationBarsPadding())}) {padding->
-                LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("page_list"),
+                @Composable fun PageContent(homeGroupId:Long) {
+                val listState=rememberLazyListState()
+                val visibleNodes=groupNodes[homeGroupId].orEmpty()
+                val nodesById=remember(visibleNodes){visibleNodes.associateBy{it.id}}
+                val drag=rememberDragSort(visibleNodes.map{it.id},listState,canMove={from,to->nodesById[from]?.groupId==nodesById[to]?.groupId}){vm.reorderNodes(it.filterIsInstance<Long>())}
+                val nodes=drag.order.mapNotNull{nodesById[it]}
+                val chipState=rememberLazyListState()
+                LaunchedEffect(homeGroupId,homeGroupIds){chipState.scrollToItem(homeGroupIds.indexOf(homeGroupId).coerceAtLeast(0))}
+                LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag(if(page!=0 || homeGroupId==pagerGroups.value.getOrNull(pager.currentPage))"page_list" else "home_page_$homeGroupId"),state=listState,
                     contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=(if(floatingHomeBar)homeBarOverlap else 0.dp)+(if(page==0)8.dp else 16.dp)),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     when(page) {
                         0->{
@@ -189,33 +225,31 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                 Spacer(Modifier.width(6.dp));UiMenu(moreActions,"node_menu",circle=true)
                             } }
                             if(searching)item{OutlinedTextField(search,{search=it},label={Text(uiText("搜索节点"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_search"),trailingIcon={IconButton(onClick={search="";searching=false}){Icon(Icons.Outlined.Close,"关闭搜索")}})}
-                            if(data.groups.isNotEmpty()) item { LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                item{HomeGroupChip(uiText("全部"),data.browseGroupId==0L,{vm.setting("browseGroupId","0")},modifier=Modifier.testTag("group_all"))}
-                                items(data.groups.sortedBy{it.order},key={it.id}){g->HomeGroupChip(g.name,data.browseGroupId==g.id,{vm.setting("browseGroupId",g.id.toString())},onLongClick={menuGroupId=g.id},active=g.enabled,modifier=Modifier.testTag("group_${g.id}"))}
+                            if(data.groups.isNotEmpty()) item { LazyRow(state=chipState,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                item{HomeGroupChip(uiText("全部"),homeGroupId==0L,{pageScope.launch{pager.animateScrollToPage(0)}},modifier=Modifier.testTag("group_all"))}
+                                items(orderedGroups,key={it.id}){g->HomeGroupChip(g.name,homeGroupId==g.id,{pageScope.launch{pager.animateScrollToPage(homeGroupIds.indexOf(g.id))}},onLongClick={menuGroupId=g.id},active=g.enabled,modifier=Modifier.testTag("group_${g.id}"))}
                             } }
                             item {HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))}
-                            if(data.browseGroupId==0L && search.isBlank())item {
+                            if(homeGroupId==0L && search.isBlank())item {
                                 UiCard { UiRow("自动选择",data.nodes.firstOrNull{it.id==autoNodeId}?.let { "当前：${it.name} · 每 10 分钟测速" } ?: "选择延迟最低的可用节点 · 每 10 分钟测速",Icons.Outlined.AutoMode,onClick=if(activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})({vm.service.selectAuto()})else null,modifier=Modifier.testTag("home_auto"),chevron=false,trailing={RadioButton(data.bool("homeAutoSelect"),onClick={vm.service.selectAuto()},enabled=activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})}) }
                             }
-                            val nodes=displayNodes
-                            if(nodes.isNotEmpty())item {
+                            if(selectingNodes && nodes.isNotEmpty())item {
                                 NodeSelectionBar(selectingNodes,selectedNodes.size,"home",{selectingNodes=!selectingNodes;selectedNodes=emptySet()},{selectedNodes=nodes.map{it.id}.toSet()},{deleteNodes(selectedNodes)})
                             }
                             items(nodes,key={it.id},contentType={"node"}){n->
                                 val enabled=n.groupId in enabledIds
                                 val showAddress=data.bool("alwaysShowAddress")
                                 val subtitle=remember(n.outbound,showAddress){runCatching{val node=JSONObject(n.outbound);node.optString("type").uppercase()+(if(showAddress)" · ${node.optString("server")}:${node.optInt("server_port")}" else "")}.getOrDefault("")}
-                                UiCard { Row(Modifier.fillMaxWidth().heightIn(min=68.dp).padding(start=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                                UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==n.id)null else spring()).then(if(selectingNodes)Modifier else drag.modifier(n.id))) { Row(Modifier.fillMaxWidth().heightIn(min=68.dp).padding(start=12.dp),verticalAlignment=Alignment.CenterVertically) {
                                     if(selectingNodes)Checkbox(n.id in selectedNodes,{checked->selectedNodes=if(checked)selectedNodes+n.id else selectedNodes-n.id},modifier=Modifier.testTag("home_node_check_${n.id}"))
                                     else RadioButton(!data.bool("homeAutoSelect") && data.selectedNodeId==n.id,onClick={if(enabled)vm.service.selectNode(n.id)},enabled=enabled)
-                                    Column(Modifier.weight(1f).combinedClickable(enabled=selectingNodes || enabled,onClick={if(selectingNodes)selectedNodes=if(n.id in selectedNodes)selectedNodes-n.id else selectedNodes+n.id else vm.service.selectNode(n.id)},onLongClick={selectingNodes=true;selectedNodes=selectedNodes+n.id}).testTag("node_${n.id}").padding(vertical=12.dp)) {
+                                    Column(Modifier.weight(1f).clickable(enabled=selectingNodes || enabled,onClick={if(selectingNodes)selectedNodes=if(n.id in selectedNodes)selectedNodes-n.id else selectedNodes+n.id else vm.service.selectNode(n.id)}).testTag("node_${n.id}").padding(vertical=12.dp)) {
                                         Text(n.name,fontSize=14.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
                                         Text(subtitle,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Text(uiText(if(n.id in testing)"测试中" else nodeTestLabel(n)),fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.testTag("node_latency_${n.id}").clickable(enabled=enabled){vm.service.testNodes(listOf(n.id))})
-                                    IconButton(onClick={deleteNodes(setOf(n.id))},modifier=Modifier.testTag("home_node_delete_${n.id}")){Icon(Icons.Outlined.Delete,"删除节点 ${n.name}")}
                                     IconButton(onClick={info=n},modifier=Modifier.testTag("node_info_${n.id}")){Icon(painterResource(R.drawable.zb_ref_ic_baseline_info_24),"节点详情")}
-                                    UiMenu(listOf("编辑" to {nodeForm(n)},"测试延迟" to {vm.service.testNodes(listOf(n.id))},"速度测试" to {speedNode=n.id},"分享" to {share(shareText(listOf(n)))},"二维码" to {qr=shareText(listOf(n))},"复制" to {copy(shareText(listOf(n)))},"节点区域" to {form("节点区域",listOf("hk/us/kr/jp/sg/tw（留空自动）" to data.setting("nodeRegion.${n.id}"))){val key="nodeRegion.${n.id}";val region=it[0].trim().lowercase(java.util.Locale.ROOT);validatePreference(key,region);vm.setting(key,region)}},"上移" to {moveNode(vm,n)},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除节点 ${n.name}？" to {vm.deleteNode(n.id)}else vm.deleteNode(n.id)}).filter{enabled || it.first !in listOf("测试延迟","速度测试")},"node_menu_${n.id}")
+                                    UiMenu(listOf("编辑" to {nodeForm(n)},"测试延迟" to {vm.service.testNodes(listOf(n.id))},"速度测试" to {speedNode=n.id},"分享" to {share(shareText(listOf(n)))},"二维码" to {qr=shareText(listOf(n))},"复制" to {copy(shareText(listOf(n)))},"节点区域" to {form("节点区域",listOf("hk/us/kr/jp/sg/tw（留空自动）" to data.setting("nodeRegion.${n.id}"))){val key="nodeRegion.${n.id}";val region=it[0].trim().lowercase(java.util.Locale.ROOT);validatePreference(key,region);vm.setting(key,region)}},"多选" to {selectingNodes=true;selectedNodes=selectedNodes+n.id},"删除" to {deleteNodes(setOf(n.id))}).filter{enabled || it.first !in listOf("测试延迟","速度测试")},"node_menu_${n.id}")
                                 } }
                             }
                             if(nodes.isEmpty())item {Box(Modifier.fillMaxWidth().height(220.dp),contentAlignment=Alignment.Center){Text(if(data.nodes.isEmpty())"暂无节点，点右上角添加节点或订阅" else "未找到匹配节点",fontSize=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
@@ -225,6 +259,9 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                         2->{item{SettingsHub(onOpen={subpage=it},clashApi=data.bool("clashApi"))}}
                     }
                 }
+                }
+                if(page==0)HorizontalPager(pager,beyondViewportPageCount=1,key={pagerGroups.value.getOrNull(it) ?: -(it+1L)},userScrollEnabled=!selectingNodes,modifier=Modifier.fillMaxSize().testTag("home_pager")){index->Box(Modifier.fillMaxSize().then(if(index==pager.currentPage)Modifier else Modifier.clearAndSetSemantics{})){pagerGroups.value.getOrNull(index)?.let{PageContent(it)}}}
+                else PageContent(data.browseGroupId)
             }
             if(floatingHomeBar)Column(Modifier.align(Alignment.BottomCenter).onSizeChanged{homeBarHeight=with(density){it.height.toDp()}}) {
                 if(dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()})
@@ -267,5 +304,3 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         }
     }
 }
-
-private fun moveNode(vm:AppViewModel,n:Node) {vm.edit{d->val list=d.nodes.filter{it.groupId==n.groupId}.sortedBy{it.order}.toMutableList();val i=list.indexOfFirst{it.id==n.id};if(i>0)java.util.Collections.swap(list,i,i-1);val order=list.mapIndexed{j,v->v.id to j}.toMap();d.copy(nodes=d.nodes.map{if(it.id in order)it.copy(order=order.getValue(it.id))else it})}}

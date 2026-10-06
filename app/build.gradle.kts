@@ -1,4 +1,6 @@
 import java.util.Properties
+import java.security.KeyStore
+import java.security.MessageDigest
 
 plugins {
     id("com.android.application")
@@ -6,6 +8,25 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 val identity = Properties().apply { rootProject.file("version.properties").inputStream().use { load(it) } }
+// Secrets stay outside the repository. Every release must use the pinned Links certificate.
+val releaseSigningFile = System.getenv("LINKS_SIGNING_PROPERTIES")?.let { File(it) }
+    ?: File(System.getProperty("user.home"), ".agent-shared/credentials/links-release-signing/signing.properties")
+val releaseSigning = Properties().apply { if (releaseSigningFile.isFile) releaseSigningFile.inputStream().use { load(it) } }
+val releaseKeystore = releaseSigning.getProperty("storeFile")?.let { releaseSigningFile.parentFile.resolve(it) }
+val linksCertificateSha256 = "501a5ab904e2e601d38cf8b04b19cc3165a503235710d888ff121d2c55d9ee29"
+val verifyReleaseSigning by tasks.registering {
+    doLast {
+        require(releaseSigningFile.isFile) { "Links release signing.properties is missing; restore the existing signing backup. Never generate a replacement key." }
+        require(listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all { !releaseSigning.getProperty(it).isNullOrBlank() }) { "Links release signing configuration is incomplete" }
+        require(releaseSigning.getProperty("keyAlias") == "links-release") { "Links release key alias must remain links-release" }
+        val keyStore = KeyStore.getInstance("JKS").apply { requireNotNull(releaseKeystore).inputStream().use { load(it, releaseSigning.getProperty("storePassword").toCharArray()) } }
+        require(keyStore.getKey("links-release", releaseSigning.getProperty("keyPassword").toCharArray()) != null) { "Links release private key is unavailable" }
+        val certificate = requireNotNull(keyStore.getCertificate("links-release"))
+        val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString("") { "%02x".format(it) }
+        require(fingerprint == linksCertificateSha256) { "Links release signing key changed; restore the original Links-release.jks" }
+    }
+}
+
 android {
     namespace = "com.zane.zanebox"
     compileSdk = 35
@@ -18,11 +39,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }
+    signingConfigs { create("linksRelease") {
+        storeFile = releaseKeystore
+        storePassword = releaseSigning.getProperty("storePassword")
+        keyAlias = releaseSigning.getProperty("keyAlias")
+        keyPassword = releaseSigning.getProperty("keyPassword")
+        storeType = "JKS"
+    } }
     buildTypes { release {
         isMinifyEnabled = true
         isShrinkResources = true
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"),"proguard-rules.pro")
-        signingConfig = signingConfigs.getByName("debug")
+        signingConfig = signingConfigs.getByName("linksRelease")
     } }
     buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -64,3 +92,5 @@ val verifyNative by tasks.registering(Exec::class) {
     commandLine("bash","native/build-native.sh")
 }
 tasks.named("preBuild").configure { dependsOn(verifyNative) }
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(verifyReleaseSigning) }

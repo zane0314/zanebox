@@ -57,11 +57,12 @@ class AssetUpdateTest {
             assertTrue("连接时更新被拒绝：${vm.message.value}",client.assetRevision.value>revision)
             connected();assertTrue(client.snapshot.value.generation>generation);assertNotEquals(original,hash("geosite"));assertEquals("EXIT_B",exit())
             val geoip=hash("geoip");val geoRevision=client.assetRevision.value
-            activity.scenario.onActivity{vm.edit{it.copy(settings=it.settings+mapOf("mixedPort" to "2081","disableMixedInbound" to "true"))}}
+            activity.scenario.onActivity{vm.edit{it.copy(settings=it.settings+mapOf("serviceMode" to "vpn","mixedPort" to "2081","disableMixedInbound" to "true"))}}
             waitFor(10000){!vm.busy.value && vm.data.value.setting("mixedPort")=="2081"}
             assertEquals(2080,client.snapshot.value.mixedPort)
             activity.scenario.onActivity{vm.downloadAsset("geoip")};waitFor(30000){client.assetRevision.value>geoRevision};connected();assertEquals(geoip,hash("geoip"));assertEquals("EXIT_B",exit())
-            assertEquals(2081,client.snapshot.value.mixedPort)
+            assertEquals(2080,client.snapshot.value.mixedPort)
+            assertEquals("vpn",vm.store.snapshot().setting("serviceMode"));assertTrue(client.snapshot.value.pendingManual)
             val imported=File(screen.cacheDir,"asset-import-test.db");imported.writeBytes(File(root,"geoip.db").readBytes())
             try {val before=client.assetRevision.value;activity.scenario.onActivity{vm.importAsset("geoip",android.net.Uri.fromFile(imported))};waitFor(30000){client.assetRevision.value>before};connected();assertEquals(geoip,hash("geoip"));assertEquals("EXIT_B",exit())}finally{imported.delete()}
             failedDownload("fail",false);failedDownload("header",false)

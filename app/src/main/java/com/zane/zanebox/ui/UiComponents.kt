@@ -153,9 +153,10 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
 }
 
 @Composable internal fun UiPageList(title:String,onDismiss:()->Unit,action:(@Composable RowScope.()->Unit)?=null,
+    state:androidx.compose.foundation.lazy.LazyListState?=null,
     content:LazyListScope.()->Unit) {
     UiPage(title,onDismiss,action) {padding->
-        LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("subpage_list"),state=LocalUiListState.current ?: androidx.compose.foundation.lazy.rememberLazyListState(),
+        LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("subpage_list"),state=state ?: LocalUiListState.current ?: androidx.compose.foundation.lazy.rememberLazyListState(),
             contentPadding=PaddingValues(start=14.dp,end=14.dp,top=12.dp,bottom=24.dp),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)
     }
 }

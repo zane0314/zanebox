@@ -1,0 +1,31 @@
+appId: com.zane.zanebox
+---
+- launchApp:
+    permissions:
+      all: allow
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: add_nodes
+- tapOn: 导入文本
+- tapOn:
+    id: editor_field_0
+- inputText: socks://10.0.2.2:19081#Signing-A
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- assertVisible: 新建分组
+- tapOn: 导入
+- extendedWaitUntil:
+    visible: Signing-A
+    timeout: 30000
+- takeScreenshot: reports/ui-1.0.2/current/new-signature-import

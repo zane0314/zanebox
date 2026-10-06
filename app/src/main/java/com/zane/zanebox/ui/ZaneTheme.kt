@@ -34,10 +34,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zane.zanebox.data.AppData
@@ -182,7 +180,6 @@ private val ZaneTypography = Typography().run {
 
 @Composable
 fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
-    val baseDensity = LocalDensity.current
     val theme = data.setting("theme", "system").lowercase()
     val dark = when (theme) {
         "dark" -> true
@@ -198,7 +195,6 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
         else -> if (dark) PrismDark else PrismLight
     }
     val skin = baseSkin
-    val fontScale = data.setting("fontScale").toFloatOrNull()?.coerceIn(.5f, 2f) ?: baseDensity.fontScale
     val colors = if (dark) darkColorScheme(
         primary = skin.primary, onPrimary = skin.background, primaryContainer = skin.primaryDark,
         onPrimaryContainer = skin.onSurface, secondary = skin.secondaryText, onSecondary = skin.background,
@@ -213,7 +209,6 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
         error = skin.error, onError = Color.White, outline = skin.divider, outlineVariant = skin.divider,
     )
     CompositionLocalProvider(
-        LocalDensity provides Density(baseDensity.density, fontScale),
         LocalZaneSkin provides skin,
     ) {
         MaterialTheme(colorScheme = colors, typography = ZaneTypography, shapes = ZaneShapes.copy(large = androidx.compose.foundation.shape.RoundedCornerShape(when(data.setting("uiSkin","prism")){"azure"->16.dp;"spectrum"->22.dp;else->14.dp}))){
