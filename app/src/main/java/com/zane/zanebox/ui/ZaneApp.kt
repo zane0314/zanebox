@@ -196,40 +196,48 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     actions={if(page==1)SmartMenu(data,vm){subpage=it}},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
                 snackbarHost={if(subpage.isBlank() && !nodeEdit && !groupEdit && !ruleEdit && !mergeEdit && editor==null && info==null && subscriptionOptions==null && speedNode==null)SnackbarHost(snackbar,Modifier.padding(bottom=if(floatingHomeBar)homeBarOverlap else 0.dp))},
                 bottomBar={if(!floatingHomeBar && dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},Modifier.navigationBarsPadding())}) {padding->
+                @Composable fun HomeHeader(homeGroupId:Long) {
+                    val chipState=rememberLazyListState()
+                    LaunchedEffect(homeGroupId,homeGroupIds) {
+                        if(data.groups.isNotEmpty())chipState.animateScrollToItem(homeGroupIds.indexOf(homeGroupId).coerceAtLeast(0))
+                    }
+                    Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=2.dp)) {
+                        Row(Modifier.fillMaxWidth().testTag("home_header").padding(top=2.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Text(uiText("已选")+"："+(if(data.bool("homeAutoSelect"))uiText("自动选择") else data.nodes.firstOrNull{it.id==data.selectedNodeId}?.name ?: uiText("未选择节点")),
+                                fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f).testTag("home_selected_node"))
+                            FilledIconButton(onClick={searching=!searching},modifier=Modifier.size(48.dp).testTag("search_toggle"),colors=IconButtonDefaults.filledIconButtonColors(containerColor=if(MaterialTheme.colorScheme.background.luminance()>.5f)androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.surface.copy(alpha=1f))){Icon(painterResource(R.drawable.zb_ref_abc_ic_search_api_material),"搜索节点")}
+                            Spacer(Modifier.width(6.dp))
+                            Box {var add by remember{mutableStateOf(false)}
+                                FilledIconButton(onClick={add=true},modifier=Modifier.size(48.dp).testTag("add_nodes"),colors=IconButtonDefaults.filledIconButtonColors(containerColor=if(MaterialTheme.colorScheme.background.luminance()>.5f)androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.surface.copy(alpha=1f))){Icon(painterResource(R.drawable.zb_ref_ic_action_note_add),"添加节点")}
+                                DropdownMenu(add,{add=false}){addActions.forEach{(title,action)->DropdownMenuItem(text={Text(uiText(title))},onClick={add=false;action()})}}
+                            }
+                            Spacer(Modifier.width(6.dp));UiMenu(moreActions,"node_menu",circle=true)
+                        }
+                        if(searching) {
+                            OutlinedTextField(search,{search=it},label={Text(uiText("搜索节点"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_search"),trailingIcon={IconButton(onClick={search="";searching=false}){Icon(Icons.Outlined.Close,"关闭搜索")}})
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        if(data.groups.isNotEmpty()) {
+                            LazyRow(modifier=Modifier.testTag("home_groups"),state=chipState,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                item{HomeGroupChip(uiText("全部"),homeGroupId==0L,{pageScope.launch{pager.animateScrollToPage(0)}},modifier=Modifier.testTag("group_all"))}
+                                items(orderedGroups,key={it.id}){g->HomeGroupChip(g.name,homeGroupId==g.id,{pageScope.launch{pager.animateScrollToPage(homeGroupIds.indexOf(g.id))}},onLongClick={menuGroupId=g.id},active=g.enabled,modifier=Modifier.testTag("group_${g.id}"))}
+                            }
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
                 @Composable fun PageContent(homeGroupId:Long) {
                 val listState=rememberLazyListState()
                 val visibleNodes=groupNodes[homeGroupId].orEmpty()
                 val nodesById=remember(visibleNodes){visibleNodes.associateBy{it.id}}
                 val drag=rememberDragSort(visibleNodes.map{it.id},listState,canMove={from,to->nodesById[from]?.groupId==nodesById[to]?.groupId}){vm.reorderNodes(it.filterIsInstance<Long>())}
                 val nodes=drag.order.mapNotNull{nodesById[it]}
-                val chipState=rememberLazyListState()
-                LaunchedEffect(homeGroupId,homeGroupIds){chipState.scrollToItem(homeGroupIds.indexOf(homeGroupId).coerceAtLeast(0))}
-                LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag(if(page!=0 || homeGroupId==pagerGroups.value.getOrNull(pager.currentPage))"page_list" else "home_page_$homeGroupId"),state=listState,
+                LazyColumn(Modifier.fillMaxSize().padding(if(page==0)PaddingValues(0.dp)else padding).consumeWindowInsets(if(page==0)PaddingValues(0.dp)else padding).testTag(if(page!=0 || homeGroupId==pagerGroups.value.getOrNull(pager.currentPage))"page_list" else "home_page_$homeGroupId"),state=listState,
                     contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=(if(floatingHomeBar)homeBarOverlap else 0.dp)+(if(page==0)8.dp else 16.dp)),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     when(page) {
                         0->{
-                            item { Row(Modifier.fillMaxWidth().padding(top=2.dp,bottom=12.dp),verticalAlignment=Alignment.Top) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(uiText("节点"),fontSize=26.sp,fontWeight=FontWeight.Bold)
-                                    val dotColor=if(runtime.state==2)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    val stateText=uiText(listOf("代理未连接","连接中","代理已连接","断开中","连接失败").getOrElse(runtime.state){"同步中"})
-                                    Text(androidx.compose.ui.text.buildAnnotatedString { pushStyle(androidx.compose.ui.text.SpanStyle(color=dotColor));append("● ");pop();append(stateText) },fontSize=14.sp,modifier=Modifier.testTag("connection_state"))
-                                    Text(uiText("已选")+"："+(if(data.bool("homeAutoSelect"))uiText("自动选择") else data.nodes.firstOrNull{it.id==data.selectedNodeId}?.name ?: uiText("未选择节点")),fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
-                                }
-                                FilledIconButton(onClick={searching=!searching},modifier=Modifier.size(48.dp).testTag("search_toggle"),colors=IconButtonDefaults.filledIconButtonColors(containerColor=if(MaterialTheme.colorScheme.background.luminance()>.5f)androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.surface.copy(alpha=1f))){Icon(painterResource(R.drawable.zb_ref_abc_ic_search_api_material),"搜索节点")}
-                                Spacer(Modifier.width(6.dp))
-                                Box {var add by remember{mutableStateOf(false)}
-                                    FilledIconButton(onClick={add=true},modifier=Modifier.size(48.dp).testTag("add_nodes"),colors=IconButtonDefaults.filledIconButtonColors(containerColor=if(MaterialTheme.colorScheme.background.luminance()>.5f)androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.surface.copy(alpha=1f))){Icon(painterResource(R.drawable.zb_ref_ic_action_note_add),"添加节点")}
-                                    DropdownMenu(add,{add=false}){addActions.forEach{(title,action)->DropdownMenuItem(text={Text(uiText(title))},onClick={add=false;action()})}}
-                                }
-                                Spacer(Modifier.width(6.dp));UiMenu(moreActions,"node_menu",circle=true)
-                            } }
-                            if(searching)item{OutlinedTextField(search,{search=it},label={Text(uiText("搜索节点"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_search"),trailingIcon={IconButton(onClick={search="";searching=false}){Icon(Icons.Outlined.Close,"关闭搜索")}})}
-                            if(data.groups.isNotEmpty()) item { LazyRow(state=chipState,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                item{HomeGroupChip(uiText("全部"),homeGroupId==0L,{pageScope.launch{pager.animateScrollToPage(0)}},modifier=Modifier.testTag("group_all"))}
-                                items(orderedGroups,key={it.id}){g->HomeGroupChip(g.name,homeGroupId==g.id,{pageScope.launch{pager.animateScrollToPage(homeGroupIds.indexOf(g.id))}},onLongClick={menuGroupId=g.id},active=g.enabled,modifier=Modifier.testTag("group_${g.id}"))}
-                            } }
-                            item {HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))}
                             if(homeGroupId==0L && search.isBlank())item {
                                 UiCard { UiRow("自动选择",data.nodes.firstOrNull{it.id==autoNodeId}?.let { "当前：${it.name} · 每 10 分钟测速" } ?: "选择延迟最低的可用节点 · 每 10 分钟测速",Icons.Outlined.AutoMode,onClick=if(activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})({vm.service.selectAuto()})else null,modifier=Modifier.testTag("home_auto"),chevron=false,trailing={RadioButton(data.bool("homeAutoSelect"),onClick={vm.service.selectAuto()},enabled=activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})}) }
                             }
@@ -260,8 +268,10 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     }
                 }
                 }
-                if(page==0)HorizontalPager(pager,beyondViewportPageCount=1,key={pagerGroups.value.getOrNull(it) ?: -(it+1L)},userScrollEnabled=!selectingNodes,modifier=Modifier.fillMaxSize().testTag("home_pager")){index->Box(Modifier.fillMaxSize().then(if(index==pager.currentPage)Modifier else Modifier.clearAndSetSemantics{})){pagerGroups.value.getOrNull(index)?.let{PageContent(it)}}}
-                else PageContent(data.browseGroupId)
+                if(page==0)Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+                    HomeHeader(pagerGroups.value.getOrNull(pager.currentPage) ?: data.browseGroupId)
+                    HorizontalPager(pager,beyondViewportPageCount=2,key={pagerGroups.value.getOrNull(it) ?: -(it+1L)},userScrollEnabled=!selectingNodes,modifier=Modifier.weight(1f).fillMaxWidth().testTag("home_pager")){index->Box(Modifier.fillMaxSize().then(if(index==pager.currentPage)Modifier else Modifier.clearAndSetSemantics{})){pagerGroups.value.getOrNull(index)?.let{PageContent(it)}}}
+                } else PageContent(data.browseGroupId)
             }
             if(floatingHomeBar)Column(Modifier.align(Alignment.BottomCenter).onSizeChanged{homeBarHeight=with(density){it.height.toDp()}}) {
                 if(dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()})

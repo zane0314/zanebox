@@ -23,7 +23,8 @@ class ScrollFixtureTest {
                     val id=groupIndex*nodesPerGroup+localIndex
                     Node(id.toLong(),group.id,if(multiGroup)"${group.name} · 节点 $localIndex" else "滚动验收节点 $id","""{"type":"socks","server":"10.0.2.2","server_port":19081}""",ping=60+id%80,status=1,order=localIndex)
                 }
-            },groups=groups,settings=mapOf("appLanguage" to "zh-CN","fontScale" to "1.0","showBottomBar" to args.getString("showBottomBar","true"),"browseGroupId" to "1","selectedNodeId" to "1","serviceMode" to "proxy","statsEnabled" to "false")))
+            },groups=groups,settings=mapOf("appLanguage" to "zh-CN","fontScale" to "1.0","showBottomBar" to args.getString("showBottomBar","true"),"browseGroupId" to "1","selectedNodeId" to "1","serviceMode" to "proxy","statsEnabled" to "false")+
+                (if(args.getString("smartRulesFixture")=="true")mapOf("smartRules.speed" to "# UI fixture\nDOMAIN,existing.example.test\nIP-CIDR,10.0.0.0/8")else emptyMap())))
         } finally {store.close()}
     }
 }

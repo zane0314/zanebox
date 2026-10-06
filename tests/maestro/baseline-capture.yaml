@@ -9,7 +9,8 @@ appId: com.zane.proxy
 - assertVisible: 全部设置
 - takeScreenshot: reports/ui-1.0.2/baseline/settings-maestro
 - back
-- assertVisible: 节点
+- assertVisible:
+    id: home_header
 - takeScreenshot: reports/ui-1.0.2/baseline/nodes-maestro
 - tapOn:
     id: com.zane.proxy:id/home_toolbar_routing

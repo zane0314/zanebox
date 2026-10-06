@@ -2,7 +2,8 @@ appId: com.zane.zanebox
 ---
 # SelectionCacheTest automatic-policy fixture provides subscription 701/702, local 703, disabled 704.
 - launchApp
-- assertVisible: 节点
+- assertVisible:
+    id: home_header
 - assertNotVisible: 自动选择
 - assertNotVisible:
     id: group_summary

@@ -4,5 +4,6 @@ appId: com.zane.proxy
     clearState: true
     permissions:
       all: allow
-- assertVisible: 节点|Nodes
+- assertVisible:
+    id: home_header
 - takeScreenshot: reports/ui-1.0.2/current/anybox-home-reference

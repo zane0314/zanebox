@@ -127,6 +127,8 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
         val dark=MaterialTheme.colorScheme.onSurface.luminance()>.5f
         SideEffect { ((view.parent as? androidx.compose.ui.window.DialogWindowProvider) ?: (view as? androidx.compose.ui.window.DialogWindowProvider))?.window?.let{window->
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
+            // Compose handles IME insets here; Android's default pan would move the whole page a second time.
+            if(android.os.Build.VERSION.SDK_INT>=31)window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
             window.setDimAmount(0f)
             if(android.os.Build.VERSION.SDK_INT>=28)window.attributes=window.attributes.apply {

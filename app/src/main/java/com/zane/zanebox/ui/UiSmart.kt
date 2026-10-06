@@ -20,6 +20,17 @@ import com.zane.zanebox.subscription.SubscriptionClient
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
+internal fun smartDomainRule(line:String):Pair<String,String>? {
+    val text=line.trim()
+    if(text.isBlank() || text.startsWith('#') || text.startsWith("//"))return null
+    val fields=text.split(',').map{it.trim()}
+    return when {
+        fields.size>=2 && fields[0].uppercase() in listOf("DOMAIN","DOMAIN-SUFFIX","DOMAIN-KEYWORD")->fields[0].uppercase() to fields[1]
+        fields.size==1 && text.matches(Regex("[\\p{L}\\p{N}*_.-]+"))->"DOMAIN-SUFFIX" to text
+        else->null
+    }
+}
+
 private const val KaringRuleCatalogUrl =
     "https://api.github.com/repos/KaringX/karing-ruleset/contents/ACL4SSR?ref=sing"
 
@@ -112,6 +123,19 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
     var catalogLoading by remember{mutableStateOf(false)}
     var fetching by remember{mutableStateOf(false)}
     var confirmDelete by remember{mutableStateOf(false)}
+    var rawEditor by remember{mutableStateOf(false)}
+    var domainIndex by remember{mutableStateOf<Int?>(null)}
+    var domainType by remember{mutableStateOf("DOMAIN-SUFFIX")}
+    var domainValue by remember{mutableStateOf("")}
+    var typePicker by remember{mutableStateOf(false)}
+    var domainInput by remember{mutableStateOf(false)}
+    var domainError by remember{mutableStateOf("")}
+    val domainTypes=listOf("DOMAIN" to "完整域名 · DOMAIN","DOMAIN-SUFFIX" to "域名后缀 · DOMAIN-SUFFIX","DOMAIN-KEYWORD" to "域名关键词 · DOMAIN-KEYWORD")
+    val ruleLines=remember(rules){rules.lines()}
+    fun editDomain(index:Int) {
+        val match=ruleLines.getOrNull(index)?.let(::smartDomainRule)
+        domainIndex=index;domainType=match?.first ?: "DOMAIN-SUFFIX";domainValue=match?.second.orEmpty();domainError="";typePicker=true
+    }
     val busy by vm.busy.collectAsStateWithLifecycle()
     val scope=rememberCoroutineScope()
 
@@ -175,6 +199,7 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
     }
 
     UiPageList("分流规则来源",onDismiss,action={
+        TextButton(onClick={save(false)},enabled=!busy&&!fetching,modifier=Modifier.testTag("rule_source_save")){Text(uiText("保存"))}
         TextButton(onClick={confirmDelete=true},enabled=!busy,modifier=Modifier.testTag("rule_source_delete")){Text(uiText("删除"))}
     }) {
         item {
@@ -189,20 +214,51 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
                         }
                         if(fetching)CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=2.dp)
                     }
-                    OutlinedTextField(rules,{rules=it;error=""},label={Text(uiText("自定义规则（每行域名或 DOMAIN / IP-CIDR）"))},
-                        modifier=Modifier.fillMaxWidth().testTag("rule_source_rules"),minLines=8,maxLines=16)
                     val compatibility=remember(serviceKey,rules){com.zane.zanebox.config.ConfigBuilder.ruleCompatibilityWarnings(serviceKey,rules)}
                     if(compatibility.isNotEmpty())Text(compatibility.joinToString("\n"),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_compatibility"))
                     if(error.isNotBlank())Text(error,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_error"))
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
-                        TextButton(onClick={save(false)},enabled=!busy&&!fetching,modifier=Modifier.testTag("rule_source_save")){Text(uiText("保存"))}
                         Button(onClick=::fetchAndReplace,enabled=!busy&&!fetching,modifier=Modifier.testTag("rule_source_replace")){Text(uiText("获取并替换"))}
                     }
                     Text(uiText("保存失败会保留当前编辑内容；获取并替换会使用现有订阅 HTTP 管线。"),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
+        item{UiCard{
+            UiRow("自定义规则","${ruleLines.count{it.isNotBlank() && !it.trim().startsWith('#') && !it.trim().startsWith("//")}} 条",Icons.Outlined.AccountTree,trailing={
+                TextButton(onClick={editDomain(-1)},modifier=Modifier.testTag("rule_domain_add")){Text("添加")}
+            })
+            UiRow("规则文本 / 批量编辑",if(rawEditor)"收起文本，返回选择式编辑" else "保留注释、IP 规则及其他原始内容",Icons.Outlined.Code,onClick={rawEditor=!rawEditor},modifier=Modifier.testTag("rule_source_raw"))
+        }}
+        if(rawEditor)item{
+            OutlinedTextField(rules,{rules=it;error=""},label={Text(uiText("自定义规则（每行域名或 DOMAIN / IP-CIDR）"))},
+                modifier=Modifier.fillMaxWidth().testTag("rule_source_rules"),minLines=8,maxLines=16)
+        } else items(ruleLines.indices.filter{ruleLines[it].isNotBlank() && !ruleLines[it].trim().startsWith('#') && !ruleLines[it].trim().startsWith("//")},key={it}) { index ->
+            val line=ruleLines[index];val match=smartDomainRule(line)
+            UiCard{UiRow(match?.second ?: line,domainTypes.firstOrNull{it.first==match?.first}?.second ?: "原始规则 · 在批量编辑中修改",Icons.Outlined.Description,
+                onClick=if(match!=null)({editDomain(index)})else ({rawEditor=true}),modifier=Modifier.testTag("rule_domain_$index"),summaryLines=2)}
+        }
     }
+
+    if(typePicker)ChoiceDialog("域名匹配类型",domainType,domainTypes,{typePicker=false}){domainType=it;typePicker=false;domainInput=true}
+    if(domainInput)UiAlertDialog(onDismissRequest={domainInput=false},title={Text(if(domainIndex==-1)"添加域名规则" else "编辑域名规则")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+            UiRow("匹配类型",domainTypes.first{it.first==domainType}.second,onClick={typePicker=true},modifier=Modifier.testTag("rule_domain_type"))
+            OutlinedTextField(domainValue,{domainValue=it;domainError=""},label={Text(if(domainType=="DOMAIN-KEYWORD")"关键词" else "域名")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("rule_domain_value"))
+            if(domainError.isNotBlank())Text(domainError,color=MaterialTheme.colorScheme.error)
+        }
+    },confirmButton={TextButton(onClick={
+        val value=domainValue.trim()
+        if(value.isBlank() || value.any{it==',' || it.isWhitespace()})domainError="请输入单个域名或关键词，不需要填写规则前缀"
+        else {
+            val index=domainIndex ?: -1
+            val lines=ruleLines.toMutableList()
+            val tail=lines.getOrNull(index)?.split(',')?.drop(2).orEmpty()
+            val line=(listOf(domainType,value)+tail).joinToString(",")
+            if(index in lines.indices)lines[index]=line else lines.add(line)
+            rules=lines.joinToString("\n");error="";domainInput=false
+        }
+    },modifier=Modifier.testTag("rule_domain_confirm")){Text(if(domainIndex==-1)"添加" else "替换")}},dismissButton={TextButton(onClick={domainInput=false}){Text(uiText("取消"))}})
 
     if(catalogOpen)UiAlertDialog(onDismissRequest={catalogOpen=false},title={Text(uiText("Karing 在线规则目录"))},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {

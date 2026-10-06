@@ -11,7 +11,8 @@ appId: com.zane.zanebox
     commands:
     - tapOn:
         id: com.android.permissioncontroller:id/permission_allow_button
-- assertVisible: 节点|Nodes
+- assertVisible:
+    id: home_header
 - tapOn:
     id: tab_2
 - tapOn:

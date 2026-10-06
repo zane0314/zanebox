@@ -1,0 +1,90 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- assertVisible:
+    id: home_header
+- assertNotVisible:
+    id: connection_state
+- assertVisible:
+    id: node_1
+- swipe:
+    start: 85%, 40%
+    end: 20%, 40%
+    duration: 600
+- extendedWaitUntil:
+    visible:
+      id: node_301
+    timeout: 30000
+- assertVisible:
+    id: home_header
+- assertVisible:
+    id: home_groups
+- takeScreenshot: reports/ui-1.0.2/current/home-fixed-group-2
+- tapOn:
+    id: group_1
+- extendedWaitUntil:
+    visible:
+      id: node_1
+    timeout: 30000
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_speed
+- tapOn: 规则来源
+- assertVisible:
+    id: rule_domain_1
+- assertNotVisible:
+    id: rule_source_rules
+- takeScreenshot: reports/ui-1.0.2/current/rules-choice-list
+- tapOn:
+    id: rule_domain_add
+- takeScreenshot: reports/ui-1.0.2/current/rules-domain-types
+- tapOn: 域名后缀 · DOMAIN-SUFFIX
+- tapOn: 域名
+- inputText: choice.example.test
+- hideKeyboard
+- tapOn: 添加
+- tapOn:
+    id: rule_source_save
+- scrollUntilVisible:
+    element:
+      text: choice.example.test
+    direction: DOWN
+    timeout: 30000
+- assertVisible: choice.example.test
+- takeScreenshot: reports/ui-1.0.2/current/rules-choice-added
+- tapOn:
+    id: page_back
+- tapOn: 规则来源
+- scrollUntilVisible:
+    element:
+      text: choice.example.test
+    direction: DOWN
+    timeout: 30000
+- assertVisible: choice.example.test
+- scrollUntilVisible:
+    element:
+      id: rule_source_raw
+    direction: UP
+    timeout: 30000
+- tapOn:
+    id: rule_source_raw
+- scrollUntilVisible:
+    element:
+      id: rule_source_rules
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: rule_source_rules
+- assertVisible:
+    id: page_back
+- assertVisible: 分流规则来源
+- takeScreenshot: reports/ui-1.0.2/current/rules-keyboard-final
+- hideKeyboard
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: home_selected_node
+- takeScreenshot: reports/ui-1.0.2/current/home-final

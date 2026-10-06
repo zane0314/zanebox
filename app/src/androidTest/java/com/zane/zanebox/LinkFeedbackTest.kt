@@ -45,6 +45,7 @@ class LinkFeedbackTest {
         compose.onNodeWithTag("tab_1").performClick();compose.onNodeWithTag("smart_youtube").performClick()
         compose.onNodeWithText("内置兼容规则组").assertIsDisplayed()
         compose.onNodeWithText("规则来源").performClick()
+        compose.onNodeWithTag("rule_source_raw").performClick()
         val editor=compose.onNodeWithTag("rule_source_rules")
         editor.assertTextContains("DOMAIN-SUFFIX,googlevideo.com",substring=true)
         assertFalse(editor.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text.contains("USER-AGENT,"))

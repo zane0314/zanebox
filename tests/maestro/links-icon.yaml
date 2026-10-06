@@ -7,4 +7,4 @@ appId: com.zane.zanebox
 - takeScreenshot: reports/ui-1.0.2/current/links-launcher-icon
 - tapOn: Links
 - assertVisible:
-    id: page_back|connection_state
+    id: page_back|home_header

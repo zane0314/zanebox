@@ -1,7 +1,8 @@
 appId: com.zane.zanebox
 ---
 - launchApp
-- assertVisible: 节点
+- assertVisible:
+    id: home_header
 - tapOn:
     id: add_nodes
 - tapOn: 手动添加

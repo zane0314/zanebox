@@ -925,7 +925,8 @@ appId: com.zane.zanebox
     id: page_back
 - tapOn:
     id: main_back
-- assertVisible: 节点
+- assertVisible:
+    id: home_header
 - stopApp
 - launchApp
 - assertVisible:
