@@ -41,13 +41,17 @@ import com.zane.zanebox.data.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import com.zane.zanebox.runtime.RuntimeSnapshot
 import org.json.JSONObject
 
 internal data class TextEditor(val title:String,val fields:List<Pair<String,String>>,val save:(List<String>)->Unit)
+internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctUntilChangedBy {Triple(it.state,it.generation,it.error)}
 
 @Composable fun ZaneApp(vm:AppViewModel) {
     val data by vm.data.collectAsStateWithLifecycle()
-    val runtime by vm.service.snapshot.collectAsStateWithLifecycle()
+    val runtime by remember(vm){homeRuntimeSnapshots(vm.service.snapshot)}.collectAsStateWithLifecycle(initialValue=vm.service.snapshot.value)
     val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val pending by vm.pendingImport.collectAsStateWithLifecycle()
@@ -176,13 +180,15 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
                             item {HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))}
                             if(currentGroup!=null)item {UiRow(currentGroup.name,currentGroup.userInfo.ifBlank{"${data.nodes.count{it.groupId==currentGroup.id}} 个节点"},modifier=Modifier.testTag("group_summary"),onClick={groupForm(currentGroup)},trailing={UiMenu(groupActions+listOf("编辑" to {groupForm(currentGroup)},"订阅选项" to {subscriptionOptions=currentGroup},"分享分组" to {share(shareText(data.nodes.filter{it.groupId==currentGroup.id}))},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除分组及其全部节点？" to {vm.deleteGroup(currentGroup.id)}else vm.deleteGroup(currentGroup.id)}),"group_menu_${currentGroup.id}")})}
                             val nodes=displayNodes
-                            items(nodes,key={it.id}){n->
-                                val enabled=data.groups.firstOrNull{it.id==n.groupId}?.enabled==true
+                            items(nodes,key={it.id},contentType={"node"}){n->
+                                val enabled=n.groupId in enabledIds
+                                val showAddress=data.bool("alwaysShowAddress")
+                                val subtitle=remember(n.outbound,showAddress){runCatching{val node=JSONObject(n.outbound);node.optString("type").uppercase()+(if(showAddress)" · ${node.optString("server")}:${node.optInt("server_port")}" else "")}.getOrDefault("")}
                                 UiCard { Row(Modifier.fillMaxWidth().heightIn(min=68.dp).padding(start=12.dp),verticalAlignment=Alignment.CenterVertically) {
                                     RadioButton(data.selectedNodeId==n.id,onClick={if(enabled)vm.service.selectNode(n.id)},enabled=enabled)
                                     Column(Modifier.weight(1f).clickable(enabled=enabled){vm.service.selectNode(n.id)}.testTag("node_${n.id}").padding(vertical=12.dp)) {
                                         Text(n.name,fontSize=14.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
-                                        Text(runCatching{val node=JSONObject(n.outbound);node.optString("type").uppercase()+(if(data.bool("alwaysShowAddress"))" · ${node.optString("server")}:${node.optInt("server_port")}" else "")}.getOrDefault(""),fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(subtitle,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Text(uiText(if(n.id in testing)"测试中" else nodeTestLabel(n)),fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.testTag("node_latency_${n.id}").clickable(enabled=enabled){vm.service.testNodes(listOf(n.id))})
                                     IconButton(onClick={info=n},modifier=Modifier.testTag("node_info_${n.id}")){Icon(painterResource(R.drawable.zb_ref_ic_baseline_info_24),"节点详情")}

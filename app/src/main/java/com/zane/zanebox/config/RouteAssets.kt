@@ -46,10 +46,24 @@ internal fun geoAssetCode(kind:String,bytes:ByteArray):String {
 
 internal val builtinSmartRuleFiles=mapOf("speed" to listOf("Speed"),"youtube" to listOf("YouTube"),"telegram" to listOf("Telegram"),"netflix" to listOf("Netflix"),"disney" to listOf("Disney"),"tiktok" to listOf("TikTok"),"x" to listOf("Twitter"),"meta" to listOf("Instagram","Facebook"),"spotify" to listOf("Spotify"),"google" to listOf("Google"),"ai" to listOf("OpenAI"))
 
+internal val unsupportedSmartRuleTypes=setOf("USER-AGENT","IP-ASN","OR")
+internal fun builtinSmartRuleText(key:String,read:(String)->String):String = builtinSmartRuleFiles[key].orEmpty().joinToString("\n") {read("anybox-rules/$it.list")}
+internal fun supportedBuiltinSmartRules(raw:String):String = raw.lines().filter {it.substringBefore(',').trim().uppercase() !in unsupportedSmartRuleTypes}.joinToString("\n")
+internal fun isBuiltinSmartRuleText(value:String,bundled:String):Boolean {
+    fun normalized(text:String)=text.replace("\r\n","\n").trim()
+    return normalized(value)==normalized(bundled) || normalized(value)==normalized(supportedBuiltinSmartRules(bundled))
+}
+
 /** Missing defaults use bundled rules; an explicitly saved empty rule list stays empty. */
 internal fun withBuiltinSmartRules(data:AppData,read:(String)->String):AppData {
-    val defaults=builtinSmartRuleFiles.filter { (key,_)->data.setting("smart.$key.target",if(key=="speed")"proxy" else "off")!="off" && !data.settings.containsKey("smartRules.$key") && data.setting("smartUrl.$key").isBlank() }
-        .map { (key,names)->"smartRules.$key" to names.joinToString("\n") { read("anybox-rules/$it.list") } }.toMap()
+    val defaults=builtinSmartRuleFiles.keys.filter { key->data.setting("smart.$key.target",if(key=="speed")"proxy" else "off")!="off" && data.setting("smartUrl.$key").isBlank() }
+        .mapNotNull {key->
+            val stored=data.settings["smartRules.$key"]
+            if(stored!=null && stored.isBlank())return@mapNotNull null
+            val bundled=builtinSmartRuleText(key,read)
+            if(stored!=null && !isBuiltinSmartRuleText(stored,bundled))null
+            else supportedBuiltinSmartRules(bundled).let {compatible->if(stored==compatible)null else "smartRules.$key" to compatible}
+        }.toMap()
     return if(defaults.isEmpty())data else data.copy(settings=data.settings+defaults)
 }
 

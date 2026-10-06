@@ -51,8 +51,10 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
             UiCard{UiRow(title,if(value=="off")"使用普通主节点" else targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
                 onClick={expanded=if(expanded==key)"" else key},onLongClick={moving=key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
                 if(expanded==key) {
+                    val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
+                    val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))
                     UiRow("分流目标",targetName(value,data),onClick={target=key})
-                    UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(key in builtIn.map{it.first} && !data.settings.containsKey("smartRules.$key"))"内置规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
+                    UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(usesBuiltin)"内置兼容规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
                     UiRow("选择应用","${data.setting("smartCustom.$key.packages").lines().count{it.isNotBlank()}} 个应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
                     if(custom.any{it.first==key}) {
                         UiRow("重命名",onClick={form("重命名",listOf("名称" to title)){values->require(values[0].isNotBlank());require((builtIn+custom).none{it.first!=key && it.second==values[0]}){"名称已存在"};vm.setting("smartCustom.$key.name",values[0])}})
@@ -98,9 +100,9 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
 private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
     val initialUrl=data.setting("smartUrl.$serviceKey")
     val initialRules=remember(serviceKey,data.settings) {
-        if(data.settings.containsKey("smartRules.$serviceKey"))data.setting("smartRules.$serviceKey")
-        else if(data.setting("smartUrl.$serviceKey").isBlank())com.zane.zanebox.config.builtinSmartRuleFiles[serviceKey]?.joinToString("\n") { name->vm.getApplication<android.app.Application>().assets.open("anybox-rules/$name.list").bufferedReader().use{it.readText()} }.orEmpty()
-        else ""
+        val bundled=com.zane.zanebox.config.builtinSmartRuleText(serviceKey){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}
+        val saved=data.setting("smartRules.$serviceKey")
+        if(serviceKey in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$serviceKey").isBlank() && (!data.settings.containsKey("smartRules.$serviceKey") || com.zane.zanebox.config.isBuiltinSmartRuleText(saved,bundled)))com.zane.zanebox.config.supportedBuiltinSmartRules(bundled) else saved
     }
     var url by remember(serviceKey,initialUrl){mutableStateOf(initialUrl)}
     var rules by remember(serviceKey,initialRules){mutableStateOf(initialRules)}
@@ -191,6 +193,8 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
                     }
                     OutlinedTextField(rules,{rules=it;error=""},label={Text(uiText("自定义规则（每行域名或 DOMAIN / IP-CIDR）"))},
                         modifier=Modifier.fillMaxWidth().testTag("rule_source_rules"),minLines=8,maxLines=16)
+                    val compatibility=remember(serviceKey,rules){com.zane.zanebox.config.ConfigBuilder.ruleCompatibilityWarnings(serviceKey,rules)}
+                    if(compatibility.isNotEmpty())Text(compatibility.joinToString("\n"),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_compatibility"))
                     if(error.isNotBlank())Text(error,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_error"))
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
                         TextButton(onClick={save(false)},enabled=!busy&&!fetching,modifier=Modifier.testTag("rule_source_save")){Text(uiText("保存"))}

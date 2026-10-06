@@ -12,6 +12,7 @@ import com.zane.zanebox.ui.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import kotlinx.coroutines.launch
 
 class LinkFeedbackTest {
     @get:Rule(order=0) val compose=createAndroidComposeRule<MainActivity>()
@@ -23,11 +24,57 @@ class LinkFeedbackTest {
             file.outputStream().use{bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
         }
     }
+    @org.junit.After fun clearFixtureClipboard() {
+        compose.runOnIdle {
+            val clipboard=compose.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            if(android.os.Build.VERSION.SDK_INT>=28)clipboard.clearPrimaryClip()
+            else clipboard.setPrimaryClip(ClipData.newPlainText("fixture",""))
+        }
+    }
     private fun seed():AppViewModel {
         val vm=ViewModelProvider(compose.activity)[AppViewModel::class.java]
         compose.runOnIdle { vm.edit { AppData(nodes=listOf(Node(801,801,"日本 B","""{"type":"socks","server":"10.0.2.2","server_port":19082}""")),groups=listOf(Group(801,"验收组")),settings=mapOf("appLanguage" to "zh-CN","selectedNodeId" to "801","browseGroupId" to "801","serviceMode" to "proxy","exitProbeUrl" to "http://10.0.2.2:19080/trace")) } }
         compose.waitUntil(10000){!vm.busy.value && vm.data.value.nodes.firstOrNull()?.id==801L}
         return vm
+    }
+    @Test fun builtinCompatibilityAndCustomRuleDisclosureKeepWorkingRoutes() {
+        val vm=seed()
+        val raw=compose.activity.assets.open("anybox-rules/YouTube.list").bufferedReader().use{it.readText()}
+        compose.runOnIdle {vm.edit {it.copy(nodes=it.nodes+Node(802,801,"规则目标 A","""{"type":"socks","server":"10.0.2.2","server_port":19081}"""),settings=it.settings+mapOf("smart.youtube.target" to "node:802","smart.speed.target" to "off","smartRules.youtube" to raw,"dnsRemote" to "tcp://10.0.2.2:19087","dnsDirect" to "tcp://10.0.2.2:19087","sniff" to "false"))}}
+        compose.waitUntil(10000){!vm.busy.value && vm.data.value.setting("smartRules.youtube")==raw}
+        compose.onNodeWithTag("tab_1").performClick();compose.onNodeWithTag("smart_youtube").performClick()
+        compose.onNodeWithText("内置兼容规则组").assertIsDisplayed()
+        compose.onNodeWithText("规则来源").performClick()
+        val editor=compose.onNodeWithTag("rule_source_rules")
+        editor.assertTextContains("DOMAIN-SUFFIX,googlevideo.com",substring=true)
+        assertFalse(editor.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text.contains("USER-AGENT,"))
+        compose.onNodeWithTag("rule_source_compatibility").assertDoesNotExist()
+        val custom="DOMAIN-SUFFIX,googlevideo.com\nUSER-AGENT,*user-custom*"
+        editor.performTextReplacement(custom)
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("rule_source_compatibility"))
+        compose.onNodeWithTag("rule_source_compatibility").assertIsDisplayed().assertTextContains("USER-AGENT",substring=true)
+        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("rule_source_save"))
+        compose.onNodeWithTag("rule_source_save").performClick()
+        compose.waitUntil(10000){!vm.busy.value && vm.data.value.setting("smartRules.youtube")==custom}
+        assertEquals(custom,vm.store.snapshot().setting("smartRules.youtube"))
+        kotlinx.coroutines.runBlocking {kotlinx.coroutines.withTimeout(30000) {
+            while(!java.io.File(compose.activity.filesDir,"core-assets/yacd/index.html").isFile)kotlinx.coroutines.delay(50)
+            vm.service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(vm.data.value))
+        }}
+        compose.onNodeWithTag("page_back").performClick();compose.onNodeWithTag("main_back").performClick()
+        val messages=java.util.concurrent.CopyOnWriteArrayList<String>()
+        val collector=kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {vm.service.events.collect{messages.add(it)}}
+        try {
+            vm.service.start()
+            compose.waitUntil(30000){vm.service.snapshot.value.state==2 || vm.service.snapshot.value.state==4}
+            assertEquals(vm.service.snapshot.value.error,2,vm.service.snapshot.value.state)
+            assertTrue("不应在每次连接时弹规则兼容消息：$messages",messages.none{it.contains("USER-AGENT")})
+            listOf("googlevideo.com" to "EXIT_A","unmatched.test" to "EXIT_B").forEach {(host,expected)->
+                val request=java.net.URL("http://$host:19080/probe").openConnection(java.net.Proxy(java.net.Proxy.Type.HTTP,java.net.InetSocketAddress("127.0.0.1",2080))) as java.net.HttpURLConnection
+                try {request.connectTimeout=5000;request.readTimeout=5000;assertEquals(expected,request.inputStream.bufferedReader().use{it.readText()})} finally {request.disconnect()}
+            }
+        } finally {vm.service.stop();collector.cancel()}
     }
     @Test fun settingsEndIsFullyVisibleAtNormalAndLargeFontAndBackupStaysInTools() {
         val vm=seed()

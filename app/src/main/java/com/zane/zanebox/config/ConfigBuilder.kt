@@ -21,11 +21,12 @@ object ConfigBuilder {
         return when { path.endsWith(".srs",true)->"binary";path.endsWith(".json",true)->"source";else->"" }
     }
     private fun smartServices(data:AppData)=smartPolicyKeys(data)
-    private val unsupportedSmartTypes=setOf("USER-AGENT", "IP-ASN", "OR")
-    fun warnings(data: AppData): List<String> = smartServices(data).filter { data.setting("smart.$it.target", "off")!="off" }.flatMap { service ->
+    fun ruleCompatibilityWarnings(service:String,rules:String):List<String> = rules.lines().map {it.substringBefore(',').trim().uppercase()}.filter {it in unsupportedSmartRuleTypes}.distinct().map {"$service：此规则格式暂不支持 $it；该类条目保留但不参与匹配，其余有效规则仍生效"}
+    fun warnings(data:AppData):List<String> = targetWarnings(data)+smartServices(data).filter {data.setting("smart.$it.target","off")!="off"}.flatMap {ruleCompatibilityWarnings(it,data.setting("smartRules.$it"))}
+    fun targetWarnings(data: AppData): List<String> = smartServices(data).filter { data.setting("smart.$it.target", "off")!="off" }.flatMap { service ->
         val target=data.setting("smart.$service.target")
         val missing=if((target=="auto" || target.startsWith("region:")) && smartTargetNodeIds(data,target).isEmpty())listOf("$service: 分流目标没有可用节点，当前使用普通路由") else emptyList()
-        missing+data.setting("smartRules.$service").lines().map { it.substringBefore(',').trim().uppercase() }.filter { it in unsupportedSmartTypes }.distinct().map { "$service: 当前 sing-box 路由不支持 $it，保留原列表但跳过该匹配；其余域名/IP规则仍生效" }
+        missing
     }
 
     fun smartTargetNodeIds(data:AppData,target:String):List<Long> {
@@ -254,7 +255,7 @@ object ConfigBuilder {
                         return@serviceLoop
                     }
                     data.setting("smartRules.$service", "").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith('#') && !it.startsWith("//") }.forEach { line ->
-                        if(line.substringBefore(',').uppercase() in unsupportedSmartTypes) return@forEach
+                        if(line.substringBefore(',').trim().uppercase() in unsupportedSmartRuleTypes) return@forEach
                         val fields=line.split(',').map { it.trim() }; val rule=JSONObject()
                         val value=fields.getOrElse(1) { fields[0] }
                         when(fields[0].uppercase()) {

@@ -1,0 +1,32 @@
+appId: com.zane.zanebox
+---
+# Compatibility instrumentation seeds custom USER-AGENT + working googlevideo rule.
+- launchApp
+- assertVisible:
+    id: home_toolbar
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_youtube
+- assertVisible: 自定义域名规则
+- tapOn: 规则来源
+- assertVisible:
+    id: rule_source_rules
+- scrollUntilVisible:
+    element:
+      id: rule_source_compatibility
+    direction: DOWN
+    timeout: 30000
+- assertVisible: '.*此规则格式暂不支持 USER-AGENT.*'
+- takeScreenshot: reports/ui-1.0.2/current/rule-compatibility-custom
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000
+- assertNotVisible: '.*此规则格式暂不支持 USER-AGENT.*'
+- takeScreenshot: reports/ui-1.0.2/current/rule-compatibility-connected

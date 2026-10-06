@@ -207,7 +207,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             publish(snapshot);notification("已连接")
             startSampler(snapshot.generation)
             startRuleUpdates()
-            val warnings=ConfigBuilder.warnings(data)
+            val warnings=ConfigBuilder.targetWarnings(data)
             if(warnings.isNotEmpty()) event("message",warnings.joinToString("\n")) else event("message","已连接")
         } catch(e:Exception) { failed(e);throw e }
     }
