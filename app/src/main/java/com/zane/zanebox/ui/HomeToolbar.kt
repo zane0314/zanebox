@@ -1,6 +1,8 @@
 package com.zane.zanebox.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountTree
@@ -14,6 +16,7 @@ import com.zane.zanebox.R
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -41,5 +44,13 @@ import androidx.compose.ui.viewinterop.AndroidView
             AndroidView(factory={ZanePowerButton(it).apply{isClickable=false;isFocusable=false}},update={it.render(state,false)},modifier=Modifier.fillMaxSize())
         }
         Text(label,Modifier.align(Alignment.TopCenter).offset(y=92.dp).testTag("tab_0").clickable(enabled=state!=1 && state!=3,onClick=onToggle),fontSize=12.sp,lineHeight=16.sp)
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable internal fun HomeGroupChip(text:String,selected:Boolean,onClick:()->Unit,onLongClick:(()->Unit)?=null,active:Boolean=true,modifier:Modifier=Modifier) {
+    Surface(color=if(selected)MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,shape=MaterialTheme.shapes.medium,
+        modifier=modifier.semantics{this.selected=selected}.alpha(if(active)1f else .45f).combinedClickable(onClick=onClick,onLongClick=onLongClick)) {
+        Text(text,Modifier.padding(horizontal=14.dp,vertical=10.dp),fontSize=12.sp,lineHeight=16.sp,maxLines=1)
     }
 }

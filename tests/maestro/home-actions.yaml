@@ -17,17 +17,19 @@ appId: com.zane.zanebox
 - longPressOn:
     id: group_[0-9]+
     index: 0
+- tapOn: 停用分组
 - assertNotVisible:
     id: node_[0-9]+
 - longPressOn:
     id: group_[0-9]+
     index: 0
+- tapOn: 启用分组
 - assertVisible: UI-fixture
 - tapOn:
     id: node_menu
 - tapOn: 跳转分组…
 - tapOn: UI-group
-- assertVisible:
+- assertNotVisible:
     id: group_summary
 - assertVisible: 未找到匹配节点
 - tapOn:

@@ -2,6 +2,8 @@
 
 package com.zane.zanebox.ui
 
+import com.zane.zanebox.config.smartTarget
+
 import android.content.Context
 import android.os.Process
 import android.os.SystemClock
@@ -172,7 +174,7 @@ private fun ProbeResultCard(result:ProbeResult) {
 private fun SiteCardsPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
     val tests by vm.service.testResults.collectAsStateWithLifecycle()
     val runtime by vm.service.snapshot.collectAsStateWithLifecycle()
-    val activeNodes=remember(data){siteDiagnostics.flatMap { com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,data.setting("smart.${it.key}.target","off")) }.distinct()}
+    val activeNodes=remember(data){siteDiagnostics.flatMap { com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,smartTarget(data,it.key)) }.distinct()}
     UiPageList(uiText("站点分流卡片"),onDismiss,action={
         IconButton(onClick={vm.service.testNodes(activeNodes)},enabled=activeNodes.isNotEmpty(),modifier=Modifier.testTag("site_cards_refresh")){Icon(Icons.Outlined.Refresh,uiText("刷新"))}
     }) {
@@ -183,7 +185,7 @@ private fun SiteCardsPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
             if(activeNodes.isEmpty())Text(uiText("没有可测速节点"),color=MaterialTheme.colorScheme.error)
         } } }
         items(siteDiagnostics) { site ->
-            val target=data.setting("smart.${site.key}.target","off")
+            val target=smartTarget(data,site.key)
             val ruleText=data.setting("smartRules.${site.key}")
             val candidateIds=com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,target)
             val pings=candidateIds.mapNotNull{tests[it]}.filter{it>0}

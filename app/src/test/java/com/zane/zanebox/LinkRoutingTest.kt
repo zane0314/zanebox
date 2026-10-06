@@ -19,17 +19,15 @@ class LinkRoutingTest {
             assertTrue(route.getBoolean("find_process"))
             val dnsRules=root.getJSONObject("dns").getJSONArray("rules")
             assertTrue(service,(0 until dnsRules.length()).map{dnsRules.getJSONObject(it)}.any{it.has("domain_suffix") && it.optString("server")=="dns-direct"})
-            assertEquals("",withBuiltinSmartRules(enabled.copy(settings=enabled.settings+mapOf("smartRules.$service" to "","smart.speed.target" to "off"))){error("must preserve explicit empty rules")}.setting("smartRules.$service"))
+            assertEquals("",withBuiltinSmartRules(enabled.copy(settings=enabled.settings+builtinSmartRuleFiles.keys.associate{"smartRules.$it" to ""})){error("must preserve explicit empty rules")}.setting("smartRules.$service"))
         }
     }
-    @Test fun countryCodesMatchTokensAndManualRegionsOverrideNames() {
-        assertEquals(emptyList<Long>(),ConfigBuilder.smartTargetNodeIds(data,"region:us"))
-        assertEquals(listOf(2L),ConfigBuilder.smartTargetNodeIds(data,"region:jp"))
-        assertEquals(listOf(1L),ConfigBuilder.smartTargetNodeIds(data.copy(settings=mapOf("nodeRegion.1" to "us")),"region:us"))
-        val config=JSONObject(ConfigBuilder.build(data.copy(settings=mapOf("smart.youtube.target" to "region:jp","smartRules.youtube" to "DOMAIN-SUFFIX,video.test"))))
-        val outs=config.getJSONArray("outbounds")
-        val group=(0 until outs.length()).map{outs.getJSONObject(it)}.single{it.optString("tag")=="smart-youtube"}
-        assertEquals("urltest",group.getString("type"));assertEquals("node-2",group.getJSONArray("outbounds").getString(0));assertEquals(1,group.getJSONArray("outbounds").length())
+    @Test fun removedRegionTargetsFollowTheMainProxyAndKeepManualMetadata() {
+        val legacy=data.copy(settings=mapOf("selectedNodeId" to "1","nodeRegion.1" to "us","smart.youtube.target" to "region:jp","smartRules.youtube" to "DOMAIN-SUFFIX,video.test"))
+        assertEquals(listOf(1L),ConfigBuilder.smartTargetNodeIds(legacy,"region:jp"))
+        val root=JSONObject(ConfigBuilder.build(legacy));val raw=root.getJSONObject("route").getJSONArray("rules")
+        assertEquals("proxy",(0 until raw.length()).map{raw.getJSONObject(it)}.single{it.has("domain_suffix")}.getString("outbound"))
+        assertEquals("us",legacy.setting("nodeRegion.1"))
     }
     @Test fun sameGroupFrontAndLandingDependenciesDoNotWrapThemselves() {
         val main=Node(1,1,"主节点","""{"type":"socks","server":"middle.test","server_port":1080}""")
@@ -74,8 +72,8 @@ class LinkRoutingTest {
         val enabled=data.copy(rules=listOf(RouteRule(1,"前置",domains="fast.com",outbound="direct",prioritize=true),RouteRule(2,"后置",domains="fast.com",outbound="node:1")),settings=mapOf("smart.speed.target" to "node:2"))
         val root=JSONObject(ConfigBuilder.build(withBuiltinSmartRules(enabled){File("src/main/assets/$it").readText()}))
         fun matching(array:org.json.JSONArray)=(0 until array.length()).map{array.getJSONObject(it)}.filter{it.optJSONArray("domain_suffix")?.optString(0)=="fast.com" && it.optString("action")=="route"}
-        assertEquals(listOf("direct","node-2","node-1"),matching(root.getJSONObject("route").getJSONArray("rules")).map{it.getString("outbound")})
-        assertEquals(listOf("dns-direct","dns-route-node-2","dns-route-node-1"),matching(root.getJSONObject("dns").getJSONArray("rules")).map{it.getString("server")})
+        assertEquals(listOf("direct","node-2","proxy","node-1"),matching(root.getJSONObject("route").getJSONArray("rules")).map{it.getString("outbound")})
+        assertEquals(listOf("dns-direct","dns-route-node-2","dns-route-proxy","dns-route-node-1"),matching(root.getJSONObject("dns").getJSONArray("rules")).map{it.getString("server")})
     }
 
     @Test fun factoryRulesAreClassifiedDisabledAndDoNotOverwriteExistingRules() {

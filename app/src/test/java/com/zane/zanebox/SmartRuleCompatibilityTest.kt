@@ -21,7 +21,7 @@ class SmartRuleCompatibilityTest {
     }
     @Test fun exactOldBundledRulesAreMigratedButCustomAdditionsStayUntouched() {
         val raw=read("anybox-rules/YouTube.list")
-        val old=base.copy(settings=base.settings+mapOf("smart.youtube.target" to "proxy","smartRules.youtube" to raw))
+        val old=base.copy(settings=base.settings+builtinSmartRuleFiles.keys.associate{"smartRules.$it" to ""}+mapOf("smart.youtube.target" to "proxy","smartRules.youtube" to raw))
         val migrated=withBuiltinSmartRules(old,::read)
         assertFalse(migrated.setting("smartRules.youtube").contains("USER-AGENT,"))
         assertTrue(migrated.setting("smartRules.youtube").contains("DOMAIN-SUFFIX,googlevideo.com"))
@@ -30,10 +30,10 @@ class SmartRuleCompatibilityTest {
         assertEquals(custom.settings,withBuiltinSmartRules(custom,::read).settings)
         assertTrue(ConfigBuilder.warnings(custom).any{it.contains("USER-AGENT")})
         assertTrue(ConfigBuilder.targetWarnings(custom).isEmpty())
-        assertTrue(ConfigBuilder.targetWarnings(custom.copy(settings=custom.settings+("smart.youtube.target" to "region:unknown"))).any{it.contains("没有可用节点")})
+        assertTrue(ConfigBuilder.targetWarnings(custom.copy(settings=custom.settings+("smart.youtube.target" to "auto"))).any{it.contains("没有可用节点")})
     }
     @Test fun explicitEmptyAndRemoteRulesArePreserved() {
-        val empty=base.copy(settings=base.settings+mapOf("smart.youtube.target" to "proxy","smartRules.youtube" to ""))
+        val empty=base.copy(settings=base.settings+builtinSmartRuleFiles.keys.associate{"smartRules.$it" to ""}+mapOf("smart.youtube.target" to "proxy"))
         assertEquals("",withBuiltinSmartRules(empty,::read).setting("smartRules.youtube"))
         val remote=empty.copy(settings=empty.settings+mapOf("smartUrl.youtube" to "https://example.test/youtube.list","smartRules.youtube" to read("anybox-rules/YouTube.list")))
         assertEquals(remote.settings,withBuiltinSmartRules(remote,::read).settings)

@@ -1,0 +1,29 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- assertVisible: 自动选择范围
+- assertVisible: 全部启用订阅组 · 2 个可用节点
+- tapOn:
+    id: smart_target_youtube
+- assertVisible: 代理
+- assertVisible: 自动选择
+- assertVisible: 直连
+- assertNotVisible: 关闭 · 使用普通主节点
+- assertNotVisible: 普通主节点
+- assertNotVisible: 香港
+- assertNotVisible: 美国
+- assertNotVisible: 韩国
+- assertNotVisible: 日本
+- assertNotVisible: 新加坡
+- assertNotVisible: 台湾
+- takeScreenshot: reports/ui-1.0.2/current/smart-targets-unified
+- tapOn: 代理
+- tapOn:
+    id: main_back
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000

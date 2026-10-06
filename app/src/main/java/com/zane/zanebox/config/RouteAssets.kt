@@ -46,6 +46,9 @@ internal fun geoAssetCode(kind:String,bytes:ByteArray):String {
 
 internal val builtinSmartRuleFiles=mapOf("speed" to listOf("Speed"),"youtube" to listOf("YouTube"),"telegram" to listOf("Telegram"),"netflix" to listOf("Netflix"),"disney" to listOf("Disney"),"tiktok" to listOf("TikTok"),"x" to listOf("Twitter"),"meta" to listOf("Instagram","Facebook"),"spotify" to listOf("Spotify"),"google" to listOf("Google"),"ai" to listOf("OpenAI"))
 
+internal fun normalizeSmartTarget(value:String)=if(value.isBlank() || value=="off" || value.startsWith("region:"))"proxy" else value
+internal fun smartTarget(data:AppData,key:String)=normalizeSmartTarget(data.setting("smart.$key.target","proxy"))
+
 internal val unsupportedSmartRuleTypes=setOf("USER-AGENT","IP-ASN","OR")
 internal fun builtinSmartRuleText(key:String,read:(String)->String):String = builtinSmartRuleFiles[key].orEmpty().joinToString("\n") {read("anybox-rules/$it.list")}
 internal fun supportedBuiltinSmartRules(raw:String):String = raw.lines().filter {it.substringBefore(',').trim().uppercase() !in unsupportedSmartRuleTypes}.joinToString("\n")
@@ -56,7 +59,7 @@ internal fun isBuiltinSmartRuleText(value:String,bundled:String):Boolean {
 
 /** Missing defaults use bundled rules; an explicitly saved empty rule list stays empty. */
 internal fun withBuiltinSmartRules(data:AppData,read:(String)->String):AppData {
-    val defaults=builtinSmartRuleFiles.keys.filter { key->data.setting("smart.$key.target",if(key=="speed")"proxy" else "off")!="off" && data.setting("smartUrl.$key").isBlank() }
+    val defaults=builtinSmartRuleFiles.keys.filter { key->data.setting("smartUrl.$key").isBlank() }
         .mapNotNull {key->
             val stored=data.settings["smartRules.$key"]
             if(stored!=null && stored.isBlank())return@mapNotNull null

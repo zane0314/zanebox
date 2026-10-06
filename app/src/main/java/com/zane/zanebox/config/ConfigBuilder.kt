@@ -22,25 +22,22 @@ object ConfigBuilder {
     }
     private fun smartServices(data:AppData)=smartPolicyKeys(data)
     fun ruleCompatibilityWarnings(service:String,rules:String):List<String> = rules.lines().map {it.substringBefore(',').trim().uppercase()}.filter {it in unsupportedSmartRuleTypes}.distinct().map {"$service：此规则格式暂不支持 $it；该类条目保留但不参与匹配，其余有效规则仍生效"}
-    fun warnings(data:AppData):List<String> = targetWarnings(data)+smartServices(data).filter {data.setting("smart.$it.target","off")!="off"}.flatMap {ruleCompatibilityWarnings(it,data.setting("smartRules.$it"))}
-    fun targetWarnings(data: AppData): List<String> = smartServices(data).filter { data.setting("smart.$it.target", "off")!="off" }.flatMap { service ->
-        val target=data.setting("smart.$service.target")
-        val missing=if((target=="auto" || target.startsWith("region:")) && smartTargetNodeIds(data,target).isEmpty())listOf("$service: 分流目标没有可用节点，当前使用普通路由") else emptyList()
+    fun warnings(data:AppData):List<String> = targetWarnings(data)+smartServices(data).flatMap {ruleCompatibilityWarnings(it,data.setting("smartRules.$it"))}
+    fun targetWarnings(data: AppData): List<String> = smartServices(data).flatMap { service ->
+        val target=smartTarget(data,service)
+        val missing=if(target=="auto" && smartTargetNodeIds(data,target).isEmpty())listOf("$service: 分流目标没有可用节点，当前使用代理") else emptyList()
         missing
     }
 
     fun smartTargetNodeIds(data:AppData,target:String):List<Long> {
         val active=data.nodes.filter { n->data.groups.any { it.id==n.groupId && it.enabled } && JSONObject(n.outbound).optString("type")!="custom" }
-        val merge=data.merges.firstOrNull { it.id==data.setting("smartSourceMergeId","0").toLongOrNull() }
-        val group=data.setting("smartSourceGroupId","0").toLongOrNull() ?:0
-        val source=if(merge!=null)active.filter { it.id in merge.nodeIds || it.groupId in merge.groupIds } else if(group>0)active.filter { it.groupId==group } else active
+        val choice=normalizeSmartTarget(target)
         return when {
-            target=="auto"->source
-            target.startsWith("region:")->source.filter { nodeRegion(data,it.id,it.name)==target.substringAfter(':') }
-            target.startsWith("node:")->active.filter { it.id==target.substringAfter(':').toLongOrNull() }
-            target.startsWith("group:")->active.filter { it.groupId==target.substringAfter(':').toLongOrNull() }
-            target.startsWith("merge:")->data.merges.firstOrNull { it.id==target.substringAfter(':').toLongOrNull() }?.let { m->active.filter { it.id in m.nodeIds || it.groupId in m.groupIds } }.orEmpty()
-            target in listOf("off","proxy")->active.filter { it.id==data.selectedNodeId }.ifEmpty { active.take(1) }
+            choice=="auto"->active.filter {n->data.groups.any{it.id==n.groupId && it.subscriptionUrl.isNotBlank()}}
+            choice.startsWith("node:")->active.filter { it.id==choice.substringAfter(':').toLongOrNull() }
+            choice.startsWith("group:")->active.filter { it.groupId==choice.substringAfter(':').toLongOrNull() }
+            choice.startsWith("merge:")->data.merges.firstOrNull { it.id==choice.substringAfter(':').toLongOrNull() }?.let { m->active.filter { it.id in m.nodeIds || it.groupId in m.groupIds } }.orEmpty()
+            choice=="proxy"->active.filter { it.id==data.selectedNodeId }.ifEmpty { active.take(1) }
             else->emptyList()
         }.map { it.id }
     }
@@ -219,55 +216,53 @@ object ConfigBuilder {
         }
         if(!testing && mode=="rule") {
             smartServices(data).forEach serviceLoop@ { service ->
-                val choice=data.setting("smart.$service.target", if(service=="speed")"proxy" else "off")
-                if(choice!="off") {
-                    val dest=when {
-                        choice=="auto" || choice.startsWith("region:") -> {
-                            val ids=smartTargetNodeIds(data,choice).toSet()
-                            val candidates=candidateNodes.filter { it.id in ids }
-                            if(candidates.isEmpty()) return@serviceLoop
-                            val tag="smart-$service"
-                            out.put(urlTestOptions(JSONObject().put("type", "urltest").put("tag", tag).put("outbounds", JSONArray(candidates.map { "node-${it.id}" })),data)); tags.add(tag); tag
-                        }
-                        else -> { if(choice.startsWith("node:") && candidateNodes.none { it.id.toString()==choice.substringAfter(':') }) return@serviceLoop;runCatching { target(choice) }.getOrElse { return@serviceLoop } }
+                val choice=smartTarget(data,service)
+                val dest=when {
+                    choice=="auto" -> {
+                        val ids=smartTargetNodeIds(data,choice).toSet()
+                        val candidates=candidateNodes.filter { it.id in ids }
+                        if(candidates.isEmpty()) return@serviceLoop
+                        val tag="smart-$service"
+                        out.put(urlTestOptions(JSONObject().put("type", "urltest").put("tag", tag).put("outbounds", JSONArray(candidates.map { "node-${it.id}" })),data)); tags.add(tag); tag
                     }
-                    val packages=data.setting("smartCustom.$service.packages").lines().map { it.trim() }.filter { it.isNotBlank() }.distinct()
-                    if(packages.isNotEmpty()) {
-                        require(packages.all { it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")) }) { "自定义应用包名无效" }
-                        val appRule=JSONObject().put("package_name",JSONArray(packages))
-                        addSmartRule(appRule,dest)
+                    else -> { if(choice.startsWith("node:") && candidateNodes.none { it.id.toString()==choice.substringAfter(':') }) return@serviceLoop;runCatching { target(choice) }.getOrElse { return@serviceLoop } }
+                }
+                val packages=data.setting("smartCustom.$service.packages").lines().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                if(packages.isNotEmpty()) {
+                    require(packages.all { it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")) }) { "自定义应用包名无效" }
+                    val appRule=JSONObject().put("package_name",JSONArray(packages))
+                    addSmartRule(appRule,dest)
+                }
+                val smartUrl=data.setting("smartUrl.$service")
+                val format=ruleSetFormat(smartUrl)
+                if(format.isNotBlank()) {
+                    val tag="smart-set-$service"
+                    val body=data.setting("smartRules.$service")
+                    val set=if(format=="source" && body.isNotBlank())JSONObject().put("type","inline").put("tag",tag).put("rules",JSONObject(body).getJSONArray("rules"))
+                    else {
+                        // A fragment changes the native cache URL hash without altering the server request.
+                        val url=smartUrl.substringBefore('#')+"#zanebox-update="+data.setting("smartUpdated.$service","0")
+                        val interval=when(data.setting("rulesUpdateInterval","24h")){"off"->"876000h";"3d"->"72h";"7d"->"168h";else->data.setting("rulesUpdateInterval","24h")}
+                        JSONObject().put("type","remote").put("tag",tag).put("format",format).put("url",url).put("download_detour","direct").put("update_interval",interval)
                     }
-                    val smartUrl=data.setting("smartUrl.$service")
-                    val format=ruleSetFormat(smartUrl)
-                    if(format.isNotBlank()) {
-                        val tag="smart-set-$service"
-                        val body=data.setting("smartRules.$service")
-                        val set=if(format=="source" && body.isNotBlank())JSONObject().put("type","inline").put("tag",tag).put("rules",JSONObject(body).getJSONArray("rules"))
-                        else {
-                            // A fragment changes the native cache URL hash without altering the server request.
-                            val url=smartUrl.substringBefore('#')+"#zanebox-update="+data.setting("smartUpdated.$service","0")
-                            val interval=when(data.setting("rulesUpdateInterval","24h")){"off"->"876000h";"3d"->"72h";"7d"->"168h";else->data.setting("rulesUpdateInterval","24h")}
-                            JSONObject().put("type","remote").put("tag",tag).put("format",format).put("url",url).put("download_detour","direct").put("update_interval",interval)
-                        }
-                        sets[tag]=set
-                        val setRule=JSONObject().put("rule_set",JSONArray().put(tag))
-                        addSmartRule(setRule,dest)
-                        return@serviceLoop
+                    sets[tag]=set
+                    val setRule=JSONObject().put("rule_set",JSONArray().put(tag))
+                    addSmartRule(setRule,dest)
+                    return@serviceLoop
+                }
+                data.setting("smartRules.$service", "").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith('#') && !it.startsWith("//") }.forEach { line ->
+                    if(line.substringBefore(',').trim().uppercase() in unsupportedSmartRuleTypes) return@forEach
+                    val fields=line.split(',').map { it.trim() }; val rule=JSONObject()
+                    val value=fields.getOrElse(1) { fields[0] }
+                    when(fields[0].uppercase()) {
+                        "DOMAIN" -> rule.put("domain", JSONArray().put(value))
+                        "DOMAIN-SUFFIX" -> rule.put("domain_suffix", JSONArray().put(value))
+                        "DOMAIN-KEYWORD" -> rule.put("domain_keyword", JSONArray().put(value))
+                        "IP-CIDR", "IP-CIDR6" -> rule.put("ip_cidr", JSONArray().put(value))
+                        "PROCESS-NAME" -> rule.put("process_name", JSONArray().put(value))
+                        else -> { require(fields.size==1) { "智能规则格式不支持: ${fields[0]}" }; rule.put("domain_suffix", JSONArray().put(value)) }
                     }
-                    data.setting("smartRules.$service", "").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith('#') && !it.startsWith("//") }.forEach { line ->
-                        if(line.substringBefore(',').trim().uppercase() in unsupportedSmartRuleTypes) return@forEach
-                        val fields=line.split(',').map { it.trim() }; val rule=JSONObject()
-                        val value=fields.getOrElse(1) { fields[0] }
-                        when(fields[0].uppercase()) {
-                            "DOMAIN" -> rule.put("domain", JSONArray().put(value))
-                            "DOMAIN-SUFFIX" -> rule.put("domain_suffix", JSONArray().put(value))
-                            "DOMAIN-KEYWORD" -> rule.put("domain_keyword", JSONArray().put(value))
-                            "IP-CIDR", "IP-CIDR6" -> rule.put("ip_cidr", JSONArray().put(value))
-                            "PROCESS-NAME" -> rule.put("process_name", JSONArray().put(value))
-                            else -> { require(fields.size==1) { "智能规则格式不支持: ${fields[0]}" }; rule.put("domain_suffix", JSONArray().put(value)) }
-                        }
-                        addSmartRule(rule,dest)
-                    }
+                    addSmartRule(rule,dest)
                 }
             }
         }

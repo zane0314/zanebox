@@ -47,17 +47,16 @@ class UiAlignmentTest {
         assertEquals("未测试",com.zane.zanebox.ui.nodeTestLabel(node));assertEquals("失败",com.zane.zanebox.ui.nodeTestLabel(node.copy(status=1,ping=0)))
         assertEquals("12 ms",com.zane.zanebox.ui.nodeTestLabel(node.copy(status=3,ping=12)))
     }
-    @Test fun diagnosticCandidatesUseTheSameSourceAndRegionAsTheNativeRoute() {
+    @Test fun diagnosticAutoCandidatesCoverEnabledSubscriptionsAndLegacyRegionsFallBack() {
         val nodes=listOf(Node(1,1,"日本 A","""{"type":"socks","server":"a.test","server_port":1080}"""),Node(2,2,"美国 B","""{"type":"socks","server":"b.test","server_port":1080}"""),Node(3,2,"日本 C","""{"type":"socks","server":"c.test","server_port":1080}"""),Node(4,3,"日本隐藏","""{"type":"socks","server":"d.test","server_port":1080}"""))
-        val data=AppData(nodes=nodes,groups=listOf(Group(1,"A"),Group(2,"B"),Group(3,"隐藏",enabled=false)),merges=listOf(MergeGroup(5,"汇总",nodeIds=listOf(2,3,4))),settings=mapOf("selectedNodeId" to "1","smartSourceMergeId" to "5","smart.ai.target" to "region:jp","smartRules.ai" to "DOMAIN-SUFFIX,example.test"))
-        assertEquals(listOf(3L),ConfigBuilder.smartTargetNodeIds(data,"region:jp"))
-        assertEquals(listOf(2L,3L),ConfigBuilder.smartTargetNodeIds(data,"auto"))
+        val data=AppData(nodes=nodes,groups=listOf(Group(1,"A","https://example.test/a"),Group(2,"B","https://example.test/b"),Group(3,"隐藏",enabled=false)),merges=listOf(MergeGroup(5,"汇总",nodeIds=listOf(2,3,4))),settings=mapOf("selectedNodeId" to "1","smartSourceMergeId" to "5","smart.ai.target" to "region:jp","smartRules.ai" to "DOMAIN-SUFFIX,example.test"))
+        assertEquals(listOf(1L),ConfigBuilder.smartTargetNodeIds(data,"region:jp"))
+        assertEquals(listOf(1L,2L,3L),ConfigBuilder.smartTargetNodeIds(data,"auto"))
         assertTrue(ConfigBuilder.smartTargetNodeIds(data,"direct").isEmpty())
         assertTrue(ConfigBuilder.smartTargetNodeIds(data,"node:4").isEmpty())
-        val out=JSONObject(ConfigBuilder.build(data)).getJSONArray("outbounds")
-        val native=(0 until out.length()).map { out.getJSONObject(it) }.first { it.optString("tag")=="smart-ai" }
-        assertEquals(listOf("node-3"),(0 until native.getJSONArray("outbounds").length()).map { native.getJSONArray("outbounds").getString(it) })
-        assertTrue(ConfigBuilder.warnings(data.copy(settings=data.settings+("smart.ai.target" to "region:sg"))).any { it.contains("没有可用节点") })
+        val route=JSONObject(ConfigBuilder.build(data)).getJSONObject("route").getJSONArray("rules")
+        assertEquals("proxy",(0 until route.length()).map{route.getJSONObject(it)}.first{it.has("domain_suffix")}.getString("outbound"))
+        assertFalse(ConfigBuilder.warnings(data.copy(settings=data.settings+("smart.ai.target" to "auto"))).any { it.contains("没有可用节点") })
     }
     @Test fun rulePortEditorIncludesStoredRanges() {
         val advanced=JSONObject("""{"port":[443],"port_range":["1000:1002"],"source_port_range":["2000:2002"]}""")
@@ -172,15 +171,16 @@ class UiAlignmentTest {
         val rule=(0 until route.getJSONArray("rules").length()).map{route.getJSONArray("rules").getJSONObject(it)}.first{it.has("port")}
         assertEquals(2,rule.getJSONArray("rule_set").length());assertEquals(443,rule.getJSONArray("port").getInt(0));assertEquals("1000:1002",rule.getJSONArray("port_range").getString(0))
     }
-    @Test fun customApplicationPoliciesReachNativeRouteAndRespectSourceGroup() {
+    @Test fun customApplicationPoliciesUseEveryEnabledSubscriptionRatherThanTheOldSourceGroup() {
         val data=AppData(nodes=listOf(Node(1,1,"A","""{"type":"socks","server":"example.com","server_port":1080}"""),Node(2,2,"B","""{"type":"socks","server":"other.example","server_port":1080}""")),
-            groups=listOf(Group(1,"A"),Group(2,"B")),settings=mapOf("smartCustom.custom_3.name" to "工作应用","smartCustom.custom_3.packages" to "com.example.work","smart.custom_3.target" to "auto","smartSourceGroupId" to "2"))
+            groups=listOf(Group(1,"A","https://example.test/a"),Group(2,"B","https://example.test/b")),settings=mapOf("smartCustom.custom_3.name" to "工作应用","smartCustom.custom_3.packages" to "com.example.work","smart.custom_3.target" to "auto","smartSourceGroupId" to "2"))
         val root=JSONObject(ConfigBuilder.build(data));val rules=root.getJSONObject("route").getJSONArray("rules")
         val app=(0 until rules.length()).map{rules.getJSONObject(it)}.firstOrNull{it.optJSONArray("package_name")?.optString(0)=="com.example.work"}
         assertNotNull("自定义应用必须进入运行配置",app)
         assertEquals("smart-custom_3",app!!.getString("outbound"))
         val out=root.getJSONArray("outbounds");val group=(0 until out.length()).map{out.getJSONObject(it)}.first{it.optString("tag")=="smart-custom_3"}
-        assertEquals("node-2",group.getJSONArray("outbounds").getString(0))
-        assertEquals(1,group.getJSONArray("outbounds").length())
+        assertEquals("node-1",group.getJSONArray("outbounds").getString(0))
+        assertEquals("node-2",group.getJSONArray("outbounds").getString(1))
+        assertEquals(2,group.getJSONArray("outbounds").length())
     }
 }

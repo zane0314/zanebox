@@ -68,6 +68,8 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     var info by remember{mutableStateOf<Node?>(null)}
     var initialProtocol by remember { mutableStateOf("vless") }
     var groupProxy by remember { mutableStateOf("") }
+    var proxyGroupId by remember { mutableStateOf<Long?>(null) }
+    var menuGroupId by remember { mutableStateOf<Long?>(null) }
     var nodeEdit by remember { mutableStateOf(false) };var editNode by remember { mutableStateOf<Node?>(null) }
     var groupEdit by remember { mutableStateOf(false) };var editGroup by remember { mutableStateOf<Group?>(null) }
     var ruleEdit by remember { mutableStateOf(false) };var editRule by remember { mutableStateOf<RouteRule?>(null) }
@@ -125,7 +127,8 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     val currentGroup=data.groups.firstOrNull{it.id==data.browseGroupId}
     val enabledIds=remember(data.groups){data.groups.filter{it.enabled}.map{it.id}.toSet()}
     val activeNodes=remember(data.nodes,enabledIds){data.nodes.filter{it.groupId in enabledIds}}
-    val groupActions=if(currentGroup!=null)listOf("前置代理" to {groupProxy="front"},"后置代理（落地）" to {groupProxy="landing"}) else emptyList()
+    fun proxyActions(group:Group):List<Pair<String,()->Unit>> =listOf("前置代理" to {proxyGroupId=group.id;groupProxy="front"},"后置代理（落地）" to {proxyGroupId=group.id;groupProxy="landing"})
+    val groupActions=currentGroup?.let(::proxyActions).orEmpty()
     val moreActions:List<Pair<String,()->Unit>> =groupActions+listOf("更新当前订阅" to {if(currentGroup==null)vm.message.value="请先选择订阅分组" else vm.updateGroup(currentGroup)},
         "测试当前分组延迟" to {vm.service.testNodes(activeNodes.filter{currentGroup==null || it.groupId==currentGroup.id}.map{it.id})},
         "全部更新（全部订阅）" to vm::updateAllGroups,
@@ -155,7 +158,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=(if(floatingHomeBar)homeBarOverlap else 0.dp)+(if(page==0)8.dp else 16.dp)),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     when(page) {
                         0->{
-                            item { Row(Modifier.fillMaxWidth().padding(top=2.dp,bottom=36.dp),verticalAlignment=Alignment.Top) {
+                            item { Row(Modifier.fillMaxWidth().padding(top=2.dp,bottom=12.dp),verticalAlignment=Alignment.Top) {
                                 Column(Modifier.weight(1f)) {
                                     Text(uiText("节点"),fontSize=26.sp,fontWeight=FontWeight.Bold)
                                     val dotColor=if(runtime.state==2)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -173,12 +176,10 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                             } }
                             if(searching)item{OutlinedTextField(search,{search=it},label={Text(uiText("搜索节点"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_search"),trailingIcon={IconButton(onClick={search="";searching=false}){Icon(Icons.Outlined.Close,"关闭搜索")}})}
                             if(data.groups.isNotEmpty()) item { LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                item{FilterChip(data.browseGroupId==0L,{vm.setting("browseGroupId","0")},label={Text(uiText("全部"))},modifier=Modifier.testTag("group_all"))}
-                                items(data.groups.sortedBy{it.order},key={it.id}){g->Surface(color=if(data.browseGroupId==g.id)MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,shape=MaterialTheme.shapes.medium,
-                                    modifier=Modifier.alpha(if(g.enabled)1f else .45f).testTag("group_${g.id}").combinedClickable(onClick={vm.setting("browseGroupId",g.id.toString())},onLongClick={vm.edit{d->d.copy(groups=d.groups.map{if(it.id==g.id)it.copy(enabled=!it.enabled)else it})}})) {Text(g.name,Modifier.padding(horizontal=14.dp,vertical=10.dp),fontSize=12.sp)}}
+                                item{HomeGroupChip(uiText("全部"),data.browseGroupId==0L,{vm.setting("browseGroupId","0")},modifier=Modifier.testTag("group_all"))}
+                                items(data.groups.sortedBy{it.order},key={it.id}){g->HomeGroupChip(g.name,data.browseGroupId==g.id,{vm.setting("browseGroupId",g.id.toString())},onLongClick={menuGroupId=g.id},active=g.enabled,modifier=Modifier.testTag("group_${g.id}"))}
                             } }
                             item {HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))}
-                            if(currentGroup!=null)item {UiRow(currentGroup.name,currentGroup.userInfo.ifBlank{"${data.nodes.count{it.groupId==currentGroup.id}} 个节点"},modifier=Modifier.testTag("group_summary"),onClick={groupForm(currentGroup)},trailing={UiMenu(groupActions+listOf("编辑" to {groupForm(currentGroup)},"订阅选项" to {subscriptionOptions=currentGroup},"分享分组" to {share(shareText(data.nodes.filter{it.groupId==currentGroup.id}))},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除分组及其全部节点？" to {vm.deleteGroup(currentGroup.id)}else vm.deleteGroup(currentGroup.id)}),"group_menu_${currentGroup.id}")})}
                             val nodes=displayNodes
                             items(nodes,key={it.id},contentType={"node"}){n->
                                 val enabled=n.groupId in enabledIds
@@ -213,10 +214,20 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                 backup={scope->backupScope=scope;backupFile.launch("zanebox-backup.zip")},restore={restoreFile.launch(arrayOf("application/zip","application/octet-stream"))},
                 groupEdit=::groupForm,ruleEdit=::ruleForm,mergeEdit=::mergeForm,subscriptionEdit={subscriptionOptions=it},share=::share,copy=::copy,qr=::showQr,exportNodes=::exportNodes,toggle=::toggle)}
             if(selector)ChoiceDialog("跳转分组",data.browseGroupId.toString(),listOf("0" to "全部分组")+data.groups.map{it.id.toString() to it.name},{selector=false}){vm.setting("browseGroupId",it)}
-            if(groupProxy.isNotBlank() && currentGroup!=null)ChoiceDialog(if(groupProxy=="front")"前置代理" else "后置代理（落地）",
-        (if(groupProxy=="front")currentGroup.frontProxy else currentGroup.landingProxy).toString(),
-        listOf("0" to "无")+data.nodes.filter { JSONObject(it.outbound).optString("type") !in listOf("chain","custom") }.map{it.id.toString() to it.name},
-        {groupProxy=""}) { id->val front=groupProxy=="front";vm.saveGroup(if(front)currentGroup.copy(frontProxy=id.toLong())else currentGroup.copy(landingProxy=id.toLong()),false);groupProxy="" }
+            data.groups.firstOrNull{it.id==menuGroupId}?.let {group->
+                val actions=listOf((if(group.enabled)"停用分组" else "启用分组") to {vm.edit{d->d.copy(groups=d.groups.map{if(it.id==group.id)it.copy(enabled=!it.enabled)else it})}})+
+                    (if(group.subscriptionUrl.isNotBlank())listOf("更新订阅" to {vm.updateGroup(group)})else emptyList())+
+                    listOf("编辑" to {groupForm(group)},"订阅选项" to {subscriptionOptions=group})+proxyActions(group)+
+                    listOf("分享分组" to {share(shareText(data.nodes.filter{it.groupId==group.id}))},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除分组及其全部节点？" to {vm.deleteGroup(group.id)}else vm.deleteGroup(group.id)})
+                UiAlertDialog(onDismissRequest={menuGroupId=null},title={Text(group.name)},text={LazyColumn(Modifier.heightIn(max=440.dp).testTag("home_group_menu")) {
+                    items(actions,key={it.first}){(label,action)->TextButton(onClick={menuGroupId=null;action()},modifier=Modifier.fillMaxWidth()){Text(uiText(label))}}
+                }},confirmButton={TextButton(onClick={menuGroupId=null}){Text(uiText("取消"))}})
+            }
+            data.groups.firstOrNull{it.id==proxyGroupId}?.let {group->if(groupProxy.isNotBlank())ChoiceDialog(if(groupProxy=="front")"前置代理" else "后置代理（落地）",
+                (if(groupProxy=="front")group.frontProxy else group.landingProxy).toString(),
+                listOf("0" to "无")+data.nodes.filter { JSONObject(it.outbound).optString("type") !in listOf("chain","custom") }.map{it.id.toString() to it.name},
+                {groupProxy="";proxyGroupId=null}) { id->val front=groupProxy=="front";vm.edit{d->d.copy(groups=d.groups.map{if(it.id!=group.id)it else if(front)it.copy(frontProxy=id.toLong())else it.copy(landingProxy=id.toLong())})};groupProxy="";proxyGroupId=null }
+            }
     if(nodeEdit)NodeEditor(editNode,data,initialProtocol=initialProtocol,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@NodeEditor;editorSaving=true;
                 vm.saveNode(value,onSaved={editorSaving=false;nodeEdit=false},onError={editorSaving=false;editorSaveError=it})
             }

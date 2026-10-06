@@ -1,0 +1,21 @@
+appId: com.zane.zanebox
+---
+- assertVisible: .*代理已连接.*
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理未连接.*
+    timeout: 30000
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_target_youtube
+- tapOn: 自动选择
+- tapOn:
+    id: main_back
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000
+- takeScreenshot: reports/ui-1.0.2/current/automatic-policy-connected

@@ -1,0 +1,44 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fontScale
+- tapOn: 最大
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertNotVisible:
+    id: group_summary
+- takeScreenshot: reports/ui-1.0.2/current/home-groups-large
+- longPressOn:
+    id: group_701
+- assertVisible: 停用分组
+- assertVisible: 前置代理
+- takeScreenshot: reports/ui-1.0.2/current/home-group-menu-large
+- tapOn: 取消
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fontScale
+- tapOn: 标准
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

@@ -1,0 +1,36 @@
+appId: com.zane.zanebox
+---
+# SelectionCacheTest automatic-policy fixture provides subscription 701/702, local 703, disabled 704.
+- launchApp
+- assertVisible: 节点
+- assertNotVisible: 自动选择
+- assertNotVisible:
+    id: group_summary
+- tapOn:
+    id: group_all
+- longPressOn:
+    id: group_701
+- assertVisible: 前置代理
+- assertVisible: 后置代理（落地）
+- takeScreenshot: reports/ui-1.0.2/current/home-group-menu
+- tapOn: 编辑
+- assertVisible:
+    id: group_name
+- assertVisible: https://example.test/a
+- tapOn:
+    id: page_back
+- longPressOn:
+    id: group_701
+- tapOn: 前置代理
+- assertVisible: 无
+- tapOn: 取消
+- longPressOn:
+    id: group_702
+- tapOn: 后置代理（落地）
+- assertVisible: 无
+- tapOn: 取消
+- longPressOn:
+    id: group_704
+- assertVisible: 启用分组
+- tapOn: 取消
+- takeScreenshot: reports/ui-1.0.2/current/home-groups-compact

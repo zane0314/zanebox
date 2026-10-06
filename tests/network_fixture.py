@@ -2,7 +2,8 @@
 """Controlled HTTP and SOCKS5 exits; no internet, credentials or third-party nodes."""
 import argparse, json, socket, socketserver, threading, struct, time, select
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-p=argparse.ArgumentParser();p.add_argument('--log',required=True);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--log',required=True);p.add_argument('--delay-a-ms',type=int,default=0);p.add_argument('--delay-b-ms',type=int,default=0);a=p.parse_args()
+assert 0<=a.delay_a_ms<=10000 and 0<=a.delay_b_ms<=10000
 lock=threading.Lock()
 def record(kind, destination, agent=None):
     with lock, open(a.log,'a') as f:f.write(json.dumps({'time':time.time(),'exit':kind,'destination':destination,**({'userAgent':agent} if agent else {})})+'\n')
@@ -50,6 +51,7 @@ class SOCKS(socketserver.BaseRequestHandler):
             while b'\r\n\r\n' not in b:b+=self.read(1)
             marker=self.server.marker;record(marker,f'{host}:{port}')
             path=b.split(b' ',2)[1].decode()
+            if path.startswith('/test'):time.sleep((a.delay_a_ms if marker=='EXIT_A' else a.delay_b_ms)/1000)
             if '/hang' in path:time.sleep(12)
             if '/trace' in path:marker='ip='+('203.0.113.10' if marker=='EXIT_A' else '203.0.113.11')+'\n'
             self.request.sendall(response(marker,b'x'*262144 if '/speed' in path else None))

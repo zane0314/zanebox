@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zane.zanebox.data.AppData
+import com.zane.zanebox.config.smartTarget
 import com.zane.zanebox.R
 import com.zane.zanebox.subscription.SubscriptionClient
 import kotlinx.coroutines.launch
@@ -26,7 +27,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
 
 @Composable internal fun SmartPanel(data:AppData,vm:AppViewModel,form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit,
     onRules:()->Unit,onMerges:()->Unit,onOpen:(String)->Unit) {
-    var target by remember{mutableStateOf("")};var source by remember{mutableStateOf(false)}
+    var target by remember{mutableStateOf("")}
     var ruleSource by remember{mutableStateOf("")};var updateChoice by remember{mutableStateOf("")}
     var apps by remember{mutableStateOf("")};var expanded by remember{mutableStateOf("")}
     var confirmDelete by remember{mutableStateOf("")}
@@ -38,8 +39,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         UiSection("路由规则")
         UiCard{UiRow("路由规则","前置 ${data.rules.count{it.prioritize}} · 后置 ${data.rules.count{!it.prioritize}}",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}
         UiSection("分流节点组")
-        UiCard{UiRow(data.merges.firstOrNull{it.id.toString()==data.setting("smartSourceMergeId")}?.name ?: data.groups.firstOrNull{it.id.toString()==data.setting("smartSourceGroupId")}?.name ?: "默认汇总组",
-            "${data.nodes.count{n->data.groups.any{it.id==n.groupId && it.enabled}}} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,onClick={source=true},modifier=Modifier.testTag("smart_source"))}
+        UiCard{UiRow("自动选择范围","全部启用订阅组 · ${com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,"auto").size} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,chevron=false,modifier=Modifier.testTag("smart_source"))}
         UiCard{UiRow("引用规则更新", "自动：${data.setting("rulesUpdateInterval","24h")} · 连接后：${data.setting("rulesUpdateDelay","30s")}",Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
             Row{IconButton(onClick={vm.updateAllSmartRules()},modifier=Modifier.testTag("smart_update")){Icon(Icons.Outlined.Download,"立即更新规则")};IconButton(onClick={updateChoice="rulesUpdateDelay"}){Icon(Icons.Outlined.Settings,"规则更新设置")}}
         })}
@@ -47,8 +47,8 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         UiSection("应用策略")
         val policies=(builtIn+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom" to "自定义规则")else emptyList())+custom).toMap()
         policyOrder.mapNotNull{key->policies[key]?.let{key to it}}.forEach{(key,title)->
-            val value=data.setting("smart.$key.target",if(key=="speed")"proxy" else "off")
-            UiCard{UiRow(title,if(value=="off")"使用普通主节点" else targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
+            val value=smartTarget(data,key)
+            UiCard{UiRow(title,targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
                 onClick={expanded=if(expanded==key)"" else key},onLongClick={moving=key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
                 if(expanded==key) {
                     val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
@@ -71,9 +71,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         TextButton(onClick={vm.moveSmartPolicy(moving,-1);moving=""},enabled=index>0,modifier=Modifier.testTag("smart_move_up")){Text(uiText("上移"))}
         TextButton(onClick={vm.moveSmartPolicy(moving,1);moving=""},enabled=index>=0 && index<policyOrder.lastIndex,modifier=Modifier.testTag("smart_move_down")){Text(uiText("下移"))}
     }},confirmButton={TextButton(onClick={moving=""}){Text(uiText("取消"))}})
-    if(target.isNotBlank())TargetPicker("分流目标",data.setting("smart.$target.target",if(target=="speed")"proxy" else "off"),data,{target=""},{vm.selectSmartTarget(target,it)},smart=true)
-    if(source)ChoiceDialog("分流节点组",if(data.setting("smartSourceMergeId","0")!="0")"merge:${data.setting("smartSourceMergeId")}" else "group:${data.setting("smartSourceGroupId","0")}",
-        listOf("group:0" to "全部启用节点")+data.merges.map{"merge:${it.id}" to it.name}+data.groups.filter{it.enabled}.map{"group:${it.id}" to it.name},{source=false}){value->vm.edit{d->d.copy(settings=d.settings+mapOf("smartSourceMergeId" to if(value.startsWith("merge:"))value.substringAfter(':') else "0","smartSourceGroupId" to if(value.startsWith("group:"))value.substringAfter(':') else "0"))}}
+    if(target.isNotBlank())TargetPicker("分流目标",smartTarget(data,target),data,{target=""},{vm.selectSmartTarget(target,it)},smart=true)
     if(ruleSource.isNotBlank())RuleSourcePage(ruleSource,data,vm){ruleSource=""}
     if(updateChoice.isNotBlank())ChoiceDialog(if(updateChoice=="rulesUpdateInterval")"自动更新间隔" else "连接后检查",data.setting(updateChoice,if(updateChoice=="rulesUpdateInterval")"24h" else "30s"),
         if(updateChoice=="rulesUpdateInterval")listOf("off" to "关闭","6h" to "6 小时","12h" to "12 小时","24h" to "24 小时","3d" to "3 天","7d" to "7 天")else listOf("0s" to "立即","15s" to "15 秒","30s" to "30 秒","1m" to "1 分钟","5m" to "5 分钟"),{updateChoice=""}){vm.setting(updateChoice,it)}

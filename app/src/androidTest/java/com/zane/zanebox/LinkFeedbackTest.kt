@@ -174,8 +174,8 @@ class LinkFeedbackTest {
     @Test fun chainGroupProxyAndSpeedPolicyEntriesAreAccessible() {
         seed();compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("创建链式代理").performClick()
         compose.onNodeWithText("链式节点 · 从出口到前置选择").assertIsDisplayed();compose.onNodeWithTag("page_back").performClick()
-        compose.onNodeWithTag("group_menu_801").performClick();compose.onNodeWithText("前置代理").performClick();compose.onNodeWithText("取消").performClick()
-        compose.onNodeWithTag("group_menu_801").performClick();compose.onNodeWithText("后置代理（落地）").performClick();compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithTag("group_801").performTouchInput{longClick()};compose.onNodeWithText("前置代理").performClick();compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithTag("group_801").performTouchInput{longClick()};compose.onNodeWithText("后置代理（落地）").performClick();compose.onNodeWithText("取消").performClick()
         compose.onNodeWithTag("tab_1").performClick();compose.onNodeWithTag("smart_speed").assertIsDisplayed()
         compose.onNodeWithTag("smart_target_speed").performClick();compose.onNodeWithText("直连").assertIsDisplayed();compose.onNodeWithText("取消").performClick()
 

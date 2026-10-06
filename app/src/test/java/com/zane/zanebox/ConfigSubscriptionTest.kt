@@ -49,7 +49,7 @@ class ConfigSubscriptionTest {
         val hop=(0 until outs.length()).map { outs.getJSONObject(it) }.first { it.getString("tag")=="node-1-hop" }
         assertEquals("node-2",hop.getString("detour"))
         val rules=root.getJSONObject("route").getJSONArray("rules")
-        assertEquals(443,rules.getJSONObject(2).getJSONArray("port").getInt(0));assertEquals("smart-ai",rules.getJSONObject(3).getString("outbound"))
+        assertEquals(443,rules.getJSONObject(2).getJSONArray("port").getInt(0));assertEquals("proxy",rules.getJSONObject(3).getString("outbound"))
         assertEquals("last.example",rules.getJSONObject(4).getJSONArray("domain_suffix").getString(0))
         try { ConfigBuilder.build(data.copy(groups=listOf(Group(1,"环",frontProxy=2),Group(2,"环",frontProxy=1))));fail("cycle must fail") } catch (_: IllegalArgumentException) {}
     }

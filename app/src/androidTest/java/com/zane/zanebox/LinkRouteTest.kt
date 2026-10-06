@@ -13,7 +13,7 @@ class LinkRouteTest {
     private val context get()=ins.targetContext
     private fun shell(command:String)=ins.uiAutomation.executeShellCommand(command).use{FileInputStream(it.fileDescriptor).bufferedReader().readText()}
     private fun waitFor(label:String,check:()->Boolean) { val until=SystemClock.elapsedRealtime()+30000;while(!check()){assertTrue(label,SystemClock.elapsedRealtime()<until);Thread.sleep(100)} }
-    @Test fun regionsPackagesDirectAndThreeRealProxyHopsChooseTheExpectedExit() {
+    @Test fun legacyTargetsPackagesDirectAndThreeRealProxyHopsChooseTheExpectedExit() {
         val store=ZaneStore(context)
         fun node(id:Long,name:String,port:Int)=Node(id,1,name,"""{"type":"socks","server":"10.0.2.2","server_port":$port}""")
         val base=AppData(nodes=listOf(node(1,"香港 A",19081),node(2,"日本 B",19082),node(3,"前置",19085),node(4,"中间",19086)),groups=listOf(Group(1,"链路")),settings=mapOf("selectedNodeId" to "1","appLanguage" to "zh-CN","serviceMode" to "vpn","dnsRemote" to "local","sniff" to "false","testUrl" to "http://10.0.2.2:19080/test","statsEnabled" to "false"))
@@ -25,7 +25,7 @@ class LinkRouteTest {
         }
         try {
             client.start();waitFor("start"){client.snapshot.value.state==2};Thread.sleep(5000);probe("EXIT_A")
-            apply(base.copy(settings=base.settings+mapOf("smart.youtube.target" to "region:jp","smartRules.youtube" to "IP-CIDR,203.0.113.9/32")));probe("EXIT_B")
+            apply(base.copy(settings=base.settings+mapOf("smart.youtube.target" to "region:jp","smartRules.youtube" to "IP-CIDR,203.0.113.9/32")));probe("EXIT_A")
             apply(base.copy(settings=base.settings+mapOf("smart.youtube.target" to "node:2","smartCustom.youtube.packages" to "com.zane.probe","smartRules.youtube" to "")));probe("EXIT_B")
             apply(base.copy(settings=base.settings+mapOf("smart.youtube.target" to "direct","smartCustom.youtube.packages" to "com.zane.probe","smartRules.youtube" to "")));probe("DIRECT","http://10.0.2.2:19080/probe")
             val dnsPolicy=base.copy(settings=base.settings+mapOf("dnsDirect" to "tcp://10.0.2.2:19087","dnsRemote" to "tcp://10.0.2.2:19087","smart.speed.target" to "node:2","smart.netflix.target" to "direct"))
@@ -36,7 +36,7 @@ class LinkRouteTest {
             probe("EXIT_B","http://three.fast.com:19080/probe","10.0.2.3")
             apply(dnsPolicy.copy(settings=dnsPolicy.settings+("smartPolicyOrder" to "netflix\nspeed")))
             probe("DIRECT","http://four.fast.com:19080/probe","10.0.2.2")
-            apply(dnsPolicy.copy(rules=listOf(RouteRule(23,"后置",domains="fast.com",outbound="node:1")),settings=dnsPolicy.settings+mapOf("smart.speed.target" to "off","smart.netflix.target" to "off")))
+            apply(dnsPolicy.copy(rules=listOf(RouteRule(23,"后置",domains="fast.com",outbound="node:1")),settings=dnsPolicy.settings+mapOf("smartRules.speed" to "","smartRules.netflix" to "")))
             probe("EXIT_A","http://five.fast.com:19080/probe","10.0.2.4")
             val chain=Node(5,1,"链式测试","""{"type":"chain","node_ids":[2,3]}""")
             apply(base.copy(nodes=base.nodes+chain,settings=base.settings+("selectedNodeId" to "5")));probe("EXIT_B")

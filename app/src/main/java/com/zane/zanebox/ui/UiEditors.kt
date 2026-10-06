@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zane.zanebox.data.*
+import com.zane.zanebox.config.normalizeSmartTarget
 import com.zane.zanebox.subscription.SubscriptionOptions
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,21 +37,20 @@ import org.json.JSONObject
 @Composable internal fun TargetPicker(title:String,value:String,data:AppData,onDismiss:()->Unit,onChoose:(String)->Unit,smart:Boolean=false,none:Boolean=false) {
     val choices=buildList {
         if(none)add("0" to "无")
-        if(smart)addAll(listOf("off" to "关闭 · 使用普通主节点","proxy" to "普通主节点","direct" to "直连","auto" to "自动选择","region:hk" to "香港","region:us" to "美国","region:kr" to "韩国","region:jp" to "日本","region:sg" to "新加坡","region:tw" to "台湾"))
-        else if(!none)addAll(listOf("proxy" to "普通主节点","direct" to "直连","block" to "阻止"))
+        if(smart)addAll(listOf("proxy" to "代理","direct" to "直连","auto" to "自动选择"))
+        else if(!none)addAll(listOf("proxy" to "代理","direct" to "直连","block" to "阻止"))
         data.groups.filter{it.enabled}.forEach{add("group:${it.id}" to "分组 · ${it.name}")}
         data.merges.forEach{add("merge:${it.id}" to "汇总组 · ${it.name}")}
         data.nodes.filter{n->data.groups.any{it.id==n.groupId && it.enabled}}.forEach{add("node:${it.id}" to it.name)}
     }
-    ChoiceDialog(title,value,choices,onDismiss,onChoose)
+    ChoiceDialog(title,if(smart)normalizeSmartTarget(value)else value,choices,onDismiss,onChoose)
 }
-internal fun targetName(value:String,data:AppData):String = when(value) {
-    "off"->"关闭";"auto"->"自动";"proxy"->"普通主节点";"direct"->"直连";"block"->"阻止";"0"->"无"
+internal fun targetName(value:String,data:AppData):String = when(normalizeSmartTarget(value)) {
+    "auto"->"自动选择";"proxy"->"代理";"direct"->"直连";"block"->"阻止";"0"->"无"
     else->when(value.substringBefore(':')) {
         "node"->data.nodes.firstOrNull{it.id==value.substringAfter(':').toLongOrNull()}?.name ?: "节点已删除"
         "group"->data.groups.firstOrNull{it.id==value.substringAfter(':').toLongOrNull()}?.name ?: "分组已删除"
         "merge"->data.merges.firstOrNull{it.id==value.substringAfter(':').toLongOrNull()}?.name ?: "汇总组已删除"
-        "region"->mapOf("hk" to "香港","us" to "美国","kr" to "韩国","jp" to "日本","sg" to "新加坡","tw" to "台湾")[value.substringAfter(':')] ?: value
         else->value
     }
 }
