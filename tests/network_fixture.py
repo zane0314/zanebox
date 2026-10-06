@@ -1,16 +1,28 @@
 #!/usr/bin/env python3
 """Controlled HTTP and SOCKS5 exits; no internet, credentials or third-party nodes."""
 import argparse, json, socket, socketserver, threading, struct, time, select
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-p=argparse.ArgumentParser();p.add_argument('--log',required=True);p.add_argument('--delay-a-ms',type=int,default=0);p.add_argument('--delay-b-ms',type=int,default=0);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--log',required=True);p.add_argument('--delay-a-ms',type=int,default=0);p.add_argument('--delay-b-ms',type=int,default=0);p.add_argument('--geoip-fixture');a=p.parse_args()
 assert 0<=a.delay_a_ms<=10000 and 0<=a.delay_b_ms<=10000
 lock=threading.Lock()
 def record(kind, destination, agent=None):
     with lock, open(a.log,'a') as f:f.write(json.dumps({'time':time.time(),'exit':kind,'destination':destination,**({'userAgent':agent} if agent else {})})+'\n')
 def response(marker,payload=None):
     body=payload if payload is not None else marker.encode();return b'HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body
+def asset_response(path):
+    if not path.startswith('/asset/'):return None
+    if path=='/asset/fail.db':return b'HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    if path=='/asset/geoip.db':return response('',Path(a.geoip_fixture).read_bytes())
+    if path=='/asset/header.db':return response('',b'<html>invalid asset</html>')
+    code=b'other' if path=='/asset/missing.db' else b'cn'
+    header=b'\x00\x01'+bytes([len(code)])+code+b'\x00\x01'
+    rule=b'\x00\x7f'+b'\x00'*16 if path=='/asset/broken.db' else b'\x00\x10asset-route.test'
+    return response('',header+rule)
 class HTTP(BaseHTTPRequestHandler):
     def do_GET(self):
+        asset=asset_response(self.path)
+        if asset is not None:self.connection.sendall(asset);return
         record('DIRECT',self.path,self.headers.get('User-Agent'))
         if self.path.startswith('/options-subscription'):
             body=json.dumps({'outbounds':[{'type':'socks','tag':'fixture A','server':'10.0.2.2','server_port':19081},{'type':'socks','tag':'fixture A duplicate','server':'10.0.2.2','server_port':19081},{'type':'socks','tag':'fixture B','server':'10.0.2.2','server_port':19082}]}).encode()
@@ -51,6 +63,8 @@ class SOCKS(socketserver.BaseRequestHandler):
             while b'\r\n\r\n' not in b:b+=self.read(1)
             marker=self.server.marker;record(marker,f'{host}:{port}')
             path=b.split(b' ',2)[1].decode()
+            asset=asset_response(path)
+            if asset is not None:self.request.sendall(asset);return
             if path.startswith('/test'):time.sleep((a.delay_a_ms if marker=='EXIT_A' else a.delay_b_ms)/1000)
             if '/hang' in path:time.sleep(12)
             if '/trace' in path:marker='ip='+('203.0.113.10' if marker=='EXIT_A' else '203.0.113.11')+'\n'

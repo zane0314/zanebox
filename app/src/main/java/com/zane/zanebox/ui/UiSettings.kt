@@ -230,7 +230,7 @@ internal fun validatePreference(key:String,value:String) {
                 }
             }
         }
-        item{Text(uiText("更新前需断开代理；资源通过内核校验后替换，失败保留原文件。"),style=MaterialTheme.typography.bodySmall)}
+        item{Text(uiText("可保持连接下载；下载后自动断开、校验并应用资源，再重启代理。失败恢复原文件；未连接时更新不会启动代理。"),style=MaterialTheme.typography.bodySmall)}
     }
     if(providers)ChoiceDialog("路由资源更新源",data.setting("rulesProvider","0"),providerPreference.choices,{providers=false}){vm.setting("rulesProvider",it)}
 }

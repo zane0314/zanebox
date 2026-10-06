@@ -203,7 +203,10 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             if(data.bool("acquireWakeLock",false))wakeLock=(getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"zanebox:proxy").apply { setReferenceCounted(false);acquire() }
             lastProxySelection=engine.configuredProxyDefault
             sessionTx=0;sessionRx=0
-            val snapshot=RuntimeSnapshot(state=2,started=SystemClock.elapsedRealtime(),generation=current.get().generation)
+            val inbounds=JSONObject(config).optJSONArray("inbounds") ?: JSONArray()
+            val mixed=(0 until inbounds.length()).map{inbounds.getJSONObject(it)}.firstOrNull{it.optString("type") in listOf("mixed","http")}
+            val mixedHost=when(val listen=mixed?.optString("listen","127.0.0.1").orEmpty()){ "","0.0.0.0"->"127.0.0.1";"::"->"::1";else->listen }
+            val snapshot=RuntimeSnapshot(state=2,started=SystemClock.elapsedRealtime(),generation=current.get().generation,mixedHost=mixedHost,mixedPort=mixed?.optInt("listen_port") ?:0)
             publish(snapshot);notification("已连接")
             startSampler(snapshot.generation)
             startRuleUpdates()
@@ -215,7 +218,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         require(filename.matches(Regex("asset-[0-9a-f-]{36}-(geoip|geosite)\\.db"))) { "资源暂存名无效" }
         val stage=File(noBackupFilesDir,filename)
         try {
-            check(current.get().state !in 1..3) { "更新资源前请先断开连接" }
+            check(current.get().state !in listOf(1,3)) { "请等待连接操作完成" }
             withTimeout(30000) { while(!File(filesDir,"core-assets/yacd/index.html").isFile)delay(50) }
             require(stage.length() in 16..64*1024*1024L)
             val bytes=stage.readBytes();val kind=filename.substringAfterLast('-').removeSuffix(".db")
@@ -223,14 +226,21 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             val asset=AtomicFile(File(filesDir,"core-assets/$kind.db"))
             val previous=if(asset.baseFile.exists())asset.openRead().use { it.readBytes() } else null
             fun write(content:ByteArray) { val output=asset.startWrite();try { output.write(content);asset.finishWrite(output) } catch(e:Exception) { asset.failWrite(output);throw e } }
-            write(bytes)
+            val restart=current.get().state==2
             try {
+                if(restart)stopCore(terminal=false)
+                write(bytes)
                 val config=JSONObject().put("outbounds",JSONArray().put(JSONObject().put("type","direct").put("tag","direct")))
                     .put("route",JSONObject().put("final","direct").put("rule_set",JSONArray().put(JSONObject().put("type","local").put("tag","asset-check").put("format","binary").put("path","$kind:$code")))
                         .put("rules",JSONArray().put(JSONObject().put("rule_set",JSONArray().put("asset-check")).put("action","route").put("outbound","direct"))))
                 engine.validate(config.toString())
-            } catch(e:Exception) { if(previous!=null)write(previous)else asset.delete();throw e }
-            event("assetInstalled","$kind 已更新并通过内核校验")
+                if(restart)startCore()
+            } catch(e:Exception) {
+                try {if(previous!=null)write(previous)else asset.delete();if(restart)startCore()}
+                catch(recovery:Exception) {e.addSuppressed(recovery);throw IllegalStateException("资源更新失败，恢复原文件或代理失败：${safeError(recovery)}",e)}
+                throw IllegalStateException("资源更新失败，已恢复原文件"+(if(restart)"和代理连接" else "")+"：${safeError(e)}",e)
+            }
+            event("assetInstalled","$kind 已更新并通过内核校验"+(if(restart)"，代理已重启" else "，下次连接时生效"))
         } finally { stage.delete() }
     }
     private fun failed(error:Exception) {

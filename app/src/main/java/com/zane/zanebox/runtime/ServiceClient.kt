@@ -25,9 +25,9 @@ import com.zane.zanebox.data.AppData
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class RuntimeSnapshot(val state:Int=0,val started:Long=0,val generation:Long=0,val txRate:Long=0,val rxRate:Long=0,val txTotal:Long=0,val rxTotal:Long=0,val error:String="") {
-    fun json():String = JSONObject().put("state",state).put("started",started).put("generation",generation).put("txRate",txRate).put("rxRate",rxRate).put("txTotal",txTotal).put("rxTotal",rxTotal).put("error",error).toString()
-    companion object { fun parse(s:String):RuntimeSnapshot { val o=JSONObject(s);return RuntimeSnapshot(o.optInt("state"),o.optLong("started"),o.optLong("generation"),o.optLong("txRate"),o.optLong("rxRate"),o.optLong("txTotal"),o.optLong("rxTotal"),o.optString("error")) } }
+data class RuntimeSnapshot(val state:Int=0,val started:Long=0,val generation:Long=0,val txRate:Long=0,val rxRate:Long=0,val txTotal:Long=0,val rxTotal:Long=0,val error:String="",val mixedHost:String="127.0.0.1",val mixedPort:Int=0) {
+    fun json():String = JSONObject().put("state",state).put("started",started).put("generation",generation).put("txRate",txRate).put("rxRate",rxRate).put("txTotal",txTotal).put("rxTotal",rxTotal).put("error",error).put("mixedHost",mixedHost).put("mixedPort",mixedPort).toString()
+    companion object { fun parse(s:String):RuntimeSnapshot { val o=JSONObject(s);return RuntimeSnapshot(o.optInt("state"),o.optLong("started"),o.optLong("generation"),o.optLong("txRate"),o.optLong("rxRate"),o.optLong("txTotal"),o.optLong("rxTotal"),o.optString("error"),o.optString("mixedHost","127.0.0.1"),o.optInt("mixedPort")) } }
 }
 class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private val context=context.applicationContext

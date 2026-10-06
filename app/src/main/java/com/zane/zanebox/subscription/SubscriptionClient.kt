@@ -78,14 +78,14 @@ object SubscriptionClient {
             }
         })
     }
-    suspend fun fetch(url:String,userAgent:String="",settings:Map<String,String> = emptyMap()):FetchedSubscription {
-        val result=fetchLimited(url,userAgent,settings,8*1024*1024)
+    suspend fun fetch(url:String,userAgent:String="",settings:Map<String,String> = emptyMap(),proxy:java.net.Proxy?=null):FetchedSubscription {
+        val result=fetchLimited(url,userAgent,settings,8*1024*1024,proxy)
         return FetchedSubscription(result.body.toString(Charsets.UTF_8),result.userInfo)
     }
-    suspend fun fetchBytes(url:String,settings:Map<String,String> = emptyMap(),limit:Int=64*1024*1024):ByteArray=fetchLimited(url,"",settings,limit).body
-    private suspend fun fetchLimited(url:String,userAgent:String,settings:Map<String,String>,limit:Int):HttpResult=withContext(Dispatchers.IO) {
+    suspend fun fetchBytes(url:String,settings:Map<String,String> = emptyMap(),limit:Int=64*1024*1024,proxy:java.net.Proxy?=null):ByteArray=fetchLimited(url,"",settings,limit,proxy).body
+    private suspend fun fetchLimited(url:String,userAgent:String,settings:Map<String,String>,limit:Int,proxy:java.net.Proxy?):HttpResult=withContext(Dispatchers.IO) {
         require(limit in 1..64*1024*1024)
-        val requestClient=requestClient(settings)
+        val requestClient=requestClient(settings).let{if(proxy==null)it else it.newBuilder().proxy(proxy).build()}
         var target=url.trim().toHttpUrlOrNull()?.toUri() ?: URI(url)
         repeat(6) { redirect ->
             require(target.scheme=="https" || target.scheme=="http") { "订阅只支持 HTTP/HTTPS" }

@@ -4,7 +4,7 @@ import com.zane.zanebox.data.AppData
 import com.zane.zanebox.subscription.SubscriptionClient
 import org.json.JSONObject
 
-internal suspend fun routeAssetUrl(kind:String,data:AppData):String {
+internal suspend fun routeAssetUrl(kind:String,data:AppData,proxy:java.net.Proxy?=null):String {
     require(kind in listOf("geoip","geosite"))
     val provider=data.setting("rulesProvider","0")
     if(provider=="4")return data.setting(if(kind=="geoip")"rulesGeoipUrl" else "rulesGeositeUrl").also { require(it.isNotBlank()) { "请配置资源 URL" } }
@@ -15,7 +15,7 @@ internal suspend fun routeAssetUrl(kind:String,data:AppData):String {
         "3"->{require(kind=="geoip") { "此更新源只提供 GeoIP" };"L11R/antizapret-sing-box-geo"}
         else->error("未知资源更新源")
     }
-    val release=JSONObject(SubscriptionClient.fetch("https://api.github.com/repos/$repo/releases/latest",settings=data.settings).body)
+    val release=JSONObject(SubscriptionClient.fetch("https://api.github.com/repos/$repo/releases/latest",settings=data.settings,proxy=proxy).body)
     val assets=release.getJSONArray("assets")
     return (0 until assets.length()).map { assets.getJSONObject(it) }.firstOrNull { it.optString("name")=="$kind.db" }?.getString("browser_download_url") ?: error("更新源没有 $kind.db")
 }

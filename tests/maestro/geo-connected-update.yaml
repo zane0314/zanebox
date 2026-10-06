@@ -1,0 +1,33 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_menu
+- tapOn: 路由资产
+- assertNotVisible: 更新前需断开代理.*
+- tapOn:
+    id: asset_download_geoip
+- extendedWaitUntil:
+    visible: geoip 已更新并通过内核校验，代理已重启
+    timeout: 60000
+- takeScreenshot: reports/ui-1.0.2/current/geoip-connected-updated
+- tapOn:
+    id: asset_download_geosite
+- extendedWaitUntil:
+    visible: geosite 已更新并通过内核校验，代理已重启
+    timeout: 60000
+- takeScreenshot: reports/ui-1.0.2/current/geosite-connected-updated
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible: .*代理已连接.*
+- assertVisible: 已选：资源代理 A
+- takeScreenshot: reports/ui-1.0.2/current/connected-after-asset-updates

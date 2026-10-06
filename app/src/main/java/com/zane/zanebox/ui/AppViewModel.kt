@@ -156,14 +156,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         service.installAsset(name)
     }
     fun downloadAsset(kind:String)=task {
-        require(service.snapshot.value.state !in 1..3) { "更新资源前请先断开连接" }
-        val data=store.snapshot();val url=com.zane.zanebox.config.routeAssetUrl(kind,data)
-        stageAsset(kind,SubscriptionClient.fetchBytes(url,settings=data.settings));message.value="资源已下载，正在进行内核校验"
+        val data=store.snapshot()
+        val runtime=service.readSnapshot()
+        val proxy=if(runtime.state==2 && runtime.mixedPort>0)java.net.Proxy(java.net.Proxy.Type.HTTP,java.net.InetSocketAddress(runtime.mixedHost,runtime.mixedPort))else null
+        val url=com.zane.zanebox.config.routeAssetUrl(kind,data,proxy)
+        stageAsset(kind,SubscriptionClient.fetchBytes(url,settings=data.settings,proxy=proxy));message.value="资源已下载，正在校验并应用"
     }
     fun importAsset(kind:String,uri:Uri)=task {
-        require(service.snapshot.value.state !in 1..3) { "导入资源前请先断开连接" }
         val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
-        stageAsset(kind,bytes);message.value="资源已导入，正在进行内核校验"
+        stageAsset(kind,bytes);message.value="资源已导入，正在校验并应用"
     }
     fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { it.copy(settings=it.settings+("smartRules.$key" to content)+("smartUpdated.$key" to System.currentTimeMillis().toString())) };message.value="分流列表已更新，请点击应用修改" }
     fun moveSmartPolicy(key:String,step:Int)=edit { data->
