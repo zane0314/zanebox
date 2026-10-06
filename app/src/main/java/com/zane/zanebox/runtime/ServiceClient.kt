@@ -37,6 +37,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private fun submit(task:suspend ()->Unit) { commands.trySend(task) }
     private val state=MutableStateFlow(RuntimeSnapshot())
     val snapshot:StateFlow<RuntimeSnapshot> = state
+    val autoNodeId=MutableStateFlow(0L)
     private val event=MutableSharedFlow<String>(extraBufferCapacity=32)
     val events:SharedFlow<String> = event
     private val tests=MutableStateFlow<Map<Long,Int>>(emptyMap())
@@ -65,6 +66,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
             wasConnected=next.state==2
         } }
         override fun onEvent(kind:String,payload:String) { when(kind) {
+            "autoSelection" -> autoNodeId.value=payload.toLongOrNull() ?: 0L
             "test" -> { val o=JSONObject(payload);tests.value=tests.value+(o.getLong("id") to o.getInt("ping")) }
             "testing" -> { val a=JSONArray(payload);testingState.value=(0 until a.length()).map { a.getLong(it) }.toSet() }
             "assetInstalled" -> { assetState.value++;event.tryEmit(payload) }
@@ -109,6 +111,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun stop()=command("stop")
     fun reload() { submit { val changed=boundClass!=serviceClass();val running=state.value.state==2;ensureMode();if(changed && running)startRemote() else remote?.command("reload","") } }
     fun selectNode(id:Long)=command("select",id.toString())
+    fun selectAuto()=command("selectAuto")
     fun testNodes(ids:List<Long>) { tests.value=emptyMap();command("test",JSONArray(ids).toString()) }
     fun cancelTests()=command("cancelTests")
     fun installAsset(filename:String)=command("asset",filename)

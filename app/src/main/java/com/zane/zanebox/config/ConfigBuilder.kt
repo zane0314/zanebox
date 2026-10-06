@@ -49,7 +49,10 @@ object ConfigBuilder {
         val fakeDns=!testing && mode!="direct" && data.bool("fakeDns",data.bool("fakeDNS", true))
         val eligible=if(testing) data.nodes else data.nodes.filter { n -> data.groups.any { it.id==n.groupId && it.enabled } }
         require(eligible.isNotEmpty()) { "没有启用分组中的可用节点" }
-        val chosen=if(testing) eligible.find { it.id==testNodeId } ?: error("测速节点不存在") else eligible.find { it.id==data.selectedNodeId } ?: eligible.find { it.groupId==data.selectedGroupId } ?: eligible.first()
+        val auto=!testing && data.bool("homeAutoSelect")
+        val homeEligible=if(auto)eligible.filter { JSONObject(it.outbound).optString("type")!="custom" } else eligible
+        require(homeEligible.isNotEmpty()) { "没有可自动选择的节点" }
+        val chosen=if(testing) eligible.find { it.id==testNodeId } ?: error("测速节点不存在") else homeEligible.find { it.id==data.selectedNodeId } ?: homeEligible.find { it.groupId==data.selectedGroupId } ?: homeEligible.first()
         if(JSONObject(chosen.outbound).optString("type")=="custom") return customConfig(JSONObject(chosen.outbound).getJSONObject("config"),data,purpose,runtimeSecret)
         val required = mutableSetOf<Long>()
         fun include(id: Long) { if (!required.add(id)) return; val n=data.nodes.find { it.id==id } ?: error("代理链引用不存在的节点 $id"); val bean=JSONObject(n.outbound);if(bean.optString("type")=="chain") { val ids=bean.getJSONArray("node_ids");for(i in 0 until ids.length()) include(ids.getLong(i)) }; if(bean.has("detour")) { val tag=bean.getString("detour");data.nodes.find { it.groupId==n.groupId && JSONObject(it.metadata).optString("sourceTag")==tag }?.let { include(it.id) } }; val g=data.groups.find { it.id==n.groupId }; if(g!=null) { if(g.frontProxy>0) include(g.frontProxy); if(g.landingProxy>0) include(g.landingProxy) } }
@@ -135,7 +138,8 @@ object ConfigBuilder {
         require(candidateNodes.isNotEmpty()) { "没有可用代理候选" }
         val selected = "node-${if (testing) testNodeId else chosen.id}"
         val defaultNode = if (selected in tags) selected else "node-${candidateNodes.first().id}"
-        out.put(JSONObject().put("type", "selector").put("tag", "proxy").put("outbounds", JSONArray(candidateNodes.filter { selectorGroup==null || it.groupId==selectorGroup.id }.map { "node-${it.id}" })).put("default", defaultNode))
+        if(auto)out.put(JSONObject().put("type","urltest").put("tag","home-auto").put("outbounds",JSONArray(candidateNodes.map { "node-${it.id}" })).put("url",data.setting("testUrl","https://www.gstatic.com/generate_204")).put("interval","10m").put("idle_timeout","10m").put("tolerance",30))
+        out.put(JSONObject().put("type", "selector").put("tag", "proxy").put("outbounds", JSONArray((if(auto)listOf("home-auto")else emptyList())+candidateNodes.filter { auto || selectorGroup==null || it.groupId==selectorGroup.id }.map { "node-${it.id}" })).put("default", if(auto)"home-auto" else defaultNode))
         tags.add("proxy")
         val rules = JSONArray()
         if (!testing) {
@@ -329,12 +333,12 @@ object ConfigBuilder {
                     val appMode=data.setting("perAppMode","exclude");require(appMode in listOf("include","exclude")) { "应用分流模式无效" }
                     tun.put(if(appMode=="include") "include_package" else "exclude_package",JSONArray(packages))
                 }
-                if(data.bool("bypassLan",false)) tun.put("route_exclude_address",JSONArray(listOf("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","fc00::/7","fe80::/10")))
+                if(data.bool("bypassLan",false)) tun.put("route_exclude_address",JSONArray(com.zane.zanebox.core.RouteMath.subtract(listOf("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","fc00::/7","fe80::/10"),addresses+(if(fakeDns && data.bool("ipv6"))listOf("fc00::/18")else emptyList()))))
                 inbound.put(tun)
             }
             if(serviceMode=="proxy" || !data.bool("disableMixedInbound",false)) inbound.put(JSONObject().put("type", "mixed").put("tag", "mixed-in").put("listen", if (data.bool("allowLan", false)) "0.0.0.0" else "127.0.0.1").put("listen_port", port(data.setting("mixedPort", "2080"))))
             if (data.bool("shareEnabled", false)) inbound.put(JSONObject().put("type", "mixed").put("tag", "share-in").put("listen", "0.0.0.0").put("listen_port", port(data.setting("sharePort", "2081"))))
-            if (data.bool("clashApi", false) || data.bool("statsEnabled", true)) {
+            if (data.bool("clashApi", false) || data.bool("statsEnabled", true) || auto) {
                 val api = JSONObject().put("external_controller", "127.0.0.1:${port(data.setting("apiPort", "9090"))}")
                 if (purpose == Purpose.MAIN && runtimeSecret.isNotBlank()) api.put("secret", runtimeSecret)
                 root.put("experimental", JSONObject().put("clash_api", api))

@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class,androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.zane.zanebox.ui
 
 import android.content.Intent
@@ -55,19 +55,44 @@ import org.json.JSONObject
     groupEdit:(Group?)->Unit,ruleEdit:(RouteRule?)->Unit,mergeEdit:(MergeGroup?)->Unit,subscriptionEdit:(Group)->Unit,share:(String)->Unit,copy:(String)->Unit,qr:(String)->Unit,exportNodes:(Long?)->Unit,toggle:()->Unit) {
     val context=LocalContext.current
     var confirmation by remember{mutableStateOf<Pair<String,()->Unit>?>(null)}
+    var expandedGroups by remember { mutableStateOf(emptySet<Long>()) }
+    var selectingGroup by remember { mutableStateOf<Long?>(null) }
+    var selectedNodes by remember { mutableStateOf(emptySet<Long>()) }
+    LaunchedEffect(data.nodes) { selectedNodes=selectedNodes.intersect(data.nodes.map{it.id}.toSet()) }
+    fun deleteNodes(ids:Set<Long>) {
+        if(ids.isEmpty())return
+        val chains=com.zane.zanebox.subscription.nodeRemovalIds(data.nodes,ids).size-ids.size
+        confirmation=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to {vm.deleteNodes(ids);selectedNodes=emptySet();selectingGroup=null}
+    }
     when(page) {
         "general"->PreferencesPage(data,vm,onDismiss,open,form)
         "apps"->AppsEditor(data.setting("perAppPackages").lines().filter{it.isNotBlank()}.toSet(),onDismiss,modeValue=if(!data.bool("perAppEnabled"))"off" else data.setting("perAppMode","exclude"),onMode={mode->vm.edit{it.copy(settings=it.settings+("perAppEnabled" to (mode!="off").toString())+("perAppMode" to if(mode=="include")"include" else "exclude"))}}){vm.setting("perAppPackages",it.joinToString("\n"));onDismiss()}
         "groups"->UiPageList("订阅管理",onDismiss,action={UiMenu(listOf("更新全部订阅" to vm::updateAllGroups,"创建分组" to {groupEdit(null)}),"groups_menu")}) {
             if(data.groups.isEmpty())item{UiRow("暂无分组","点击右上角创建分组")}
-            items(data.groups.sortedBy{it.order},key={it.id}){g->UiCard{
+            data.groups.sortedBy{it.order}.forEach { g->
+                item(key="manage-group-${g.id}") { UiCard {
                 UiRow(g.name,"${data.nodes.count{it.groupId==g.id}} 个节点"+(if(g.subscriptionUrl.isBlank())" · 基础分组" else " · 订阅分组"),Icons.Outlined.Folder,onClick={groupEdit(g)},modifier=Modifier.testTag("manage_group_${g.id}"),trailing={UiSwitch(g.enabled,{enabled->vm.edit{d->d.copy(groups=d.groups.map{if(it.id==g.id)it.copy(enabled=enabled)else it})}})})
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
+                FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
+                    TextButton(onClick={expandedGroups=if(g.id in expandedGroups)expandedGroups-g.id else expandedGroups+g.id;selectingGroup=null;selectedNodes=emptySet()},modifier=Modifier.testTag("manage_group_nodes_${g.id}")){Text(uiText(if(g.id in expandedGroups)"收起节点" else "节点"))}
                     TextButton(onClick={subscriptionEdit(g)},modifier=Modifier.testTag("subscription_options_${g.id}")){Text(uiText("订阅选项"))}
                     TextButton(onClick={vm.updateGroup(g)},enabled=g.subscriptionUrl.isNotBlank()){Text(uiText("更新"))}
-                    UiMenu(listOf("分享订阅" to {share(subscriptionShareLink(g).ifBlank{shareText(data.nodes.filter{it.groupId==g.id})})},"复制订阅链接" to {copy(subscriptionShareLink(g))},"订阅二维码" to {qr(subscriptionShareLink(g))},"复制节点配置" to {copy(shareText(data.nodes.filter{it.groupId==g.id}))},"导出节点" to {exportNodes(g.id)},"上移" to {vm.edit{d->val list=d.groups.sortedBy{it.order}.toMutableList();val i=list.indexOfFirst{it.id==g.id};if(i>0)java.util.Collections.swap(list,i,i-1);d.copy(groups=list.mapIndexed{j,v->v.copy(order=j)})}},"清空节点" to {confirmation="清空分组 ${g.name} 中的全部节点？" to {vm.clearGroup(g.id)}},"删除分组" to {if(data.bool("confirmProfileDelete",true))confirmation="删除分组 ${g.name} 及其全部节点？" to {vm.deleteGroup(g.id)}else vm.deleteGroup(g.id)}),"manage_group_menu_${g.id}")
+                    UiMenu(listOf("分享订阅" to {share(subscriptionShareLink(g).ifBlank{shareText(data.nodes.filter{it.groupId==g.id})})},"复制订阅链接" to {copy(subscriptionShareLink(g))},"订阅二维码" to {qr(subscriptionShareLink(g))},"复制节点配置" to {copy(shareText(data.nodes.filter{it.groupId==g.id}))},"导出节点" to {exportNodes(g.id)},"上移" to {vm.edit{d->val list=d.groups.sortedBy{it.order}.toMutableList();val i=list.indexOfFirst{it.id==g.id};if(i>0)java.util.Collections.swap(list,i,i-1);d.copy(groups=list.mapIndexed{j,v->v.copy(order=j)})}},"清空节点" to {confirmation="清空分组 ${g.name} 中的全部节点、依赖代理链？" to {vm.clearGroup(g.id)}},"删除分组" to {if(data.bool("confirmProfileDelete",true))confirmation="删除分组 ${g.name} 及其全部节点、依赖代理链？" to {vm.deleteGroup(g.id)}else vm.deleteGroup(g.id)}),"manage_group_menu_${g.id}")
                 }
-            }}
+                }}
+                if(g.id in expandedGroups) {
+                    val nodes=data.nodes.filter{it.groupId==g.id}.sortedWith(nodeComparator(nodeSortMode(data,g)))
+                    item(key="manage-actions-${g.id}") { NodeSelectionBar(selectingGroup==g.id,if(selectingGroup==g.id)selectedNodes.size else 0,"manage_${g.id}",{selectingGroup=if(selectingGroup==g.id)null else g.id;selectedNodes=emptySet()},{selectedNodes=nodes.map{it.id}.toSet()},{deleteNodes(selectedNodes)}) }
+                    if(nodes.isEmpty())item { UiRow("暂无节点") }
+                    items(nodes,key={"manage-node-${it.id}"}) { node -> UiCard {
+                        UiRow(node.name,nodeTestLabel(node),onClick={selectedNodes=if(selectingGroup!=g.id)setOf(node.id)else if(node.id in selectedNodes)selectedNodes-node.id else selectedNodes+node.id;selectingGroup=g.id},modifier=Modifier.testTag("manage_node_${node.id}"),chevron=false,trailing={
+                            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                                if(selectingGroup==g.id)Checkbox(node.id in selectedNodes,{checked->selectedNodes=if(checked)selectedNodes+node.id else selectedNodes-node.id},modifier=Modifier.testTag("manage_node_check_${node.id}"))
+                                IconButton(onClick={deleteNodes(setOf(node.id))},modifier=Modifier.testTag("manage_node_delete_${node.id}")){Icon(Icons.Outlined.Delete,"删除节点 ${node.name}")}
+                            }
+                        })
+                    }}
+                }
+            }
         }
         "rules"->UiPageList("路由规则",onDismiss,action={IconButton(onClick={ruleEdit(null)},modifier=Modifier.testTag("add_rule")){Icon(Icons.Outlined.Add,"添加规则")};UiMenu(listOf("重置全部规则" to {confirmation="删除全部路由规则？" to {vm.edit { it.copy(rules=emptyList()) } }},"管理路由资产" to {open("assets")}),"rules_menu")}) {
             if(data.rules.isEmpty())item{UiRow("暂无路由规则","点击右上角添加规则")}

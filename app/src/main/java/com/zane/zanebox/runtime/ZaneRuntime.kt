@@ -64,6 +64,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private var sessionTx=0L
     private var sessionRx=0L
     private var lastProxySelection=""
+    @Volatile private var lastAutoNode=0L
     @Volatile private var cachedSecret:String?=null
     @Volatile private var apiPort=9090
     private var publishedFlags=""
@@ -80,7 +81,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private val counters=JSONObject().put("apps",JSONObject()).put("domains",JSONObject()).put("nodes",JSONObject())
     private val binder=object:IRuntime.Stub() {
         override fun getSnapshot()=current.get().json()
-        override fun registerCallback(callback:IRuntimeCallback) { callbacks.register(callback);callback.onSnapshot(current.get().json()) }
+        override fun registerCallback(callback:IRuntimeCallback) { callbacks.register(callback);callback.onSnapshot(current.get().json());callback.onEvent("autoSelection",lastAutoNode.toString()) }
         override fun unregisterCallback(callback:IRuntimeCallback) { callbacks.unregister(callback) }
         override fun command(action:String,payload:String) { dispatch(action,payload) }
     }
@@ -124,6 +125,18 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 "stop" -> access.withLock { stopCore() }
                 "reload" -> access.withLock { if(current.get().state==2) { stopCore(terminal=false);startCore() } else event("message","设置已保存，连接时应用") }
                 "select" -> access.withLock { selectNode(payload.toLong()) }
+                "selectAuto" -> access.withLock {
+                    val before=store.snapshot()
+                    check(current.get().state !in listOf(1,3)) { "请等待连接操作完成" }
+                    val next=before.copy(settings=before.settings+("homeAutoSelect" to "true"))
+                    engine.validate(runtimeConfig(next))
+                    if(!before.bool("homeAutoSelect")) {
+                        val running=current.get().state==2
+                        store.update { it.copy(settings=it.settings+("homeAutoSelect" to "true")) }
+                        try { if(running) { stopCore(terminal=false,syncSelection=false);startCore() };event("message","已启用自动选择") }
+                        catch(e:Exception) { store.update { it.copy(settings=it.settings+("homeAutoSelect" to before.setting("homeAutoSelect","false"))) };if(running)runCatching{startCore()};throw e }
+                    }
+                }
                 "restore" -> access.withLock { restoreData(payload) }
                 "validate" -> { val args=JSONObject(payload);val name=args.getString("name");val filename=args.getString("file");require(filename.matches(Regex("validate-[0-9a-f-]{36}\\.json")));val file=File(noBackupFilesDir,filename);val error=try { require(file.length() in 1..64*1024*1024L);engine.validate(file.readText());"" } catch(e:Exception) { safeError(e) } finally { file.delete() };event("validation",JSONObject().put("name",name).put("error",error).toString()) }
                 "test" -> startTests(JSONArray(payload))
@@ -201,7 +214,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             Libcore.setNetworkChangeResetConnections(data.bool("networkReset",true))
             engine.start(config)
             if(data.bool("acquireWakeLock",false))wakeLock=(getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"zanebox:proxy").apply { setReferenceCounted(false);acquire() }
-            lastProxySelection=engine.configuredProxyDefault
+            lastProxySelection=engine.configuredProxyDefault;lastAutoNode=0;event("autoSelection","0")
             sessionTx=0;sessionRx=0
             val inbounds=JSONObject(config).optJSONArray("inbounds") ?: JSONArray()
             val mixed=(0 until inbounds.length()).map{inbounds.getJSONObject(it)}.firstOrNull{it.optString("type") in listOf("mixed","http")}
@@ -249,10 +262,10 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         publish(RuntimeSnapshot(state=4,generation=current.get().generation,error=safeError(error)))
         foregroundStop()
     }
-    private fun stopCore(terminal:Boolean=true) {
+    private fun stopCore(terminal:Boolean=true,syncSelection:Boolean=true) {
         releaseWakeLock()
         if(current.get().state==0) { if(terminal) { foregroundStop();owner.stopSelf() };return }
-        val data=store.snapshot();val selections=readSelections(data);syncDefaultSelection(data,selections)
+        val data=store.snapshot();val selections=readSelections(data);if(syncSelection)syncDefaultSelection(data,selections)
         if(data.bool("statsEnabled",true))runCatching { sampleConnections(api("/connections")) }
         val old=current.get();publish(old.copy(state=3));sampler?.cancel();sampler=null;ruleUpdates?.cancel();ruleUpdates=null
         try { recordTraffic(data,engine.close(),selections);persistTraffic();connectionBytes.clear() } finally { publish(RuntimeSnapshot(generation=old.generation+1,txTotal=sessionTx,rxTotal=sessionRx));if(terminal) { foregroundStop();owner.stopSelf() };event("message","已断开") }
@@ -262,9 +275,10 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         require(before.groups.any { it.id==node.groupId && it.enabled }) { "节点分组已禁用" }
         check(current.get().state !in listOf(1,3)) { "请等待连接操作完成" }
         if(current.get().state==2) { collectTraffic(before);publish(current.get().copy(txTotal=sessionTx,rxTotal=sessionRx)) }
-        store.update { it.copy(settings=it.settings+("selectedNodeId" to id.toString())+("selectedGroupId" to node.groupId.toString())) }
-        try { if(current.get().state==2 && !engine.select("node-$id")) { stopCore(terminal=false);startCore() };event("message","默认节点已切换") }
-        catch(e:Exception) { store.update { it.copy(settings=it.settings+("selectedNodeId" to before.selectedNodeId.toString())+("selectedGroupId" to before.selectedGroupId.toString())) };throw e }
+        val running=current.get().state==2
+        store.update { it.copy(settings=it.settings+("selectedNodeId" to id.toString())+("selectedGroupId" to node.groupId.toString())+("homeAutoSelect" to "false")) }
+        try { if(current.get().state==2 && (before.bool("homeAutoSelect") || !engine.select("node-$id"))) { stopCore(terminal=false,syncSelection=false);startCore() };event("autoSelection","0");event("message","默认节点已切换") }
+        catch(e:Exception) { store.update { it.copy(settings=it.settings+("selectedNodeId" to before.selectedNodeId.toString())+("selectedGroupId" to before.selectedGroupId.toString())+("homeAutoSelect" to before.setting("homeAutoSelect","false"))) };if(running && current.get().state!=2)runCatching{startCore()};throw e }
     }
     private suspend fun restoreData(name:String) {
         require(name.matches(Regex("restore-[0-9a-f-]{36}\\.json"))) { "恢复文件名无效" }
@@ -326,19 +340,25 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         val selections=readSelections(data);syncDefaultSelection(data,selections)
         return recordTraffic(data,traffic,selections)
     }
-    private fun readSelections(data:AppData):JSONObject = if(data.bool("statsEnabled",true) || data.bool("clashApi",false))runCatching { JSONObject(api("/proxies")).getJSONObject("proxies") }.getOrDefault(JSONObject()) else JSONObject()
+    private fun readSelections(data:AppData):JSONObject = if(data.bool("statsEnabled",true) || data.bool("clashApi",false) || data.bool("homeAutoSelect"))runCatching { JSONObject(api("/proxies")).getJSONObject("proxies") }.getOrDefault(JSONObject()) else JSONObject()
     private fun syncDefaultSelection(data:AppData,selections:JSONObject) {
         val tag=selections.optJSONObject("proxy")?.optString("now").orEmpty()
         if(tag.isBlank())return
+        if(tag=="home-auto") {
+            val id=selections.optJSONObject(tag)?.optString("now")?.removePrefix("node-")?.toLongOrNull() ?: 0L
+            if(id!=lastAutoNode) { lastAutoNode=id;event("autoSelection",id.toString()) }
+            return
+        }
         val previous=lastProxySelection;lastProxySelection=tag
         if(previous.isBlank() || previous==tag)return
         val id=tag.takeIf { it.startsWith("node-") }?.removePrefix("node-")?.substringBefore('-')?.toLongOrNull() ?: return
         val node=data.nodes.firstOrNull { it.id==id && data.groups.any { g->g.id==it.groupId && g.enabled } } ?: return
-        if(data.selectedNodeId==id && data.selectedGroupId==node.groupId)return
+        if(data.selectedNodeId==id && data.selectedGroupId==node.groupId && !data.bool("homeAutoSelect"))return
         store.update { latest ->
             val currentNode=latest.nodes.firstOrNull { it.id==id && latest.groups.any { g->g.id==it.groupId && g.enabled } }
-            if(currentNode==null)latest else latest.copy(settings=latest.settings+("selectedNodeId" to id.toString())+("selectedGroupId" to currentNode.groupId.toString()))
+            if(currentNode==null)latest else latest.copy(settings=latest.settings+("selectedNodeId" to id.toString())+("selectedGroupId" to currentNode.groupId.toString())+("homeAutoSelect" to "false"))
         }
+        if(data.bool("homeAutoSelect") && current.get().state==2)dispatch("reload","")
         event("message","默认节点已与内核同步")
     }
     private fun recordTraffic(data:AppData,traffic:Map<String,Pair<Long,Long>>,selections:JSONObject):Pair<Long,Long> {

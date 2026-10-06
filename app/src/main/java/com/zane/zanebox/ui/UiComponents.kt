@@ -38,6 +38,17 @@ internal val LocalUiBusy=staticCompositionLocalOf { false }
 internal val LocalUiListState=staticCompositionLocalOf<androidx.compose.foundation.lazy.LazyListState?> { null }
 internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable internal fun NodeSelectionBar(selecting:Boolean,count:Int,tag:String,onMode:()->Unit,onAll:()->Unit,onDelete:()->Unit) {
+    FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
+        TextButton(onClick=onMode,modifier=Modifier.testTag(if(selecting)"${tag}_selection_cancel" else "${tag}_multiselect")){Text(uiText(if(selecting)"取消多选" else "多选"))}
+        if(selecting) {
+            TextButton(onClick=onAll,modifier=Modifier.testTag("${tag}_select_all")){Text(uiText("全选"))}
+            TextButton(onClick=onDelete,enabled=count>0,modifier=Modifier.testTag("${tag}_delete_selected")){Text("删除 ($count)")}
+        }
+    }
+}
+
 @Composable internal fun ApplyChangesRow(onReload:()->Unit,modifier:Modifier=Modifier) {
     Surface(color=MaterialTheme.colorScheme.surface) {
         Row(modifier.fillMaxWidth().clickable(onClick=onReload).padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {

@@ -80,45 +80,72 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         getApplication<Application>().cacheDir.listFiles()?.forEach { require(it.deleteRecursively()) { "缓存清除失败" } }
         message.value="缓存已清除"
     }
-    fun importText(text: String, groupId: Long = -1) = task { importNow(text,if(groupId<0) store.snapshot().browseGroupId else groupId) }
-    private fun importNow(text: String, groupId: Long = 0) {
-        val subscription=com.zane.zanebox.IncomingLink.subscription(text)
-        if(subscription!=null)pendingImport.value=PendingImport.Subscription(subscription.subscriptionUrl,subscription.name)
-        else insertParsed(SubscriptionParser.parseReport(text),groupId)
-    }
-    private fun insertParsed(report: ParseReport, groupId: Long) {
+    fun importText(text: String, groupId: Long = -1) = task { offerTextNow(text,if(groupId<0) store.snapshot().browseGroupId else groupId) }
+    private fun insertParsed(report: ParseReport, groupId: Long, name:String) {
         val parsed = report.nodes
         require(parsed.isNotEmpty()) { "未找到有效节点" }
         store.update { d ->
-            val target = groupId.takeIf { id -> d.groups.any { it.id == id } } ?: store.nextId()
-            d.copy(groups = if(d.groups.any { it.id == target }) d.groups else d.groups + Group(target,"导入节点"),
+            require(groupId<0 || d.groups.any { it.id==groupId }) { "所选分组已删除，请重新选择" }
+            require(groupId>=0 || name.trim().isNotEmpty()) { "分组名称不能为空" }
+            val target = if(groupId>=0)groupId else store.nextId()
+            d.copy(groups = if(groupId>=0) d.groups else d.groups + Group(target,name.trim()),
                 nodes = d.nodes + parsed.map { Node(store.nextId(),target,it.name,it.outbound,it.shareLink,metadata=it.metadata) }).withEnabledSelection()
         }
         message.value = "已导入 ${parsed.size} 个节点" + (if(report.skipped>0) "，跳过 ${report.skipped} 条无法识别的内容" else "") + "，请点击应用修改"
     }
-    /** Content arriving from other apps (VIEW/SEND) is staged here and only applied after the user confirms. */
+    /** All imports are staged and only applied after the user confirms their destination. */
     val pendingImport = MutableStateFlow<PendingImport?>(null)
+    val importing = MutableStateFlow(false)
+    private var pendingSubscriptionGroup:Group?=null
+    private fun stageImport(pending:PendingImport) {
+        require(!importing.value) { "正在导入，请稍候" }
+        pendingSubscriptionGroup=null
+        pendingImport.value=pending
+    }
     fun offerLink(value:String) = task {
         val link=com.zane.zanebox.IncomingLink.parse(value)
-        if(link.subscriptionUrl.isNotBlank()) pendingImport.value=PendingImport.Subscription(link.subscriptionUrl,link.name) else offerTextNow(link.text)
+        if(link.subscriptionUrl.isNotBlank())stageImport(PendingImport.Subscription(link.subscriptionUrl,link.name)) else offerTextNow(link.text)
     }
     fun offerText(text:String) = task { offerTextNow(text) }
-    private fun offerTextNow(text:String) {
+    private fun offerTextNow(text:String,groupId:Long=store.snapshot().browseGroupId) {
         val subscription=com.zane.zanebox.IncomingLink.subscription(text)
-        pendingImport.value=if(subscription!=null)PendingImport.Subscription(subscription.subscriptionUrl,subscription.name) else PendingImport.Nodes(SubscriptionParser.parseReport(text))
+        val pending=if(subscription!=null)PendingImport.Subscription(subscription.subscriptionUrl,subscription.name) else {
+            val report=SubscriptionParser.parseReport(text)
+            require(report.nodes.isNotEmpty()) { "未找到有效节点" }
+            PendingImport.Nodes(report,groupId.takeIf { it>0 } ?: -1)
+        }
+        stageImport(pending)
     }
-    fun offerStream(uri:Uri) = task {
-        val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { input -> readLimited(input) }
-        if(isZip(bytes)) { val restored=BackupManager(getApplication()).`import`(bytes);pendingImport.value=PendingImport.Backup(restored) }
-        else offerTextNow(bytes.toString(Charsets.UTF_8))
-    }
-    fun cancelImport() { pendingImport.value=null }
-    fun confirmImport() {
-        val pending=pendingImport.value ?: return;pendingImport.value=null
-        when(pending) {
-            is PendingImport.Subscription -> saveGroup(Group(store.nextId(),pending.name,pending.url),true)
-            is PendingImport.Nodes -> task { insertParsed(pending.report,store.snapshot().browseGroupId) }
-            is PendingImport.Backup -> task { service.restore(pending.data);message.value="备份已验证，正在应用" }
+    fun offerStream(uri:Uri) = readText(uri)
+    fun cancelImport() { if(!importing.value) { pendingImport.value=null;pendingSubscriptionGroup=null } }
+    fun confirmImport(name:String=(pendingImport.value as? PendingImport.Subscription)?.name ?: "导入节点",groupId:Long=(pendingImport.value as? PendingImport.Nodes)?.preferredGroupId ?: -1) {
+        val pending=pendingImport.value ?: return
+        if(importing.value)return
+        importing.value=true
+        task {
+            try {
+                when(pending) {
+                    is PendingImport.Subscription -> {
+                        require(name.trim().isNotEmpty()) { "分组名称不能为空" }
+                        val group=pendingSubscriptionGroup?.let { previous ->
+                            store.snapshot().groups.firstOrNull { it.id==previous.id } ?: error("导入分组已删除，请取消后重新导入")
+                        } ?: Group(store.nextId(),name.trim(),pending.url).also { created ->
+                            store.update { it.copy(groups=it.groups+created).withEnabledSelection() }
+                            pendingSubscriptionGroup=created
+                        }
+                        val renamed=store.update { d ->
+                            val current=d.groups.firstOrNull { it.id==group.id } ?: error("导入分组已删除，请取消后重新导入")
+                            require(current.subscriptionUrl==pending.url) { "订阅地址已变更，请取消后重新导入" }
+                            d.copy(groups=d.groups.map { g -> if(g.id==group.id)g.copy(name=name.trim()) else g })
+                        }.groups.first { it.id==group.id }
+                        updateGroupNow(renamed)
+                    }
+                    is PendingImport.Nodes -> insertParsed(pending.report,groupId,name)
+                    is PendingImport.Backup -> { service.restore(pending.data);message.value="备份已验证，正在应用" }
+                }
+                pendingImport.value=null
+                pendingSubscriptionGroup=null
+            } finally { importing.value=false }
         }
     }
     fun updateGroup(group: Group) = task { updateGroupNow(group) }
@@ -180,26 +207,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteNode(id:Long)=edit { removeNodes(it,setOf(id)) }
+    fun deleteNode(id:Long)=deleteNodes(setOf(id))
+    fun deleteNodes(ids:Set<Long>)=edit { removeNodes(it,ids) }
     fun clearGroup(id:Long)=edit { d->removeNodes(d,d.nodes.filter{it.groupId==id}.map{it.id}.toSet()) }
     private fun removeNodes(d:AppData,ids:Set<Long>):AppData {
-        val remaining=d.nodes.filter{it.id !in ids}
-        return d.copy(nodes=remaining,groups=d.groups.map{it.copy(frontProxy=if(it.frontProxy in ids)0 else it.frontProxy,landingProxy=if(it.landingProxy in ids)0 else it.landingProxy)},
-            settings=cleanSmartTargets(if(d.selectedNodeId in ids)d.settings+("selectedNodeId" to (remaining.firstOrNull()?.id ?:0).toString())else d.settings,ids.map{"node:$it"}.toSet()),
-            rules=d.rules.map{if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in ids)it.copy(outbound="proxy")else it},
-            merges=d.merges.map{it.copy(nodeIds=it.nodeIds.filter{n->n !in ids},selectedId=if(it.selectedId in ids)0 else it.selectedId)})
+        val removed=com.zane.zanebox.subscription.nodeRemovalIds(d.nodes,ids)
+        val remaining=d.nodes.filter{it.id !in removed}
+        return d.copy(nodes=remaining,groups=d.groups.map{it.copy(frontProxy=if(it.frontProxy in removed)0 else it.frontProxy,landingProxy=if(it.landingProxy in removed)0 else it.landingProxy)},
+            settings=cleanSmartTargets((if(d.selectedNodeId in removed)d.settings+("selectedNodeId" to "0")else d.settings).filterKeys { key -> removed.none { key=="nodeRegion.$it" } },removed.map{"node:$it"}.toSet()),
+            rules=d.rules.map{if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in removed)it.copy(outbound="proxy")else it},
+            merges=d.merges.map{it.copy(nodeIds=it.nodeIds.filter{n->n !in removed},selectedId=if(it.selectedId in removed)0 else it.selectedId)}).withEnabledSelection()
     }
     fun deleteGroup(id:Long) = edit { d ->
-        val removed=d.nodes.filter { it.groupId==id }.map { it.id }.toSet();val remaining=d.nodes.filter { it.groupId!=id }
-        d.copy(groups=d.groups.filter{it.id!=id}.map{it.copy(frontProxy=if(it.frontProxy in removed)0 else it.frontProxy,landingProxy=if(it.landingProxy in removed)0 else it.landingProxy)},nodes=remaining,
-            settings=cleanSmartTargets(d.settings,setOf("group:$id")+removed.map{"node:$it"})+("browseGroupId" to if(d.browseGroupId==id)"0" else d.browseGroupId.toString())+("smartSourceGroupId" to if(d.setting("smartSourceGroupId")==id.toString())"0" else d.setting("smartSourceGroupId","0"))+("selectedGroupId" to if(d.selectedGroupId==id)"0" else d.selectedGroupId.toString())+("selectedNodeId" to if(d.selectedNodeId in removed)(remaining.firstOrNull()?.id ?: 0).toString() else d.selectedNodeId.toString()),
-            rules=d.rules.map { if(it.outbound=="group:$id" || removed.any { n -> it.outbound=="node:$n" })it.copy(outbound="proxy")else it },
-            merges=d.merges.map { it.copy(groupIds=it.groupIds-id,nodeIds=it.nodeIds.filter{n->n !in removed},selectedId=if(it.selectedId in removed)0 else it.selectedId) })
+        val cleaned=removeNodes(d,d.nodes.filter { it.groupId==id }.map { it.id }.toSet())
+        cleaned.copy(groups=cleaned.groups.filter{it.id!=id},
+            settings=cleanSmartTargets(cleaned.settings,setOf("group:$id"))+("browseGroupId" to if(d.browseGroupId==id)"0" else d.browseGroupId.toString())+("smartSourceGroupId" to if(d.setting("smartSourceGroupId")==id.toString())"0" else d.setting("smartSourceGroupId","0"))+("selectedGroupId" to if(cleaned.selectedGroupId==id)"0" else cleaned.selectedGroupId.toString()),
+            rules=cleaned.rules.map { if(it.outbound=="group:$id")it.copy(outbound="proxy")else it },
+            merges=cleaned.merges.map { it.copy(groupIds=it.groupIds-id) })
     }
     fun deleteMerge(id:Long) = edit { d -> d.copy(settings=cleanSmartTargets(d.settings,setOf("merge:$id"))+("smartSourceMergeId" to if(d.setting("smartSourceMergeId")==id.toString())"0" else d.setting("smartSourceMergeId","0")),merges=d.merges.filter { it.id!=id },rules=d.rules.map { if(it.outbound=="merge:$id")it.copy(outbound="proxy")else it }) }
     fun readText(uri: Uri) = task {
         val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { input -> readLimited(input) }
-        if(isZip(bytes)) pendingImport.value=PendingImport.Backup(BackupManager(getApplication()).`import`(bytes)) else importNow(bytes.toString(Charsets.UTF_8),store.snapshot().browseGroupId)
+        if(isZip(bytes)) stageImport(PendingImport.Backup(BackupManager(getApplication()).`import`(bytes))) else offerTextNow(bytes.toString(Charsets.UTF_8))
     }
     fun restore(uri: Uri) = task {
         val bytes = getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
@@ -231,7 +260,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
 sealed class PendingImport {
     data class Subscription(val url:String,val name:String):PendingImport()
-    data class Nodes(val report:ParseReport):PendingImport()
+    data class Nodes(val report:ParseReport,val preferredGroupId:Long=-1):PendingImport()
     data class Backup(val data:AppData):PendingImport()
 }
 

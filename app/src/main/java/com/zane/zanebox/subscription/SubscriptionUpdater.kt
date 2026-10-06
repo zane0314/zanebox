@@ -63,13 +63,9 @@ object SubscriptionUpdater {
             val meta=JSONObject(match?.metadata ?: "{}");val addition=JSONObject(incoming.metadata);addition.keys().forEach { key -> meta.put(key,addition.get(key)) }
             (match ?: Node(nextId(),group.id,incoming.name,incoming.outbound,order=nextOrder++)).copy(name=incoming.name,outbound=incoming.outbound,shareLink=incoming.shareLink,metadata=meta.toString())
         }
-        val removed=remaining.keys.toMutableSet()
-        var all=current.nodes.filter { it.groupId!=group.id }+fresh
-        // A chain losing a hop cannot silently become a shorter, differently routed chain.
-        while(true) {
-            val missing=all.filter { n -> val o=JSONObject(n.outbound);o.optString("type")=="chain" && o.getJSONArray("node_ids").let { ids -> (0 until ids.length()).any { ids.getLong(it) in removed } } }.map { it.id }
-            if(missing.isEmpty()) break;removed.addAll(missing);all=all.filter { it.id !in removed }
-        }
+        val candidates=current.nodes.filter { it.groupId!=group.id }+fresh
+        val removed=nodeRemovalIds(candidates,remaining.keys)
+        val all=candidates.filter { it.id !in removed }
         val settings=current.settings.filterKeys { key -> removed.none { key=="nodeRegion.$it" } }.mapValues { (key,value) -> if(key.startsWith("smart.") && key.endsWith(".target") && value.startsWith("node:") && value.substringAfter(':').toLongOrNull() in removed) "off" else value }.toMutableMap()
         val enabledGroups=current.groups.filter { it.enabled }.sortedBy { it.order }
         val enabledIds=enabledGroups.map { it.id }.toSet()
@@ -86,4 +82,19 @@ object SubscriptionUpdater {
         if(group.id!=groupId || (request!=null && JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optString("request")!=request)) group
         else group.copy(options=journal(group.options) { value -> value.put("state",state).put("lastAttempt",now);if(error.isBlank()) value.remove("error") else value.put("error",error.take(256));if(nextAttempt>0) value.put("nextAttempt",nextAttempt) else value.remove("nextAttempt") })
     })
+}
+
+/** A chain losing a hop cannot silently become a shorter, differently routed chain. */
+internal fun nodeRemovalIds(nodes:List<Node>,ids:Set<Long>):Set<Long> {
+    val removed=ids.toMutableSet()
+    // ponytail: rescan per chain depth; build a reverse index if large chain graphs make deletion slow.
+    while(true) {
+        val missing=nodes.filter { n ->
+            n.id !in removed && JSONObject(n.outbound).let { out ->
+                out.optString("type")=="chain" && out.getJSONArray("node_ids").let { hops -> (0 until hops.length()).any { hops.getLong(it) in removed } }
+            }
+        }.map { it.id }
+        if(missing.isEmpty())return removed
+        removed.addAll(missing)
+    }
 }

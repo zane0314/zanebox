@@ -1,0 +1,120 @@
+appId: com.zane.zanebox
+---
+# Maestro 内部剪贴板用于文本输入；真实系统剪贴板另由 ClipboardImportTest 覆盖。
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    when:
+      visible:
+        id: com.android.permissioncontroller:id/permission_allow_button
+    commands:
+    - tapOn:
+        id: com.android.permissioncontroller:id/permission_allow_button
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- setClipboard: http://10.0.2.2:19080/subscription
+- tapOn:
+    id: add_nodes
+- tapOn: 导入文本
+- tapOn:
+    id: editor_field_0
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- tapOn: 导入订阅
+- eraseText
+- inputText: Clipboard-Sub
+- hideKeyboard
+- takeScreenshot: reports/ui-1.0.2/current/clipboard-subscription-confirm
+- tapOn: 添加
+- extendedWaitUntil:
+    visible: fixture A
+    timeout: 20000
+- assertVisible: Clipboard-Sub
+- assertVisible:
+    id: home_auto
+- setClipboard: socks://10.0.2.2:19081#Clipboard-Node
+- tapOn:
+    id: add_nodes
+- tapOn: 导入文本
+- tapOn:
+    id: editor_field_0
+- pasteText
+- hideKeyboard
+- tapOn:
+    id: editor_save
+- assertVisible: 新建分组
+- tapOn: Clipboard-Sub
+- takeScreenshot: reports/ui-1.0.2/current/node-existing-group-confirm
+- tapOn: 导入
+- extendedWaitUntil:
+    visible: Clipboard-Node
+    timeout: 10000
+- tapOn:
+    id: home_node_delete_[0-9]+
+    index: 0
+- tapOn: 取消
+- assertVisible: fixture A
+- tapOn:
+    id: home_multiselect
+- tapOn:
+    id: home_node_check_[0-9]+
+    index: 0
+- takeScreenshot: reports/ui-1.0.2/current/home-selected-node
+- tapOn:
+    id: home_delete_selected
+- tapOn: 确认
+- assertNotVisible: fixture A
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_groups
+- tapOn:
+    id: manage_group_nodes_[0-9]+
+    index: 0
+- tapOn:
+    id: manage_[0-9]+_multiselect
+- tapOn:
+    id: manage_node_check_[0-9]+
+    index: 0
+- takeScreenshot: reports/ui-1.0.2/current/settings-selected-node
+- tapOn:
+    id: manage_[0-9]+_delete_selected
+- tapOn: 确认
+- assertNotVisible: Clipboard-Node
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+- tapOn:
+    id: setting_fontScale
+- tapOn: 最大
+- tapOn:
+    id: page_back
+- tapOn:
+    id: settings_groups
+- tapOn:
+    id: manage_group_nodes_[0-9]+
+    index: 0
+- takeScreenshot: reports/ui-1.0.2/current/settings-node-large
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/home-auto-large
