@@ -1,0 +1,29 @@
+appId: com.zane.zanebox
+---
+- assertVisible: .*代理已连接.*
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理未连接.*
+    timeout: 30000
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_target_youtube
+- assertNotVisible: 节点 802
+- tapOn: 分组 · 订阅 A
+- tapOn: 节点 802
+- tapOn:
+    id: smart_target_youtube
+- tapOn: 分组 · 订阅 A
+- takeScreenshot: reports/ui-1.0.2/current/saved-node-target
+- tapOn: 取消
+- tapOn: 取消
+- tapOn:
+    id: main_back
+- assertVisible: 已选：节点 801
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000

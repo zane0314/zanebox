@@ -1,0 +1,53 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fontScale
+- tapOn: 最大
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_target_youtube
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: smart_target_youtube
+- assertNotVisible: 节点 802
+- tapOn: 分组 · 订阅 A
+- assertVisible: 节点 802
+- assertVisible: 整个分组
+- takeScreenshot: reports/ui-1.0.2/current/subscription-nodes-large
+- tapOn: 取消
+- tapOn: 取消
+- tapOn:
+    id: main_back
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fontScale
+- tapOn: 标准
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

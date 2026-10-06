@@ -5,6 +5,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -158,10 +160,10 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
         confirmButton={CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density){confirmButton()}})
 }
 
-@Composable internal fun ChoiceDialog(title:String,value:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,onChoose:(String)->Unit) {
+@Composable internal fun ChoiceDialog(title:String,value:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,dismissOnChoose:Boolean=true,onChoose:(String)->Unit) {
     UiAlertDialog(onDismissRequest=onDismiss,title={Text(uiText(title))},text={
-        LazyColumn(Modifier.heightIn(max=440.dp)) { items(choices.size) {i-> val (key,label)=choices[i]
-            Row(Modifier.fillMaxWidth().clickable {onChoose(key);onDismiss()}.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
+        LazyColumn(Modifier.heightIn(max=440.dp).selectableGroup()) { items(choices.size) {i-> val (key,label)=choices[i]
+            Row(Modifier.fillMaxWidth().selectable(selected=value==key,role=Role.RadioButton) {onChoose(key);if(dismissOnChoose)onDismiss()}.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
                 RadioButton(selected=value==key,onClick=null);Spacer(Modifier.width(8.dp));Text(uiText(label))
             }
         } }

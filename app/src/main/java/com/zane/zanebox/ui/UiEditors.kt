@@ -35,15 +35,29 @@ import org.json.JSONObject
 }
 
 @Composable internal fun TargetPicker(title:String,value:String,data:AppData,onDismiss:()->Unit,onChoose:(String)->Unit,smart:Boolean=false,none:Boolean=false) {
+    var openGroupId by remember{mutableStateOf<Long?>(null)}
+    val group=if(smart)data.groups.firstOrNull{it.id==openGroupId && it.enabled}else null
+    if(group!=null) {
+        ChoiceDialog(group.name,normalizeSmartTarget(value),listOf("group:${group.id}" to "整个分组")+
+            data.nodes.filter{it.groupId==group.id}.map{"node:${it.id}" to it.name},{openGroupId=null}) {
+            onChoose(it);onDismiss()
+        }
+        return
+    }
     val choices=buildList {
         if(none)add("0" to "无")
         if(smart)addAll(listOf("proxy" to "代理","direct" to "直连","auto" to "自动选择"))
         else if(!none)addAll(listOf("proxy" to "代理","direct" to "直连","block" to "阻止"))
         data.groups.filter{it.enabled}.forEach{add("group:${it.id}" to "分组 · ${it.name}")}
         data.merges.forEach{add("merge:${it.id}" to "汇总组 · ${it.name}")}
-        data.nodes.filter{n->data.groups.any{it.id==n.groupId && it.enabled}}.forEach{add("node:${it.id}" to it.name)}
+        if(!smart)data.nodes.filter{n->data.groups.any{it.id==n.groupId && it.enabled}}.forEach{add("node:${it.id}" to it.name)}
     }
-    ChoiceDialog(title,if(smart)normalizeSmartTarget(value)else value,choices,onDismiss,onChoose)
+    val selected=if(smart && value.startsWith("node:"))data.nodes.firstOrNull{it.id==value.substringAfter(':').toLongOrNull()}?.let{"group:${it.groupId}"} ?: value
+        else if(smart)normalizeSmartTarget(value)else value
+    ChoiceDialog(title,selected,choices,onDismiss,dismissOnChoose=!smart) {
+        if(smart && it.startsWith("group:"))openGroupId=it.substringAfter(':').toLong()
+        else {onChoose(it);if(smart)onDismiss()}
+    }
 }
 internal fun targetName(value:String,data:AppData):String = when(normalizeSmartTarget(value)) {
     "auto"->"自动选择";"proxy"->"代理";"direct"->"直连";"block"->"阻止";"0"->"无"

@@ -1,0 +1,49 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- tapOn:
+    id: smart_target_youtube
+- assertVisible: 代理
+- assertVisible: 直连
+- assertVisible: 自动选择
+- assertVisible: 分组 · 订阅 A
+- assertNotVisible: 节点 801
+- assertNotVisible: 节点 802
+- assertNotVisible: 节点 803
+- assertNotVisible: 分组 · 停用订阅
+- takeScreenshot: reports/ui-1.0.2/current/grouped-targets
+- tapOn: 分组 · 订阅 A
+- assertVisible: 整个分组
+- assertVisible: 节点 801
+- assertVisible: 节点 802
+- assertNotVisible: 节点 803
+- takeScreenshot: reports/ui-1.0.2/current/subscription-nodes
+- tapOn: 取消
+- assertVisible: 分流目标
+- tapOn: 分组 · 空订阅
+- assertVisible: 整个分组
+- assertNotVisible: 节点 801
+- tapOn: 取消
+- tapOn: 分组 · 本地 B
+- assertVisible: 节点 803
+- assertNotVisible: 节点 802
+- tapOn: 取消
+- tapOn: 分组 · 订阅 A
+- tapOn: 整个分组
+- tapOn:
+    id: smart_target_youtube
+- tapOn: 汇总组 · 汇总
+- tapOn:
+    id: smart_target_youtube
+- tapOn: 分组 · 订阅 A
+- tapOn: 节点 801
+- tapOn:
+    id: main_back
+- assertVisible: 已选：节点 801
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000

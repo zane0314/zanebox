@@ -16,7 +16,7 @@ class FontScaleTest {
         var choice by mutableStateOf(false)
         compose.setContent {
             ZaneTheme(AppData(settings=mapOf("fontScale" to scale))) {
-                if(choice)ChoiceDialog("字号测试","a",listOf("a" to "Choice item"),{}, {})
+                if(choice)ChoiceDialog("字号测试","a",listOf("a" to "Choice item"),{},onChoose={})
                 else UiPageList("字号测试",{}) {}
             }
         }
