@@ -1,0 +1,69 @@
+appId: com.zane.zanebox
+---
+# FloatingToolbarTest seeds 40 local nodes before this flow.
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_fontScale
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_fontScale
+- tapOn: 标准
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: home_toolbar
+- takeScreenshot: reports/ui-1.0.2/current/floating-home
+- swipe:
+    direction: UP
+    duration: 500
+- takeScreenshot: reports/ui-1.0.2/current/floating-home-scroll
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_showBottomBar
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_showBottomBar
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertNotVisible:
+    id: home_toolbar
+- tapOn:
+    id: node_menu
+- tapOn: 设置
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_showBottomBar
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: home_toolbar
+- tapOn:
+    id: add_nodes
+- tapOn: 从剪贴板导入
+- assertVisible: 没有可导入的内容
+- takeScreenshot: reports/ui-1.0.2/current/floating-home-feedback
+- tapOn:
+    id: tab_1
+- assertVisible: Speed · IP / DNS / 测速
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: home_toolbar

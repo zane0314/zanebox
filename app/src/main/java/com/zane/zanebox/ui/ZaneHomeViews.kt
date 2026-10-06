@@ -89,13 +89,10 @@ class ZaneHomeToolbar @JvmOverloads constructor(context: Context, attrs: Attribu
     @Suppress("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked != MotionEvent.ACTION_DOWN) return true
-        val x = event.x
-        val y = event.y
-        if (x >= frameLeft && x <= frameRight && y >= frameTop && y <= frameBottom) return true
-        val dx = x - width / 2f
-        val dy = y - powerCenterY
-        val bulge = dp(BULGE_RADIUS)
-        return dx * dx + dy * dy <= bulge * bulge
+        buildPath()
+        val painted = Region()
+        painted.setPath(path, Region(0, 0, width, height))
+        return painted.contains(event.x.toInt(), event.y.toInt())
     }
 
     override fun onDraw(canvas: Canvas) {

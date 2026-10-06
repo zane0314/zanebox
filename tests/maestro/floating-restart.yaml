@@ -1,0 +1,55 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_serviceMode
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_serviceMode
+- tapOn: 本地代理
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_sniff
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_sniff
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: apply_changes
+- takeScreenshot: reports/ui-1.0.2/current/floating-home-restart-needed
+- tapOn:
+    id: apply_changes
+- extendedWaitUntil:
+    notVisible:
+      id: apply_changes
+    timeout: 30000
+- assertVisible: .*代理已连接.*
+- takeScreenshot: reports/ui-1.0.2/current/floating-home-connected
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理未连接.*
+    timeout: 30000

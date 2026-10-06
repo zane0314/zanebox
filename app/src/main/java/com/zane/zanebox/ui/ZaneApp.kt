@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import com.zane.zanebox.R
 import androidx.compose.ui.platform.LocalContext
@@ -136,17 +137,18 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
         Box(Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}) {
             UiBackdrop(Modifier.fillMaxSize(),home=page==0)
             NativeHomeAppearance(page==0) {
+            val floatingHomeBar=page==0 && data.bool("showBottomBar",true)
+            var homeBarHeight by remember {mutableStateOf(0.dp)}
+            val density=androidx.compose.ui.platform.LocalDensity.current
+            val homeBarOverlap=(homeBarHeight-WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()).coerceAtLeast(0.dp)
             Scaffold(containerColor=androidx.compose.ui.graphics.Color.Transparent,contentColor=MaterialTheme.colorScheme.onSurface,
                 topBar={if(page!=0)TopAppBar(expandedHeight=56.dp,title={Text(uiText(if(page==1)"智能分流" else "设置"),fontSize=20.sp,modifier=Modifier.padding(start=16.dp))},
                     navigationIcon={IconButton(onClick={page=0},modifier=Modifier.testTag("main_back")){Icon(Icons.AutoMirrored.Outlined.ArrowBack,"返回")}},
                     actions={if(page==1)SmartMenu(data,vm){subpage=it}},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
-                snackbarHost={if(subpage.isBlank() && !nodeEdit && !groupEdit && !ruleEdit && !mergeEdit && editor==null && info==null && subscriptionOptions==null && speedNode==null)SnackbarHost(snackbar)},
-                bottomBar={Column {
-                    if(dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},if(page==0 && data.bool("showBottomBar",true))Modifier else Modifier.navigationBarsPadding())
-                    if(page==0 && data.bool("showBottomBar",true))HomeToolbar(runtime.state,{page=it},::toggle)
-                }}) {padding->
+                snackbarHost={if(subpage.isBlank() && !nodeEdit && !groupEdit && !ruleEdit && !mergeEdit && editor==null && info==null && subscriptionOptions==null && speedNode==null)SnackbarHost(snackbar,Modifier.padding(bottom=if(floatingHomeBar)homeBarOverlap else 0.dp))},
+                bottomBar={if(!floatingHomeBar && dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},Modifier.navigationBarsPadding())}) {padding->
                 LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("page_list"),
-                    contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=if(page==0)8.dp else 16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=(if(floatingHomeBar)homeBarOverlap else 0.dp)+(if(page==0)8.dp else 16.dp)),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     when(page) {
                         0->{
                             item { Row(Modifier.fillMaxWidth().padding(top=2.dp,bottom=36.dp),verticalAlignment=Alignment.Top) {
@@ -194,6 +196,10 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
                         2->{item{SettingsHub(onOpen={subpage=it},clashApi=data.bool("clashApi"))}}
                     }
                 }
+            }
+            if(floatingHomeBar)Column(Modifier.align(Alignment.BottomCenter).onSizeChanged{homeBarHeight=with(density){it.height.toDp()}}) {
+                if(dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()})
+                HomeToolbar(runtime.state,{page=it},::toggle)
             }
             }
             if(busy)LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter).testTag("busy"))
