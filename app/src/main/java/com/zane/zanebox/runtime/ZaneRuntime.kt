@@ -174,7 +174,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         return file.openRead().use { it.readBytes().toString(Charsets.US_ASCII) }.also { require(it.matches(Regex("[0-9a-f]{64}"))) { "控制凭证损坏" };cachedSecret=it }
     }
     private fun runtimeConfig(data:AppData):String {
-        val root=JSONObject(ConfigBuilder.build(data,Purpose.MAIN,runtimeSecret=ownerSecret()))
+        val root=JSONObject(ConfigBuilder.build(com.zane.zanebox.config.withBuiltinSmartRules(data) { assets.open(it).bufferedReader().use { reader->reader.readText() } },Purpose.MAIN,runtimeSecret=ownerSecret()))
         root.optJSONObject("experimental")?.optJSONObject("clash_api")?.apply {
             put("external_ui",File(filesDir,"core-assets/yacd").absolutePath)
             put("access_control_allow_origin",JSONArray().put("http://127.0.0.1:${data.setting("apiPort","9090")}"))
@@ -499,12 +499,12 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     @Synchronized private fun notification(text:String,rate:Boolean=false) {
         val data=store.snapshot()
         val group=if(data.bool("showGroupInNotification",false))data.groups.firstOrNull { it.id==data.selectedGroupId }?.name.orEmpty() else ""
-        val title=if(group.isBlank())"zanebox" else "zanebox · $group"
+        val title=if(group.isBlank())"Links" else "Links · $group"
         val key="$title|$text"
         if(rate && (!inForeground || key==notificationText)) return
         notificationText=key
         val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if(!channelReady && Build.VERSION.SDK_INT>=26) { manager.createNotificationChannel(NotificationChannel("proxy","zanebox 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true }
+        if(!channelReady && Build.VERSION.SDK_INT>=26) { manager.createNotificationChannel(NotificationChannel("proxy","Links 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true }
         val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop=PendingIntent.getService(this,1,Intent(this,owner.javaClass).setAction("stop"),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val built=NotificationCompat.Builder(this,"proxy").setSmallIcon(R.drawable.ic_zanebox).setContentTitle(title).setContentText(text).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(0,"断开",stop).build()

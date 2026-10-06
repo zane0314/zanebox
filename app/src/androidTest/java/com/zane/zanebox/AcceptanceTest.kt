@@ -49,7 +49,7 @@ class AcceptanceTest {
   waitFor("订阅更新"){store.snapshot().groups.single().updatedAt>0 && store.snapshot().nodes.size==2}
   // Subscription changed protocol identity; get current IDs after replacement.
   val nodes=store.snapshot().nodes;val first=nodes[0].id;val second=nodes[1].id
-  store.update{it.copy(nodes=it.nodes.map{n->n.copy(order=if(n.id==second)0 else 1)},settings=it.settings+mapOf("selectedNodeId" to first.toString(),"testUrl" to "http://10.0.2.2:19080/test","sniff" to "false","dnsRemote" to "local"))}
+  store.update{it.copy(nodes=it.nodes.map{n->n.copy(order=if(n.id==second)0 else 1)},settings=it.settings+mapOf("selectedNodeId" to first.toString(),"testUrl" to "http://10.0.2.2:19080/test","sniff" to "false","dnsRemote" to "tcp://10.0.2.2:19087","dnsDirect" to "tcp://10.0.2.2:19087"))}
   Assert.assertEquals(second,store.snapshot().nodes.sortedBy{it.order}.first().id)
   val backup=BackupManager(context);val original=store.snapshot();Assert.assertEquals(original,backup.`import`(backup.export(original)))
   try { store.replace(backup.`import`(byteArrayOf(1,2,3)));Assert.fail("坏备份被接受") }catch(_:Exception){}
@@ -67,7 +67,8 @@ class AcceptanceTest {
    fun apply(transform:(AppData)->AppData) { store.update(transform);File(context.getExternalFilesDir(null),"applied-config.json").writeText(ConfigBuilder.build(store.snapshot()));val generation=client.snapshot.value.generation;client.reload();waitFor("配置重载",30000){client.snapshot.value.state==2 && client.snapshot.value.generation>generation} }
    apply{it.copy(rules=listOf(RouteRule(900,"IP分流",ipCidrs="203.0.113.9/32",outbound="node:$second")))};probe("EXIT_B")
    apply{it.copy(rules=listOf(RouteRule(902,"域名分流",domains="probe.zanebox.test",outbound="node:$second")))};probe("EXIT_B","http://probe.zanebox.test:19080/probe")
-   apply{it.copy(rules=listOf(RouteRule(901,"包名分流",packages="com.zane.probe",outbound="node:$second")))};probe("EXIT_B")
+   apply{it.copy(rules=listOf(RouteRule(902,"域名分流",domains="fakeip.zanebox.test",outbound="node:$second")),settings=it.settings+("enableDnsRouting" to "false"))};probe("EXIT_B","http://fakeip.zanebox.test:19080/probe")
+   apply{it.copy(rules=listOf(RouteRule(901,"包名分流",packages="com.zane.probe",outbound="node:$second")),settings=it.settings+("enableDnsRouting" to "true"))};probe("EXIT_B")
    apply{it.copy(rules=emptyList(),settings=it.settings+mapOf("smart.ai.target" to "node:$second","smartRules.ai" to "IP-CIDR,203.0.113.9/32"))};probe("EXIT_B")
    apply{it.copy(settings=it.settings+mapOf("smart.ai.target" to "off","perAppEnabled" to "true","perAppMode" to "exclude","perAppPackages" to "com.zane.probe"))};probe("DIRECT","http://10.0.2.2:19080/probe")
    apply{it.copy(settings=it.settings+mapOf("perAppMode" to "include"))};probe("EXIT_A")

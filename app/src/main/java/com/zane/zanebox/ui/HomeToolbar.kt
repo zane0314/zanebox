@@ -19,19 +19,20 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable internal fun HomeToolbar(state:Int,onPage:(Int)->Unit,onToggle:()->Unit) {
-    Box(Modifier.fillMaxWidth().navigationBarsPadding().height(127.dp)) {
-        AndroidView(factory={ZaneHomeToolbar(it)},modifier=Modifier.fillMaxSize())
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal=24.dp).padding(top=45.dp).height(72.dp)) {
-        val centerGap=maxWidth*.2f
-        Row(Modifier.fillMaxSize(),verticalAlignment=Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).clickable{onPage(2)}.testTag("tab_2").padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                Icon(painterResource(R.drawable.zb_ref_ic_baseline_tune_24),"设置",Modifier.size(26.dp));Text(uiText("设置"),fontSize=12.sp,lineHeight=16.sp)
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom=4.dp).height(127.dp).testTag("home_toolbar")) {
+        AndroidView(factory={ZaneHomeToolbar(it).apply{importantForAccessibility=android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO}},modifier=Modifier.fillMaxSize())
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val sideWidth=maxOf(96f,48f*androidx.compose.ui.platform.LocalDensity.current.fontScale+16f).dp.coerceAtMost((maxWidth-120.dp)/2)
+            listOf(2 to .2f,1 to .8f).forEach { (page,fraction)->
+                Column(Modifier.offset(x=24.dp+(maxWidth-48.dp)*fraction-sideWidth/2,y=52.dp).size(width=sideWidth,height=58.dp)
+                    .clickable{onPage(page)}.testTag("tab_$page").padding(top=4.dp),
+                    horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {
+                    Icon(painterResource(if(page==2)R.drawable.zb_ref_ic_baseline_tune_24 else R.drawable.zb_ref_ic_anybox_smart_routing),null,Modifier.size(26.dp))
+                    Spacer(Modifier.height(3.dp))
+                    Text(uiText(if(page==2)"设置" else "智能分流"),fontSize=12.sp,lineHeight=12.sp,maxLines=1,
+                        style=androidx.compose.ui.text.TextStyle(platformStyle=androidx.compose.ui.text.PlatformTextStyle(includeFontPadding=false)))
+                }
             }
-            Spacer(Modifier.width(centerGap))
-            Column(Modifier.weight(1f).clickable{onPage(1)}.testTag("tab_1").padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                Icon(painterResource(R.drawable.zb_ref_ic_anybox_smart_routing),"智能分流",Modifier.size(26.dp));Text(uiText("智能分流"),fontSize=12.sp,lineHeight=16.sp)
-            }
-        }
         }
         val label=uiText(listOf("连接","连接中…","断开","断开中…","连接").getOrElse(state){"同步中"})
         val description=uiText("代理开关")+"："+label

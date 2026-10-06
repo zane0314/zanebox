@@ -10,11 +10,11 @@ appId: com.zane.zanebox
     id: settings_general
 - scrollUntilVisible:
     element:
-      id: select_apps
+      id: setting_perAppEnabled
     direction: DOWN
     timeout: 60000
 - tapOn:
-    id: select_apps
+    id: setting_perAppEnabled
 - extendedWaitUntil:
     visible:
       id: apps_auto
@@ -44,6 +44,11 @@ appId: com.zane.zanebox
     id: rules_menu
 - tapOn: 重置全部规则
 - tapOn: 取消
+- scrollUntilVisible:
+    element:
+      text: UI-rule
+    direction: DOWN
+    timeout: 60000
 - assertVisible: UI-rule
 - tapOn:
     id: rules_menu

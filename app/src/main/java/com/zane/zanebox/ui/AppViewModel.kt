@@ -26,7 +26,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    val store = ZaneStore(app)
+    val store = ZaneStore(app).apply {
+        if(snapshot().setting("factoryRouteDefaultsVersion")!="1")update{com.zane.zanebox.config.withFactoryRouteDefaults(it,java.util.Locale.getDefault().country)}
+    }
     val service = ServiceClient(app)
     val data = store.data
     val message = MutableStateFlow("")
@@ -53,7 +55,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun setting(key: String, value: String) {
         if(key=="ipv6Mode") { require(value in listOf("ipv4_only","prefer_ipv4","prefer_ipv6","ipv6_only"));edit { it.copy(settings=it.settings+("ipv6Mode" to value)+("ipv6" to (value!="ipv4_only").toString())+("dnsStrategy" to value)) };return }
-        if (key == "browseGroupId" || key == "theme" || key == "fontScale" || key == "uiSkin" || key == "launcherIcon" || key == "appTheme" || key == "appLanguage" || key == "showBottomBar" || key == "alwaysShowAddress" || key == "hideFromRecentApps" || key == "confirmProfileDelete") task { store.update { it.copy(settings=it.settings+(key to value)) } }
+        if (key == "browseGroupId" || key == "theme" || key == "fontScale" || key == "uiSkin" || key == "launcherIcon" || key == "appLanguage" || key == "showBottomBar" || key == "alwaysShowAddress" || key == "hideFromRecentApps" || key == "confirmProfileDelete") task { store.update { it.copy(settings=it.settings+(key to value)) } }
         else edit { it.copy(settings = it.settings + (key to value)) }
     }
     fun resetSettings()=edit { it.copy(settings=emptyMap()) }
@@ -72,14 +74,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         message.value="节点已保存，请点击应用修改"
         withContext(Dispatchers.Main) { onSaved() }
     }
-    fun factoryReset()=task { service.restore(AppData());message.value="正在清除应用配置" }
+    fun factoryReset()=task { service.restore(com.zane.zanebox.config.withFactoryRouteDefaults(AppData(),java.util.Locale.getDefault().country));message.value="正在清除应用配置" }
     fun clearCache()=task {
         require(service.snapshot.value.state !in 1..3) { "清除缓存前请先断开连接" }
         getApplication<Application>().cacheDir.listFiles()?.forEach { require(it.deleteRecursively()) { "缓存清除失败" } }
         message.value="缓存已清除"
     }
     fun importText(text: String, groupId: Long = -1) = task { importNow(text,if(groupId<0) store.snapshot().browseGroupId else groupId) }
-    private fun importNow(text: String, groupId: Long = 0) = insertParsed(SubscriptionParser.parseReport(text),groupId)
+    private fun importNow(text: String, groupId: Long = 0) {
+        val subscription=com.zane.zanebox.IncomingLink.subscription(text)
+        if(subscription!=null)pendingImport.value=PendingImport.Subscription(subscription.subscriptionUrl,subscription.name)
+        else insertParsed(SubscriptionParser.parseReport(text),groupId)
+    }
     private fun insertParsed(report: ParseReport, groupId: Long) {
         val parsed = report.nodes
         require(parsed.isNotEmpty()) { "未找到有效节点" }
@@ -97,7 +103,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if(link.subscriptionUrl.isNotBlank()) pendingImport.value=PendingImport.Subscription(link.subscriptionUrl,link.name) else offerTextNow(link.text)
     }
     fun offerText(text:String) = task { offerTextNow(text) }
-    private fun offerTextNow(text:String) { pendingImport.value=PendingImport.Nodes(SubscriptionParser.parseReport(text)) }
+    private fun offerTextNow(text:String) {
+        val subscription=com.zane.zanebox.IncomingLink.subscription(text)
+        pendingImport.value=if(subscription!=null)PendingImport.Subscription(subscription.subscriptionUrl,subscription.name) else PendingImport.Nodes(SubscriptionParser.parseReport(text))
+    }
     fun offerStream(uri:Uri) = task {
         val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { input -> readLimited(input) }
         if(isZip(bytes)) { val restored=BackupManager(getApplication()).`import`(bytes);pendingImport.value=PendingImport.Backup(restored) }
@@ -157,15 +166,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stageAsset(kind,bytes);message.value="资源已导入，正在进行内核校验"
     }
     fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { it.copy(settings=it.settings+("smartRules.$key" to content)+("smartUpdated.$key" to System.currentTimeMillis().toString())) };message.value="分流列表已更新，请点击应用修改" }
-    fun selectSmartTarget(key:String,value:String)=edit { d ->
-        val assets=mapOf("youtube" to listOf("YouTube"),"telegram" to listOf("Telegram"),"netflix" to listOf("Netflix"),"disney" to listOf("Disney"),"tiktok" to listOf("TikTok"),"x" to listOf("Twitter"),"meta" to listOf("Instagram","Facebook"),"spotify" to listOf("Spotify"),"google" to listOf("Google"),"ai" to listOf("OpenAI"))
-        var settings=d.settings+("smart.$key.target" to value)
-        if(value!="off" && !d.settings.containsKey("smartRules.$key")) assets[key]?.let { names ->
-            val text=names.joinToString("\n"){name->getApplication<Application>().assets.open("anybox-rules/$name.list").bufferedReader().use{it.readText()}}
-            settings=settings+("smartRules.$key" to text)
-        }
-        d.copy(settings=settings)
+    fun moveSmartPolicy(key:String,step:Int)=edit { data->
+        require(step==1 || step==-1)
+        val order=com.zane.zanebox.config.smartPolicyKeys(data).toMutableList()
+        val from=order.indexOf(key);val to=from+step
+        if(from>=0 && to in order.indices)java.util.Collections.swap(order,from,to)
+        data.copy(settings=data.settings+("smartPolicyOrder" to order.joinToString("\n")))
     }
+    fun selectSmartTarget(key:String,value:String)=edit { d ->
+        com.zane.zanebox.config.withBuiltinSmartRules(d.copy(settings=d.settings+("smart.$key.target" to value))) { path ->
+            getApplication<Application>().assets.open(path).bufferedReader().use { it.readText() }
+        }
+    }
+
     fun deleteNode(id:Long)=edit { removeNodes(it,setOf(id)) }
     fun clearGroup(id:Long)=edit { d->removeNodes(d,d.nodes.filter{it.groupId==id}.map{it.id}.toSet()) }
     private fun removeNodes(d:AppData,ids:Set<Long>):AppData {

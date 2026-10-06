@@ -32,7 +32,7 @@ appId: com.zane.zanebox
     id: page_back
 - tapOn:
     id: settings_about
-- assertVisible: 关于 zanebox
+- assertVisible: 关于 Links
 - tapOn: 开源许可与致谢
 - assertVisible: 开源许可
 - takeScreenshot: reports/ui-1.0.2/current/licenses
@@ -41,13 +41,9 @@ appId: com.zane.zanebox
 - tapOn:
     id: page_back
 - tapOn:
-    id: settings_general
-- scrollUntilVisible:
-    element:
-      text: 备份与恢复
-    direction: DOWN
-    timeout: 60000
-- tapOn: 备份与恢复
+    id: network_tools
+- tapOn:
+    id: tools_backup_tab
 - assertVisible: 本地备份
 - takeScreenshot: reports/ui-1.0.2/current/backup
 - scrollUntilVisible:
@@ -58,8 +54,6 @@ appId: com.zane.zanebox
 - tapOn: WebDAV 设置
 - assertVisible: 测试连接
 - takeScreenshot: reports/ui-1.0.2/current/webdav
-- tapOn:
-    id: page_back
 - tapOn:
     id: page_back
 - tapOn:

@@ -71,16 +71,19 @@ import org.json.JSONObject
         }
         "rules"->UiPageList("路由规则",onDismiss,action={IconButton(onClick={ruleEdit(null)},modifier=Modifier.testTag("add_rule")){Icon(Icons.Outlined.Add,"添加规则")};UiMenu(listOf("重置全部规则" to {confirmation="删除全部路由规则？" to {vm.edit { it.copy(rules=emptyList()) } }},"管理路由资产" to {open("assets")}),"rules_menu")}) {
             if(data.rules.isEmpty())item{UiRow("暂无路由规则","点击右上角添加规则")}
-            items(data.rules.sortedBy{it.order},key={it.id}){r->UiCard{
+            listOf(true,false).forEach { front->
+                item{UiSection(if(front)"前置路由规则" else "后置路由规则")}
+            items(data.rules.filter{it.prioritize==front}.sortedBy{it.order},key={it.id}){r->UiCard{
                 UiRow(r.name,targetName(r.outbound,data),Icons.Outlined.AccountTree,onClick={ruleEdit(r)},modifier=Modifier.testTag("rule_${r.id}"),trailing={UiSwitch(r.enabled,{value->vm.edit{d->d.copy(rules=d.rules.map{if(it.id==r.id)it.copy(enabled=value)else it})}})})
                 Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.End) {
                     UiMenu(listOf(
                         "编辑" to {ruleEdit(r)},
                         "上移" to {vm.edit { d ->
-                            val list=d.rules.sortedBy{it.order}.toMutableList()
+                            val list=d.rules.filter{it.prioritize==r.prioritize}.sortedBy{it.order}.toMutableList()
                             val i=list.indexOfFirst{it.id==r.id}
                             if(i>0)java.util.Collections.swap(list,i,i-1)
-                            d.copy(rules=list.mapIndexed{j,v->v.copy(order=j)})
+                            val orders=list.mapIndexed{j,v->v.id to j}.toMap()
+                            d.copy(rules=d.rules.map{v->orders[v.id]?.let{v.copy(order=it)} ?:v})
                         }},
                         "删除" to {
                             confirmation="删除规则 ${r.name}？" to {
@@ -90,6 +93,7 @@ import org.json.JSONObject
                     ))
                 }
             }}
+            }
             item{UiCard{UiRow("管理路由资产","本地 GeoIP / Geosite 与规则集",Icons.Outlined.Storage,onClick={open("assets")})}}
         }
         "merges"->UiPageList("节点汇总组",onDismiss,action={IconButton(onClick={mergeEdit(null)},modifier=Modifier.testTag("add_merge")){Icon(Icons.Outlined.Add,"添加汇总组")}}) {
@@ -107,8 +111,12 @@ import org.json.JSONObject
         "tools"->{var tab by remember{mutableIntStateOf(0)}
             UiPageList("工具",onDismiss) {
                 item{TabRow(tab){Tab(tab==0,{tab=0},text={Text(uiText("网络"))},modifier=Modifier.testTag("tools_network_tab"));Tab(tab==1,{tab=1},text={Text(uiText("备份"))},modifier=Modifier.testTag("tools_backup_tab"))}}
-                if(tab==0)item{UiCard{UiRow("STUN / NAT 测试","检测当前网络映射与过滤行为",Icons.Outlined.NetworkCheck,onClick={open("stun")},modifier=Modifier.testTag("stun_tool"));UiRow("连接监控","当前代理连接",Icons.Outlined.Cable,onClick={vm.service.refreshConnections();open("connections")});UiRow("流量统计","应用、域名与节点",Icons.Outlined.BarChart,onClick={open("traffic")});UiRow("Clash 面板","本地 YACD",Icons.Outlined.Dashboard,onClick={vm.service.openPanel();open("panel")})}}
-                else item{BackupRows(data,vm,open,backup,restore)}
+                if(tab==0)item{UiCard{
+                    UiRow("STUN / NAT 测试","检测当前网络映射与过滤行为",Icons.Outlined.NetworkCheck,onClick={open("stun")},modifier=Modifier.testTag("stun_tool"))
+                    UiRow("连接监控","当前代理连接",Icons.Outlined.Cable,onClick={vm.service.refreshConnections();open("connections")})
+                    UiRow("流量统计","应用、域名与节点",Icons.Outlined.BarChart,onClick={open("traffic")})
+                    UiRow("Clash 面板","本地 YACD",Icons.Outlined.Dashboard,onClick={vm.service.openPanel();open("panel")})
+                }} else item{BackupRows(data,vm,open,backup,restore)}
             }
         }
         "stun"->ToolsPanel(vm,onDismiss)
@@ -122,18 +130,17 @@ import org.json.JSONObject
         "routing-probe","site-cards","ruleset-preview","penetration","geo-status"->UiDiagnostics(page,data,vm,onDismiss)
         "assets"->AssetPage(data,vm,onDismiss,form)
         "document"->UiPageList("文档",onDismiss){item{UiCard{UiRow("sing-box 文档","协议与路由配置参考",Icons.Outlined.Description,onClick={context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://sing-box.sagernet.org/")))})}}}
-        "about"->UiPageList("关于 zanebox",onDismiss) {
-            item{UiCard{UiRow("zanebox",BuildConfig.VERSION_NAME+" / "+BuildConfig.VERSION_CODE,Icons.Outlined.Info);UiRow("内核","AnyBox libcore / sing-box",Icons.Outlined.Memory);UiRow("UI 基线","AnyBox 2.1.9",Icons.Outlined.Palette)}}
+        "about"->UiPageList("关于 Links",onDismiss) {
+            item{UiCard{UiRow("Links",BuildConfig.VERSION_NAME+" / "+BuildConfig.VERSION_CODE,Icons.Outlined.Info);UiRow("内核","AnyBox libcore / sing-box",Icons.Outlined.Memory);UiRow("UI 基线","AnyBox 2.1.9",Icons.Outlined.Palette)}}
             item{UiCard{UiRow("开源许可与致谢","sing-box、SagerNet、AndroidX 与 Kotlin",Icons.Outlined.Description,onClick={open("licenses")})}}
         }
-        "licenses"->UiPageList("开源许可",onDismiss) {item{Text(uiText("zanebox 使用 AnyBox libcore / sing-box（GPL-3.0），AndroidX（Apache-2.0）、Kotlin（Apache-2.0）、OkHttp（Apache-2.0）、SnakeYAML（Apache-2.0）和 ZXing（Apache-2.0）。完整上游源码与许可证保存在本工程 native 目录。"));}}
+        "licenses"->UiPageList("开源许可",onDismiss) {item{Text(uiText("Links 使用 AnyBox libcore / sing-box（GPL-3.0），AndroidX（Apache-2.0）、Kotlin（Apache-2.0）、OkHttp（Apache-2.0）、SnakeYAML（Apache-2.0）和 ZXing（Apache-2.0）。完整上游源码与许可证保存在本工程 native 目录。"));}}
     }
     confirmation?.let{(title,action)->UiAlertDialog(onDismissRequest={confirmation=null},title={Text(uiText("确认操作"))},text={Text(title)},confirmButton={TextButton(onClick={action();confirmation=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirmation=null}){Text(uiText("取消"))}})}
 }
 
 @Composable private fun PreferencesPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit,open:(String)->Unit,form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit) {
     var selecting by remember{mutableStateOf<Preference?>(null)}
-    var colorPicker by remember{mutableStateOf(false)}
     var confirmation by remember{mutableStateOf<Pair<String,()->Unit>?>(null)}
     val context=LocalContext.current
     val sections=preferenceSections(data)
@@ -144,33 +151,30 @@ import org.json.JSONObject
                 Column { prefs.forEachIndexed{index,p->
                     val value=if(p.key=="ipv6Mode")data.setting("dnsStrategy",if(data.bool("ipv6"))"prefer_ipv4" else "ipv4_only") else data.setting(p.key,p.default)
                     val visual=preferenceAppearance[p.key]
-                    val summary=p.availability.ifBlank{if(p.boolean)visual?.summary.orEmpty() else p.choices.firstOrNull{it.first==value}?.second ?:value.ifBlank{if(p.key=="appTheme")"跟随皮肤" else "未设置"}}
+                    val summary=if(p.key=="perAppEnabled")(if(!data.bool("perAppEnabled"))"关闭" else if(data.setting("perAppMode","exclude")=="include")"代理" else "绕过")+" · ${data.setting("perAppPackages").lines().count{it.isNotBlank()}} 个应用" else p.availability.ifBlank{if(p.boolean)visual?.summary.orEmpty() else p.choices.firstOrNull{it.first==value}?.second ?:value.ifBlank{"未设置"}}
                     fun setToggle(enabled:Boolean) {
                         if(p.key=="appendHttpProxy" && enabled && data.bool("disableMixedInbound"))vm.message.value="请先开启本地 mixed 入口"
                         else if(p.key=="disableMixedInbound" && enabled && data.bool("appendHttpProxy"))vm.message.value="请先关闭追加 HTTP 代理"
                         else if(p.key=="statsEnabled")vm.service.setTrafficEnabled(enabled) else vm.setting(p.key,enabled.toString())
                     }
-                    UiRow(if(p.key=="showBottomBar")p.title else visual?.title ?:p.title,summary,modifier=Modifier.testTag("setting_${p.key}"),iconRes=visual?.icon ?:0,reserveIcon=true,minHeight=58.dp,chevron=false,summaryLines=2,
-                        onClick=if(p.availability.isNotBlank())null else ({if(p.boolean)setToggle(!data.bool(p.key,p.default.toBoolean())) else if(p.key=="appTheme")colorPicker=true else if(p.choices.isNotEmpty())selecting=p else form(visual?.title ?:p.title,listOf(p.title to value)){v->validatePreference(p.key,v[0]);vm.setting(p.key,v[0])}}),
-                        trailing=if(p.boolean)({Box(Modifier.size(width=48.dp,height=36.dp),contentAlignment=androidx.compose.ui.Alignment.Center){UiSwitch(data.bool(p.key,p.default.toBoolean()),::setToggle,modifier=Modifier)}})else if(p.key=="appTheme")({Box(Modifier.size(26.dp).border(2.5.dp,MaterialTheme.colorScheme.primary,androidx.compose.foundation.shape.CircleShape),contentAlignment=androidx.compose.ui.Alignment.Center){Surface(shape=androidx.compose.foundation.shape.CircleShape,color=MaterialTheme.colorScheme.primary,modifier=Modifier.size(8.dp)) {}}})else null)
+                    UiRow(if(p.key=="showBottomBar")p.title else visual?.title ?:p.title,summary,modifier=Modifier.testTag("setting_${p.key}"),iconRes=visual?.icon ?:0,reserveIcon=true,minHeight=58.dp,chevron=p.key=="perAppEnabled",summaryLines=2,
+                        onClick=if(p.availability.isNotBlank())null else ({if(p.key=="perAppEnabled")open("apps") else if(p.boolean)setToggle(!data.bool(p.key,p.default.toBoolean())) else if(p.choices.isNotEmpty())selecting=p else form(visual?.title ?:p.title,listOf(p.title to value)){v->validatePreference(p.key,v[0]);vm.setting(p.key,v[0])}}),
+                        trailing=if(p.key=="perAppEnabled")({UiSwitch(data.bool("perAppEnabled"),null,Modifier.testTag("per_app_indicator"))})else if(p.boolean)({Box(Modifier.size(width=48.dp,height=36.dp),contentAlignment=androidx.compose.ui.Alignment.Center){UiSwitch(data.bool(p.key,p.default.toBoolean()),::setToggle,modifier=Modifier)}})else null)
                     if(index<prefs.lastIndex)HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),thickness=.5.dp,color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))
                 }}
             }}
-            if(title=="路由设置")item{UiCard{UiRow("选择应用", "已选 ${data.setting("perAppPackages").lines().count{it.isNotBlank()}} 个应用",Icons.Outlined.Apps,onClick={open("apps")},modifier=Modifier.testTag("select_apps"))}}
             if(title=="代理共享")item{UiCard{UiRow("局域网地址",lanAddresses());UiRow("共享代理端口",if(data.bool("shareEnabled"))data.setting("sharePort","2081")else data.setting("mixedPort","2080"))}}
         }
         item{UiSection("数据管理")}
-        item{UiCard{UiRow("备份与恢复",icon=Icons.Outlined.Backup,onClick={open("backup")});UiRow("WebDAV 设置",icon=Icons.Outlined.Cloud,onClick={open("webdav-settings")})}}
         item{UiCard{UiRow("重置设置","保留节点、分组和路由规则",onClick={confirmation="将应用设置恢复默认值？" to {vm.resetSettings()}},modifier=Modifier.testTag("reset_settings"));UiRow("清除缓存",onClick={confirmation="清除应用缓存？" to {vm.clearCache()}},modifier=Modifier.testTag("clear_cache"));UiRow("恢复出厂设置","清除节点、分组、规则和设置",onClick={confirmation="清除全部应用配置？此操作会断开代理。" to {vm.factoryReset()}},modifier=Modifier.testTag("factory_reset"))}}
     }
     selecting?.let{p->ChoiceDialog(p.title,data.setting(p.key,p.default),p.choices,{selecting=null}){value->
         if(p.key=="serviceMode" && vm.service.snapshot.value.state in 1..3)vm.message.value="切换服务模式前请先断开连接"
         else runCatching {if(p.key=="launcherIcon")applyLauncherIcon(context,value);vm.setting(p.key,value)}.onFailure {vm.message.value=it.message ?: "设置失败"}
     }}
-    if(colorPicker)ThemeColorDialog(data.setting("appTheme"),{colorPicker=false},{value->vm.setting("appTheme",value);colorPicker=false}) {
-        colorPicker=false;form("主题颜色",listOf("#RRGGBB / #AARRGGBB" to data.setting("appTheme"))){values->validatePreference("appTheme",values[0]);vm.setting("appTheme",values[0])}
-    }
+
     confirmation?.let{(title,action)->UiAlertDialog(onDismissRequest={confirmation=null},title={Text(uiText("确认操作"))},text={Text(uiText(title))},confirmButton={TextButton(onClick={action();confirmation=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirmation=null}){Text(uiText("取消"))}})}
+
 }
 internal fun validatePreference(key:String,value:String) {
     if(key.startsWith("nodeRegion."))require(value in listOf("","hk","us","kr","jp","sg","tw")) { "区域须为 hk/us/kr/jp/sg/tw，或留空自动" }
@@ -182,7 +186,6 @@ internal fun validatePreference(key:String,value:String) {
         "muxMaxStreams"->require(value.toIntOrNull() in 1..1024){"流数须为 1–1024"}
         "urlTestTolerance"->require(value.toIntOrNull() in 0..65535){"容差须为 0–65535"}
         "urlTestInterval"->require(value.matches(Regex("[1-9][0-9]*(ms|s|m|h)"))){"间隔无效"}
-        "appTheme"->require(value.isBlank() || value.matches(Regex("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?"))){"请输入 #RRGGBB 或 #AARRGGBB，留空跟随皮肤"}
         "globalCustomConfig"->if(value.isNotBlank())JSONObject(value)
         "testUrl","rulesGeositeUrl","rulesGeoipUrl"->{val u=java.net.URI(value);require(u.scheme in listOf("http","https") && !u.host.isNullOrBlank() && u.userInfo==null){ "请输入有效 URL" }}
     }
@@ -235,17 +238,3 @@ internal fun validatePreference(key:String,value:String) {
 private fun lanAddresses():String=runCatching {
     java.net.NetworkInterface.getNetworkInterfaces().toList().filter{it.isUp && !it.isLoopback && !it.name.startsWith("tun")}.flatMap{network->network.inetAddresses.toList().filterIsInstance<java.net.Inet4Address>().filter{!it.isLoopbackAddress}.map{"${network.name}: ${it.hostAddress}"}}.joinToString(" · ").ifBlank{"暂无可用地址"}
 }.getOrDefault("暂无可用地址")
-
-@Composable private fun ThemeColorDialog(current:String,onDismiss:()->Unit,onChoose:(String)->Unit,custom:()->Unit) {
-    UiAlertDialog(modifier=Modifier.semantics{testTagsAsResourceId=true}.testTag("theme_color_picker"),onDismissRequest=onDismiss,title={Text(uiText("主题颜色"))},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        themePresetColors.chunked(5).forEachIndexed{row,colors->Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            colors.forEachIndexed{column,hex-> val color=Color(("FF"+hex.removePrefix("#")).toLong(16))
-                IconButton(onClick={onChoose(hex)},modifier=Modifier.size(48.dp).semantics{contentDescription=hex}.testTag("theme_color_${row*5+column+1}")) {
-                    Surface(shape=androidx.compose.foundation.shape.CircleShape,color=color,modifier=Modifier.size(32.dp)) {if(current==hex)Icon(Icons.Outlined.Check,null,tint=Color.White)}
-                }
-            }
-        }}
-        TextButton(onClick={onChoose("")},modifier=Modifier.testTag("theme_color_skin")){Text(uiText("跟随皮肤"))}
-        TextButton(onClick=custom,modifier=Modifier.testTag("theme_color_custom")){Text(uiText("自定义颜色"))}
-    }},confirmButton={TextButton(onClick=onDismiss){Text(uiText("取消"))}})
-}

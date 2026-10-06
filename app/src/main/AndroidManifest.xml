@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <application android:name=".ZaneApplication" android:allowBackup="false" android:label="zanebox" android:icon="@drawable/ic_zanebox" android:theme="@style/Theme.ZaneBox" android:usesCleartextTraffic="true">
+    <application android:name=".ZaneApplication" android:allowBackup="false" android:label="Links" android:roundIcon="@mipmap/ic_links" android:icon="@mipmap/ic_links" android:theme="@style/Theme.ZaneBox" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask">
             <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="zanebox"/></intent-filter>
             <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="sn" android:host="subscription"/></intent-filter>
@@ -23,29 +23,29 @@
             <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
         </activity>
         <activity android:name=".LauncherActivity" android:exported="false" android:taskAffinity="" android:noHistory="true" android:excludeFromRecents="true"/>
-        <activity-alias android:name=".launcher.PrismAlias" android:enabled="true" android:exported="true" android:icon="@drawable/zb_launcher_prism" android:label="zanebox" android:targetActivity=".LauncherActivity">
+        <activity-alias android:name=".launcher.PrismAlias" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_links" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".launcher.PixelAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_pixel" android:label="zanebox" android:targetActivity=".LauncherActivity">
+        <activity-alias android:name=".launcher.PixelAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_pixel" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".launcher.NodeNAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_node_n" android:label="zanebox" android:targetActivity=".LauncherActivity">
+        <activity-alias android:name=".launcher.NodeNAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_node_n" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".launcher.ChannelGateAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_channel_gate" android:label="zanebox" android:targetActivity=".LauncherActivity">
+        <activity-alias android:name=".launcher.ChannelGateAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_channel_gate" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".launcher.ConfluenceAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_confluence" android:label="zanebox" android:targetActivity=".LauncherActivity">
+        <activity-alias android:name=".launcher.ConfluenceAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_confluence" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".launcher.LaunchPathAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_launch_path" android:label="zanebox" android:targetActivity=".LauncherActivity">
+        <activity-alias android:name=".launcher.LaunchPathAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_launch_path" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
         <service android:name=".runtime.ZaneVpnService" android:process=":bg" android:exported="false" android:permission="android.permission.BIND_VPN_SERVICE" android:foregroundServiceType="systemExempted">
             <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
         </service>
         <service android:name=".runtime.ZaneProxyService" android:process=":bg" android:exported="false" android:foregroundServiceType="specialUse"><property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="proxy"/></service>
-        <service android:name=".runtime.QuickTileService" android:process=":bg" android:exported="true" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:icon="@drawable/ic_zanebox" android:label="zanebox">
+        <service android:name=".runtime.QuickTileService" android:process=":bg" android:exported="true" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:icon="@drawable/ic_zanebox" android:label="Links">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
         </service>
         <receiver android:name=".runtime.StartReceiver" android:process=":bg" android:exported="false">

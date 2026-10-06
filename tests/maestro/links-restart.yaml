@@ -1,0 +1,44 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: connect_toggle
+- runFlow:
+    when:
+      visible:
+        id: android:id/button1
+    commands:
+    - tapOn:
+        id: android:id/button1
+- extendedWaitUntil:
+    visible: .*代理已连接.*
+    timeout: 30000
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_sniff
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_sniff
+- assertVisible: 重启服务
+- takeScreenshot: reports/ui-1.0.2/current/links-restart-settings
+- tapOn:
+    id: apply_changes
+- extendedWaitUntil:
+    notVisible:
+      id: apply_changes
+    timeout: 30000
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible: .*代理已连接.*
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: .*代理未连接.*
+    timeout: 30000

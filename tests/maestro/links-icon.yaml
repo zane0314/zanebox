@@ -1,0 +1,10 @@
+appId: com.zane.zanebox
+---
+- pressKey: Home
+- swipe:
+    direction: UP
+- assertVisible: Links
+- takeScreenshot: reports/ui-1.0.2/current/links-launcher-icon
+- tapOn: Links
+- assertVisible:
+    id: page_back|connection_state

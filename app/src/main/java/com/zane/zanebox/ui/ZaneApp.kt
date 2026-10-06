@@ -61,6 +61,8 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
     var editorSaving by remember{mutableStateOf(false)}
     var backupScope by remember{mutableStateOf(com.zane.zanebox.backup.BackupScope())}
     var info by remember{mutableStateOf<Node?>(null)}
+    var initialProtocol by remember { mutableStateOf("vless") }
+    var groupProxy by remember { mutableStateOf("") }
     var nodeEdit by remember { mutableStateOf(false) };var editNode by remember { mutableStateOf<Node?>(null) }
     var groupEdit by remember { mutableStateOf(false) };var editGroup by remember { mutableStateOf<Group?>(null) }
     var ruleEdit by remember { mutableStateOf(false) };var editRule by remember { mutableStateOf<RouteRule?>(null) }
@@ -72,6 +74,7 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
     var selector by remember { mutableStateOf(false) }
     var dirty by rememberSaveable { mutableStateOf(false) }
     val snackbar=remember { SnackbarHostState() }
+    val subpageLists=remember{mutableMapOf<String,androidx.compose.foundation.lazy.LazyListState>()}
     val context=LocalContext.current
     LaunchedEffect(vm) {
         vm.message.filter { it.isNotBlank() }.collectLatest { message ->
@@ -89,7 +92,7 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
     fun share(text:String) {if(text.isBlank()){vm.message.value="没有可分享的内容";return};runCatching{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text),"分享节点"))}.onFailure { vm.message.value=it.message ?: "分享失败" }}
     fun copy(text:String) {if(text.isBlank()){vm.message.value="没有可复制的内容";return};(context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("zanebox",text));vm.message.value="已复制"}
     fun showQr(text:String) {if(text.isBlank())vm.message.value="没有可生成二维码的内容" else qr=text}
-    fun nodeForm(n:Node?=null) {editNode=n;editorSaveError="";nodeEdit=true}
+    fun nodeForm(n:Node?=null,protocol:String="vless") {initialProtocol=protocol;editNode=n;editorSaveError="";nodeEdit=true}
     fun groupForm(g:Group?=null) {editGroup=g;editorSaveError="";groupEdit=true}
     fun ruleForm(r:RouteRule?=null) {editRule=r;editorSaveError="";ruleEdit=true}
     fun mergeForm(m:MergeGroup?=null) {editMerge=m;editorSaveError="";mergeEdit=true}
@@ -112,12 +115,13 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
     val restoreFile=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){it?.let {uri->confirm="恢复备份将替换当前全部配置，是否继续？" to {vm.restore(uri)}}}
     val addActions=listOf("扫码导入" to {scan.launch(com.journeyapps.barcodescanner.ScanOptions().setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE).setPrompt("扫描节点二维码").setBeepEnabled(false))},
         "从剪贴板导入" to {val cb=context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager;vm.importText(cb.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty(),data.browseGroupId)},
-        "从文件导入" to {importFile.launch(arrayOf("*/*"))},"手动添加" to {nodeForm()},
+        "从文件导入" to {importFile.launch(arrayOf("*/*"))},"手动添加" to {nodeForm()},"创建链式代理" to {nodeForm(protocol="chain")},
         "导入文本" to {form("导入文本",listOf("链接 / Base64 / Clash / sing-box" to "")){vm.importText(it[0],data.browseGroupId)}})
     val currentGroup=data.groups.firstOrNull{it.id==data.browseGroupId}
     val enabledIds=remember(data.groups){data.groups.filter{it.enabled}.map{it.id}.toSet()}
     val activeNodes=remember(data.nodes,enabledIds){data.nodes.filter{it.groupId in enabledIds}}
-    val moreActions:List<Pair<String,()->Unit>> =listOf("更新当前订阅" to {if(currentGroup==null)vm.message.value="请先选择订阅分组" else vm.updateGroup(currentGroup)},
+    val groupActions=if(currentGroup!=null)listOf("前置代理" to {groupProxy="front"},"后置代理（落地）" to {groupProxy="landing"}) else emptyList()
+    val moreActions:List<Pair<String,()->Unit>> =groupActions+listOf("更新当前订阅" to {if(currentGroup==null)vm.message.value="请先选择订阅分组" else vm.updateGroup(currentGroup)},
         "测试当前分组延迟" to {vm.service.testNodes(activeNodes.filter{currentGroup==null || it.groupId==currentGroup.id}.map{it.id})},
         "全部更新（全部订阅）" to vm::updateAllGroups,
         "全部测速（全部分组）" to {vm.service.testNodes(data.nodes.filter{n->data.groups.any{it.id==n.groupId && it.enabled}}.map{it.id})},"取消测速" to {vm.service.cancelTests()},
@@ -128,7 +132,7 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
                                 .sortedWith(Comparator{a,b->val g=data.groups.firstOrNull{it.id==a.groupId};if(a.groupId!=b.groupId && currentGroup==null)(g?.order ?:0).compareTo(data.groups.firstOrNull{it.id==b.groupId}?.order ?:0) else nodeComparator(g?.let{nodeSortMode(data,it)} ?: NodeSortMode.DEFAULT).compare(a,b)})}
     BackHandler(page!=0 && subpage.isBlank()) {page=0}
     ZaneTheme(data) {
-        CompositionLocalProvider(LocalUiSnackbar provides snackbar,LocalUiBusy provides busy) {
+        CompositionLocalProvider(LocalUiSnackbar provides snackbar,LocalUiBusy provides busy,LocalUiReload provides (if(dirty && runtime.state==2)({vm.service.reload()})else null)) {
         Box(Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}) {
             UiBackdrop(Modifier.fillMaxSize(),home=page==0)
             NativeHomeAppearance(page==0) {
@@ -136,18 +140,13 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
                 topBar={if(page!=0)TopAppBar(expandedHeight=56.dp,title={Text(uiText(if(page==1)"智能分流" else "设置"),fontSize=20.sp,modifier=Modifier.padding(start=16.dp))},
                     navigationIcon={IconButton(onClick={page=0},modifier=Modifier.testTag("main_back")){Icon(Icons.AutoMirrored.Outlined.ArrowBack,"返回")}},
                     actions={if(page==1)SmartMenu(data,vm){subpage=it}},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
-                snackbarHost={SnackbarHost(snackbar)},
+                snackbarHost={if(subpage.isBlank() && !nodeEdit && !groupEdit && !ruleEdit && !mergeEdit && editor==null && info==null && subscriptionOptions==null && speedNode==null)SnackbarHost(snackbar)},
                 bottomBar={Column {
-                    if(dirty && runtime.state==2)Surface(color=MaterialTheme.colorScheme.surface) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text(uiText("重载代理服务以应用修改"),Modifier.weight(1f),fontSize=12.sp)
-                            TextButton(onClick={vm.service.reload()},modifier=Modifier.testTag("apply_changes")){Text(uiText("应用"))}
-                        }
-                    }
+                    if(dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},if(page==0 && data.bool("showBottomBar",true))Modifier else Modifier.navigationBarsPadding())
                     if(page==0 && data.bool("showBottomBar",true))HomeToolbar(runtime.state,{page=it},::toggle)
                 }}) {padding->
-                LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("page_list"),
-                    contentPadding=PaddingValues(horizontal=16.dp,vertical=if(page==0)2.dp else 0.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("page_list"),
+                    contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=if(page==0)8.dp else 16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     when(page) {
                         0->{
                             item { Row(Modifier.fillMaxWidth().padding(top=2.dp,bottom=36.dp),verticalAlignment=Alignment.Top) {
@@ -173,7 +172,7 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
                                     modifier=Modifier.alpha(if(g.enabled)1f else .45f).testTag("group_${g.id}").combinedClickable(onClick={vm.setting("browseGroupId",g.id.toString())},onLongClick={vm.edit{d->d.copy(groups=d.groups.map{if(it.id==g.id)it.copy(enabled=!it.enabled)else it})}})) {Text(g.name,Modifier.padding(horizontal=14.dp,vertical=10.dp),fontSize=12.sp)}}
                             } }
                             item {HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))}
-                            if(currentGroup!=null)item {UiRow(currentGroup.name,currentGroup.userInfo.ifBlank{"${data.nodes.count{it.groupId==currentGroup.id}} 个节点"},modifier=Modifier.testTag("group_summary"),onClick={groupForm(currentGroup)},trailing={UiMenu(listOf("编辑" to {groupForm(currentGroup)},"订阅选项" to {subscriptionOptions=currentGroup},"分享分组" to {share(shareText(data.nodes.filter{it.groupId==currentGroup.id}))},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除分组及其全部节点？" to {vm.deleteGroup(currentGroup.id)}else vm.deleteGroup(currentGroup.id)}),"group_menu_${currentGroup.id}")})}
+                            if(currentGroup!=null)item {UiRow(currentGroup.name,currentGroup.userInfo.ifBlank{"${data.nodes.count{it.groupId==currentGroup.id}} 个节点"},modifier=Modifier.testTag("group_summary"),onClick={groupForm(currentGroup)},trailing={UiMenu(groupActions+listOf("编辑" to {groupForm(currentGroup)},"订阅选项" to {subscriptionOptions=currentGroup},"分享分组" to {share(shareText(data.nodes.filter{it.groupId==currentGroup.id}))},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除分组及其全部节点？" to {vm.deleteGroup(currentGroup.id)}else vm.deleteGroup(currentGroup.id)}),"group_menu_${currentGroup.id}")})}
                             val nodes=displayNodes
                             items(nodes,key={it.id}){n->
                                 val enabled=data.groups.firstOrNull{it.id==n.groupId}?.enabled==true
@@ -198,11 +197,15 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
             }
             }
             if(busy)LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter).testTag("busy"))
-            if(subpage.isNotBlank())SettingsDestination(subpage.substringAfterLast('>'),data,vm,{subpage=subpage.substringBeforeLast('>',"")},{subpage="$subpage>$it"},::form,
+            if(subpage.isNotBlank())CompositionLocalProvider(LocalUiListState provides subpageLists.getOrPut(subpage){androidx.compose.foundation.lazy.LazyListState()}) {SettingsDestination(subpage.substringAfterLast('>'),data,vm,{subpage=subpage.substringBeforeLast('>',"")},{subpage="$subpage>$it"},::form,
                 backup={scope->backupScope=scope;backupFile.launch("zanebox-backup.zip")},restore={restoreFile.launch(arrayOf("application/zip","application/octet-stream"))},
-                groupEdit=::groupForm,ruleEdit=::ruleForm,mergeEdit=::mergeForm,subscriptionEdit={subscriptionOptions=it},share=::share,copy=::copy,qr=::showQr,exportNodes=::exportNodes,toggle=::toggle)
+                groupEdit=::groupForm,ruleEdit=::ruleForm,mergeEdit=::mergeForm,subscriptionEdit={subscriptionOptions=it},share=::share,copy=::copy,qr=::showQr,exportNodes=::exportNodes,toggle=::toggle)}
             if(selector)ChoiceDialog("跳转分组",data.browseGroupId.toString(),listOf("0" to "全部分组")+data.groups.map{it.id.toString() to it.name},{selector=false}){vm.setting("browseGroupId",it)}
-            if(nodeEdit)NodeEditor(editNode,data,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@NodeEditor;editorSaving=true;
+            if(groupProxy.isNotBlank() && currentGroup!=null)ChoiceDialog(if(groupProxy=="front")"前置代理" else "后置代理（落地）",
+        (if(groupProxy=="front")currentGroup.frontProxy else currentGroup.landingProxy).toString(),
+        listOf("0" to "无")+data.nodes.filter { JSONObject(it.outbound).optString("type") !in listOf("chain","custom") }.map{it.id.toString() to it.name},
+        {groupProxy=""}) { id->val front=groupProxy=="front";vm.saveGroup(if(front)currentGroup.copy(frontProxy=id.toLong())else currentGroup.copy(landingProxy=id.toLong()),false);groupProxy="" }
+    if(nodeEdit)NodeEditor(editNode,data,initialProtocol=initialProtocol,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@NodeEditor;editorSaving=true;
                 vm.saveNode(value,onSaved={editorSaving=false;nodeEdit=false},onError={editorSaving=false;editorSaveError=it})
             }
             if(groupEdit)GroupEditor(editGroup,data,{groupEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@GroupEditor;editorSaving=true;val g=value.copy(id=editGroup?.id ?: vm.store.nextId(),order=editGroup?.order ?: data.groups.size);vm.saveGroup(g,g.subscriptionUrl.isNotBlank() && (editGroup==null || editGroup?.subscriptionUrl!=g.subscriptionUrl),onSaved={editorSaving=false;groupEdit=false},onError={editorSaving=false;editorSaveError=it})}

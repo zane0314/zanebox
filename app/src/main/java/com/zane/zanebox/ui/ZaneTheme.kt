@@ -66,7 +66,7 @@ data class ZaneSkinPalette(
 
 private val PrismLight = ZaneSkinPalette(
     name = "prism",
-    primary = Color(0xFF229ED9), primaryDark = Color(0xFF168AC0),
+    primary = Color(0xFF176D95), primaryDark = Color(0xFF176D95),
     background = Color(0xFFEAEBF3), surface = Color(0x66FFFFFF), surfaceElevated = Color(0xFFF7F8FA),
     onSurface = Color(0xFF1D2733), secondaryText = Color(0xFF525E6C), divider = Color(0xFFE8EAED),
     iconTile = Color(0xFFE5F4FB), selectedSurface = Color(0x14229ED9), success = Color(0xFF248A3D),
@@ -85,9 +85,9 @@ private val PrismDark = PrismLight.copy(
 
 private val AzureLight = ZaneSkinPalette(
     name = "azure",
-    primary = Color(0xFF2F7BF6), primaryDark = Color(0xFF1F5FD0),
+    primary = Color(0xFF1F5FD0), primaryDark = Color(0xFF1F5FD0),
     background = Color(0xFFF2F5FA), surface = Color(0xFFFFFFFF), surfaceElevated = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF131A24), secondaryText = Color(0xFF68727F), divider = Color(0xFFECEFF3),
+    onSurface = Color(0xFF131A24), secondaryText = Color(0xFF5C6776), divider = Color(0xFFECEFF3),
     iconTile = Color(0xFFE8F0FE), selectedSurface = Color(0x142F7BF6), success = Color(0xFF22A45D),
     warning = Color(0xFFF28A00), error = Color(0xFFD70015),
     backdropStart = Color(0xFFF5F8FC), backdropCenter = Color(0xFFF2F5FA), backdropEnd = Color(0xFFEDF2F8),
@@ -197,7 +197,7 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
         "spectrum" -> if (dark) SpectrumDark else SpectrumLight
         else -> if (dark) PrismDark else PrismLight
     }
-    val skin = parseThemeColor(data.setting("appTheme"))?.let { baseSkin.copy(primary = it, primaryDark = it) } ?: baseSkin
+    val skin = baseSkin
     val fontScale = data.setting("fontScale").toFloatOrNull()?.coerceIn(.5f, 2f) ?: baseDensity.fontScale
     val colors = if (dark) darkColorScheme(
         primary = skin.primary, onPrimary = skin.background, primaryContainer = skin.primaryDark,
@@ -220,18 +220,6 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
             UiLanguageProvider(data, content)
         }
     }
-}
-
-private fun parseThemeColor(value:String):Color? {
-    val hex=(value.toIntOrNull()?.let{com.zane.zanebox.data.themePresetColors.getOrNull(it-1)} ?:value).trim().removePrefix("#")
-    if(hex.isEmpty())return null
-    return runCatching {
-        when(hex.length) {
-            6 -> Color(("FF$hex").toLong(16))
-            8 -> Color(hex.toLong(16))
-            else -> null
-        }
-    }.getOrNull()
 }
 
 /** Uses the original vector backgrounds instead of approximating their gradients. */
@@ -281,5 +269,5 @@ fun applyLauncherIcon(context:Context,value:String) {
     if(!home){content();return}
     val view=LocalView.current;val context=LocalContext.current
     SideEffect{(context as? android.app.Activity)?.window?.let{configureSystemBars(it,view,false)}}
-    MaterialTheme(colorScheme=MaterialTheme.colorScheme.copy(background=Color(0xFFE9EDFC),surface=Color.White.copy(alpha=.8f),surfaceVariant=Color.White.copy(alpha=.8f),onSurface=Color(0xFF182230),onBackground=Color(0xFF182230),onSurfaceVariant=Color(0xFF7B8794),primary=Color(0xFF0066CC),primaryContainer=Color(0xFFD3E2FF),onPrimaryContainer=Color(0xFF0066CC),outlineVariant=Color(0xFFCBD5E1)),content=content)
+    MaterialTheme(colorScheme=MaterialTheme.colorScheme.copy(background=Color(0xFFE9EDFC),surface=Color.White.copy(alpha=.8f),surfaceVariant=Color.White.copy(alpha=.8f),onSurface=Color(0xFF182230),onBackground=Color(0xFF182230),onSurfaceVariant=Color(0xFF5D697A),primary=Color(0xFF0066CC),primaryContainer=Color(0xFFD3E2FF),onPrimaryContainer=Color(0xFF0066CC),outlineVariant=Color(0xFFCBD5E1)),content=content)
 }

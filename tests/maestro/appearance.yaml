@@ -7,15 +7,6 @@ appId: com.zane.zanebox
 - tapOn:
     id: settings_general
 - tapOn:
-    id: setting_appTheme
-- tapOn:
-    id: theme_color_1
-- assertVisible: '#f44336'
-- tapOn:
-    id: setting_appTheme
-- tapOn:
-    id: theme_color_skin
-- tapOn:
     id: page_back
 - tapOn:
     id: main_back

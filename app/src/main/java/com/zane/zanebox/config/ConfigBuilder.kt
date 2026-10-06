@@ -20,8 +20,7 @@ object ConfigBuilder {
         val path=runCatching { URI(url).path.orEmpty() }.getOrDefault("")
         return when { path.endsWith(".srs",true)->"binary";path.endsWith(".json",true)->"source";else->"" }
     }
-    private fun smartServices(data:AppData)=listOf("youtube","telegram","netflix","disney","tiktok","x","meta","spotify","google","ai","custom")+
-        data.settings.keys.filter { it.startsWith("smartCustom.") && it.endsWith(".name") }.map { it.removePrefix("smartCustom.").removeSuffix(".name") }.sorted()
+    private fun smartServices(data:AppData)=smartPolicyKeys(data)
     private val unsupportedSmartTypes=setOf("USER-AGENT", "IP-ASN", "OR")
     fun warnings(data: AppData): List<String> = smartServices(data).filter { data.setting("smart.$it.target", "off")!="off" }.flatMap { service ->
         val target=data.setting("smart.$service.target")
@@ -89,7 +88,7 @@ object ConfigBuilder {
         }
         nodes.forEach { n ->
             if(JSONObject(n.outbound).optString("type")=="chain") {
-                val g=data.groups.find { it.id==n.groupId };val chain=flatten(n.id).toMutableList()
+                val g=data.groups.find { it.id==n.groupId }?.takeUnless { n.id==it.frontProxy || n.id==it.landingProxy };val chain=flatten(n.id).toMutableList()
                 if(g!=null && g.landingProxy>0) chain.add(0,flatten(g.landingProxy).first().also { require(JSONObject(data.nodes.first { it.id==g.landingProxy }.outbound).optString("type")!="chain") { "落地代理不能是链" } })
                 chain.forEachIndexed { index,item ->
                     item.put("tag",if(index==0) "node-${n.id}" else "node-${n.id}-chain-$index")
@@ -98,7 +97,7 @@ object ConfigBuilder {
                 }
                 return@forEach
             }
-            val g=data.groups.find { it.id==n.groupId }
+            val g=data.groups.find { it.id==n.groupId }?.takeUnless { n.id==it.frontProxy || n.id==it.landingProxy }
             val item=JSONObject(n.outbound).put("tag", "node-${n.id}")
             if(item.has("detour")) { val original=item.getString("detour"); val ref=data.nodes.find { it.groupId==n.groupId && JSONObject(it.metadata).optString("sourceTag")==original }; if(ref!=null) item.put("detour", "node-${ref.id}") }
             if(g!=null && g.frontProxy>0) { require(g.frontProxy!=n.id) { "前置代理不能引用自身" }; item.put("detour", "node-${g.frontProxy}") }
@@ -149,6 +148,23 @@ object ConfigBuilder {
         }
         val dnsRules = JSONArray()
         val priorityRules = JSONArray(); val ordinaryRules=JSONArray()
+        val priorityDnsRules=JSONArray();val ordinaryDnsRules=JSONArray()
+        val routeDnsServers=linkedMapOf<String,JSONObject>()
+        fun routeDnsRule(rule:JSONObject):JSONObject? {
+            if(!data.bool("enableDnsRouting",true))return null
+            val dest=when(rule.optString("action","route")) { "reject"->"block";"route"->rule.optString("outbound").takeIf{it.isNotBlank()} ?: return null;else->return null }
+            val allowed=setOf("domain","domain_suffix","domain_keyword","domain_regex","rule_set","action","outbound")
+            if(rule.keys().asSequence().any{it !in allowed})return null
+            val refs=rule.optJSONArray("rule_set")
+            if(refs!=null && refs.length()>0 && (0 until refs.length()).all{refs.getString(it).startsWith("geoip:")})return null
+            val match=JSONObject()
+            listOf("domain","domain_suffix","domain_keyword","domain_regex").forEach { key->if(rule.has(key))match.put(key,rule.get(key)) }
+            rule.optJSONArray("rule_set")?.let{refs->val domains=(0 until refs.length()).map{refs.getString(it)}.filter{!it.startsWith("geoip:")};if(domains.isNotEmpty())match.put("rule_set",JSONArray(domains))}
+            if(match.length()==0)return null
+            if(dest=="block")return match.put("action","reject")
+            val server=if(dest=="direct")"dns-direct" else "dns-route-$dest".also { tag->routeDnsServers.getOrPut(tag){dnsServer(data.setting("dnsRemote","https://1.1.1.1/dns-query"),tag,dest)} }
+            return match.put("action","route").put("server",server)
+        }
         val sets = linkedMapOf<String, JSONObject>()
         fun target(value: String): String = when {
             value in listOf("proxy", "direct", "block") -> value
@@ -191,19 +207,18 @@ object ConfigBuilder {
             if (dest == "block") rule.put("action", "reject") else if(rule.optString("action", "route")=="route") rule.put("action", "route").put("outbound", dest)
             if(customRule!=null) mergeJson(rule,customRule)
             (if(r.prioritize) priorityRules else ordinaryRules).put(rule)
-            if (dest == "direct" && data.bool("enableDnsRouting",true)) {
-                val d=JSONObject()
-                listOf("domain","domain_suffix","domain_keyword","domain_regex").forEach { key -> if(rule.has(key)) d.put(key,rule.get(key)) }
-                val domainSets=setTags.filter { it.startsWith("geosite:") }
-                if(domainSets.isNotEmpty()) d.put("rule_set",JSONArray(domainSets))
-                if(d.length()>0) dnsRules.put(d.put("action","route").put("server","dns-direct"))
-            }
+            routeDnsRule(rule)?.let{(if(r.prioritize)priorityDnsRules else ordinaryDnsRules).put(it)}
         }
         fun append(source: JSONArray) { for(i in 0 until source.length()) rules.put(source.get(i)) }
         append(priorityRules)
+        for(i in 0 until priorityDnsRules.length())dnsRules.put(priorityDnsRules.get(i))
+        fun addSmartRule(rule:JSONObject,dest:String) {
+            rules.put(if(dest=="block")rule.put("action","reject") else rule.put("action","route").put("outbound",dest))
+            routeDnsRule(rule)?.let{dnsRules.put(it)}
+        }
         if(!testing && mode=="rule") {
             smartServices(data).forEach serviceLoop@ { service ->
-                val choice=data.setting("smart.$service.target", "off")
+                val choice=data.setting("smart.$service.target", if(service=="speed")"proxy" else "off")
                 if(choice!="off") {
                     val dest=when {
                         choice=="auto" || choice.startsWith("region:") -> {
@@ -219,7 +234,7 @@ object ConfigBuilder {
                     if(packages.isNotEmpty()) {
                         require(packages.all { it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")) }) { "自定义应用包名无效" }
                         val appRule=JSONObject().put("package_name",JSONArray(packages))
-                        rules.put(if(dest=="block")appRule.put("action","reject") else appRule.put("action","route").put("outbound",dest))
+                        addSmartRule(appRule,dest)
                     }
                     val smartUrl=data.setting("smartUrl.$service")
                     val format=ruleSetFormat(smartUrl)
@@ -235,7 +250,7 @@ object ConfigBuilder {
                         }
                         sets[tag]=set
                         val setRule=JSONObject().put("rule_set",JSONArray().put(tag))
-                        rules.put(if(dest=="block")setRule.put("action","reject") else setRule.put("action","route").put("outbound",dest))
+                        addSmartRule(setRule,dest)
                         return@serviceLoop
                     }
                     data.setting("smartRules.$service", "").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith('#') && !it.startsWith("//") }.forEach { line ->
@@ -250,12 +265,13 @@ object ConfigBuilder {
                             "PROCESS-NAME" -> rule.put("process_name", JSONArray().put(value))
                             else -> { require(fields.size==1) { "智能规则格式不支持: ${fields[0]}" }; rule.put("domain_suffix", JSONArray().put(value)) }
                         }
-                        rules.put(if(dest=="block") rule.put("action", "reject") else rule.put("action", "route").put("outbound", dest))
+                        addSmartRule(rule,dest)
                     }
                 }
             }
         }
         append(ordinaryRules)
+        for(i in 0 until ordinaryDnsRules.length())dnsRules.put(ordinaryDnsRules.get(i))
         val final = if (testing) defaultNode else if (mode == "direct") "direct" else "proxy"
         // Process lookup costs a system call per connection; only pay it when statistics or a rule needs the owner.
         val rulesText = rules.toString()
@@ -268,6 +284,7 @@ object ConfigBuilder {
         if(serverStrategy.isNotBlank()) route.put("default_domain_resolver",JSONObject().put("server","dns-direct").put("strategy",serverStrategy))
         if (sets.isNotEmpty()) route.put("rule_set", JSONArray(sets.values.toList()))
         val dnsServers=JSONArray().put(dnsServer(data.setting("dnsDirect", "local"), "dns-direct", "direct")).put(dnsServer(data.setting("dnsRemote", "https://1.1.1.1/dns-query"), "dns-remote", final))
+        routeDnsServers.values.forEach{dnsServers.put(it)}
         val hosts=parseHosts(data.setting("dnsHosts", data.setting("hosts","")))
         if(hosts.length()>0) {
             dnsServers.put(JSONObject().put("type","hosts").put("tag","dns-hosts").put("predefined",hosts))
@@ -296,12 +313,13 @@ object ConfigBuilder {
         for(i in 0 until dnsRules.length()) {
             val rule=dnsRules.getJSONObject(i)
             if(rule.optString("server")=="dns-direct") familyFilter(rule,directStrategy)
+            if(rule.optString("server").startsWith("dns-route-") || rule.optString("server")=="dns-remote")familyFilter(rule,remoteStrategy)
             if(rule.optString("server")=="dns-fake") { familyFilter(JSONObject(),finalStrategy);familyApplied=true }
             rule.remove("strategy");filteredDnsRules.put(rule)
         }
         if(!familyApplied) familyFilter(JSONObject(),finalStrategy)
         val dns = JSONObject().put("servers", dnsServers)
-            .put("rules", filteredDnsRules).put("final", if (final == "direct") "dns-direct" else "dns-remote").put("strategy", finalStrategy)
+            .put("reverse_mapping",true).put("rules", filteredDnsRules).put("final", if (final == "direct") "dns-direct" else "dns-remote").put("strategy", finalStrategy)
         val root = JSONObject().put("log", JSONObject().put("level", data.setting("logLevel", "info"))).put("outbounds", out).put("route", route).put("dns", dns)
         val inbound = JSONArray()
         if (!testing) {
@@ -416,7 +434,7 @@ object ConfigBuilder {
     private fun nodeRegion(data: AppData, id: Long, name: String): String {
         data.setting("nodeRegion.$id").trim().lowercase(java.util.Locale.ROOT).takeIf { it.isNotBlank() }?.let { return it }
         val hints=mapOf("hk" to listOf("香港","HK","Hong Kong","🇭🇰"), "us" to listOf("美国","US","United States","🇺🇸"), "kr" to listOf("韩国","KR","Korea","🇰🇷"), "jp" to listOf("日本","JP","Japan","🇯🇵"), "sg" to listOf("新加坡","SG","Singapore","🇸🇬"), "tw" to listOf("台湾","TW","Taiwan","🇹🇼"))
-        return hints.entries.firstOrNull { (_, words) -> words.any { name.contains(it, ignoreCase=true) } }?.key ?: ""
+        return hints.entries.firstOrNull { (_, words) -> words.any { hint->if(hint.matches(Regex("[A-Z]{2}")))Regex("(?i)(?<![a-z])${Regex.escape(hint)}(?![a-z])").containsMatchIn(name) else name.contains(hint, ignoreCase=true) } }?.key ?: ""
     }
     private fun wireguardEndpoint(item: JSONObject): JSONObject {
         if (item.has("address") && item.has("peers")) return item
@@ -433,7 +451,8 @@ object ConfigBuilder {
         val uri = URI(if (address.contains("://")) address else "udp://$address")
         require(uri.host != null) { "DNS 地址无效" }
         val type = when (uri.scheme) { "https" -> "https"; "tls" -> "tls"; "tcp" -> "tcp"; "udp" -> "udp"; else -> error("DNS 协议不支持") }
-        obj.put("type", type).put("server", uri.host).put("detour", detour)
+        obj.put("type", type).put("server", uri.host)
+        if(detour!="direct")obj.put("detour",detour)
         if (uri.port > 0) obj.put("server_port", uri.port)
         if (type == "https") obj.put("path", uri.rawPath.ifBlank { "/dns-query" })
         return obj

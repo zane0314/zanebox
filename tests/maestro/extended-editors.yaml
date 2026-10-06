@@ -168,11 +168,11 @@ appId: com.zane.zanebox
     id: settings_general
 - scrollUntilVisible:
     element:
-      id: select_apps
+      id: setting_perAppEnabled
     direction: DOWN
     timeout: 60000
 - tapOn:
-    id: select_apps
+    id: setting_perAppEnabled
 - assertVisible:
     id: apps_search
 - assertVisible:

@@ -5,8 +5,21 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 internal data class IncomingLink(val text:String="",val subscriptionUrl:String="",val name:String="导入订阅") {
     companion object {
-        fun parse(value:String):IncomingLink {
+        fun subscription(value:String):IncomingLink? {
+            val text=value.trim()
+            if(text.lines().size!=1 || !Regex("(?i)^(https?://|sn://subscription|clash://install-config|zanebox://subscription)").containsMatchIn(text))return null
+            return parse(text).takeIf { it.subscriptionUrl.isNotBlank() }
+        }
+        fun parse(input:String):IncomingLink {
+            val value=input.trim()
             require(value.length<=8*1024*1024) { "导入链接过长" }
+            if(value.startsWith("http://",true) || value.startsWith("https://",true)) {
+                val url=value.toHttpUrlOrNull()
+                require(url!=null) { "订阅地址必须为有效HTTP或HTTPS网址" }
+                val explicitPort=value.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#').substringAfterLast('@').matches(Regex("(?:[^:]+|\\[[^]]+\\]):[0-9]+"))
+                val proxyHint=url.encodedPath=="/" && (url.username.isNotEmpty() || url.password.isNotEmpty() || (explicitPort && url.fragment!=null))
+                if(!proxyHint)return IncomingLink(subscriptionUrl=value)
+            }
             val schemeEnd=value.indexOf("://");require(schemeEnd>0) { "导入链接无协议" }
             val scheme=value.substring(0,schemeEnd).lowercase()
             val rest=value.substring(schemeEnd+3)

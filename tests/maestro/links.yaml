@@ -1,0 +1,89 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_appLanguage
+- tapOn: 简体中文
+- assertNotVisible:
+    id: setting_appTheme
+- scrollUntilVisible:
+    element:
+      id: factory_reset
+    direction: DOWN
+    timeout: 60000
+- swipe:
+    direction: UP
+- takeScreenshot: reports/ui-1.0.2/current/links-settings-bottom
+- tapOn:
+    id: factory_reset
+- assertVisible: 确认操作
+- tapOn: 取消
+- scrollUntilVisible:
+    element:
+      id: setting_perAppEnabled
+    direction: UP
+    timeout: 60000
+- assertNotVisible:
+    id: setting_perAppMode
+- tapOn:
+    id: per_app_indicator
+- assertVisible:
+    id: apps_mode_off
+- tapOn:
+    id: apps_mode_include
+- tapOn:
+    id: page_back
+- assertVisible:
+    id: setting_perAppEnabled
+- takeScreenshot: reports/ui-1.0.2/current/links-app-mode-include
+- tapOn:
+    id: setting_perAppEnabled
+- tapOn:
+    id: apps_mode_exclude
+- tapOn:
+    id: page_back
+- tapOn:
+    id: setting_perAppEnabled
+- tapOn:
+    id: apps_mode_off
+- tapOn:
+    id: page_back
+- tapOn:
+    id: page_back
+- tapOn:
+    id: network_tools
+- tapOn:
+    id: tools_backup_tab
+- assertVisible: 本地备份
+- takeScreenshot: reports/ui-1.0.2/current/links-backup-tools
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- takeScreenshot: reports/ui-1.0.2/current/links-home
+- tapOn:
+    id: tab_1
+- assertVisible: Speed · IP / DNS / 测速
+- tapOn:
+    id: smart_target_speed
+- assertVisible: 直连
+- takeScreenshot: reports/ui-1.0.2/current/links-speed-policy
+- tapOn: 取消
+- tapOn:
+    id: smart_rules
+- assertNotVisible: Speed · IP / DNS / 测速
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: add_nodes
+- tapOn: 创建链式代理
+- assertVisible: 链式节点 · 从出口到前置选择
+- takeScreenshot: reports/ui-1.0.2/current/links-chain-editor
+- tapOn:
+    id: page_back

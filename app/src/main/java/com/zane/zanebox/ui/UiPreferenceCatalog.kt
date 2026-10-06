@@ -24,8 +24,7 @@ internal fun preferenceSections(data:AppData)=listOf(
     "软件设置" to listOf(
         boolean("autoStart","开机自动连接"),
         choice("uiSkin","界面皮肤","prism","prism" to "棱镜流光","azure" to "天青留白","spectrum" to "光谱水晶"),
-        choice("launcherIcon","桌面图标","default","default" to "zanebox","prism" to "Prism","pixel" to "Pixel","node_n" to "Node N","channel_gate" to "Channel Gate","confluence" to "Confluence","launch_path" to "Launch Path"),
-        Preference("appTheme","主题颜色"),
+        choice("launcherIcon","桌面图标","default","default" to "Link","prism" to "Links · 毛玻璃","pixel" to "Pixel","node_n" to "Node N","channel_gate" to "Channel Gate","confluence" to "Confluence","launch_path" to "Launch Path"),
         choice("theme","夜间模式","system","system" to "跟随系统","light" to "浅色","dark" to "深色"),
         choice("appLanguage","应用语言","",*languages.toTypedArray()),
         choice("fontScale","字体大小","1.0",".85" to "小","1.0" to "标准","1.15" to "大","1.3" to "更大","1.5" to "特大","2.0" to "最大"),
@@ -46,8 +45,7 @@ internal fun preferenceSections(data:AppData)=listOf(
     ),
     "路由设置" to listOf(
         choice("routeMode","路由模式","rule","rule" to "规则","global" to "全局","direct" to "直连"),
-        boolean("perAppEnabled","分应用代理"),
-        choice("perAppMode","应用代理模式","exclude","exclude" to "绕过已选应用","include" to "仅代理已选应用"),
+        Preference("perAppEnabled","分应用代理","false"),
         boolean("bypassLan","绕过局域网"),
         boolean("bypassLanInCore","在内核中绕过局域网"),
         boolean("concurrentDial","并发拨号"),
@@ -111,7 +109,6 @@ internal fun preferenceSections(data:AppData)=listOf(
 
 internal data class PreferenceAppearance(val title:String,val summary:String,val icon:Int)
 internal val preferenceAppearance=mapOf(
-    "appTheme" to PreferenceAppearance("主题颜色","",R.drawable.zb_ref_ic_baseline_color_lens_24),
     "autoStart" to PreferenceAppearance("自动连接","此前已连接时，在手机启动或更新后自动恢复连接",R.drawable.zb_ref_ic_communication_phonelink_ring),
     "uiSkin" to PreferenceAppearance("界面皮肤","",R.drawable.zb_ref_ic_baseline_color_lens_24),
     "launcherIcon" to PreferenceAppearance("桌面图标","",R.drawable.zb_ref_ic_image_photo),

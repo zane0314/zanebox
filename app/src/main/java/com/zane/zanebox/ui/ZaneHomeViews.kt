@@ -119,8 +119,8 @@ class ZaneHomeToolbar @JvmOverloads constructor(context: Context, attrs: Attribu
         if (!backdropResolved) {
             backdropResolved = true
             // The toolbar is a direct child of nodes_root with anybox_home_background.
-            backdropOwner = parent as? View
-            backdrop = backdropOwner?.background?.constantState?.newDrawable(resources)?.mutate()
+            backdropOwner = rootView
+            backdrop = androidx.core.content.ContextCompat.getDrawable(context,com.zane.zanebox.R.drawable.zb_ref_anybox_home_background)?.mutate()
         }
         val d = backdrop ?: return
         val owner = backdropOwner ?: return

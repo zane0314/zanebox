@@ -35,9 +35,18 @@ shasum -a 256 "$APK" "$TEST" "$PROBE" "$ROOT/native/OwnBoxForAndroid/libcore/.bu
 cp "$ROOT/version.properties" "$OUT/version.properties"
 "$ADB" shell run-as com.zane.zanebox cat cache/neko.log >"$OUT/native-runtime.log" 2>&1 || true
 python3 - "$OUT" "$RC" "${ZANE_TEST_COUNT:-27}" <<'PY'
-import pathlib,re,sys,json
+import pathlib,re,sys,json,hashlib,subprocess,os
 p=pathlib.Path(sys.argv[1]);text=(p/'instrumentation.txt').read_text();crash=(p/'logcat.txt').read_text()
 reasons=[]
+adb=[os.environ.get('ADB','/opt/homebrew/bin/adb')]
+photos=[]
+for photo in (p/'device-files').rglob('*.png'):
+    device='/sdcard/Android/data/com.zane.zanebox/files/'+photo.relative_to(p/'device-files').as_posix()
+    local=hashlib.sha256(photo.read_bytes()).hexdigest()
+    remote=subprocess.check_output(adb+['shell','sha256sum',device],text=True).split()[0]
+    photos.append({'device':device,'host':str(photo.resolve()),'sha256':local,'verified':local==remote})
+    if local!=remote:reasons.append('设备截图回传校验失败：'+photo.name)
+(p/'device-photos.json').write_text(json.dumps(photos,ensure_ascii=False,indent=2))
 if sys.argv[2]!='0' or not re.search(r'OK \('+re.escape(sys.argv[3])+r' tests?\)',text):reasons.append('instrumentation没有完整通过')
 if re.search(r'FATAL EXCEPTION[^\n]*\n(?:[^\n]*\n){0,6}[^\n]*com\.zane\.(zanebox|probe)',crash):reasons.append('发现应用/Probe崩溃')
 if not list((p/'device-files').rglob('acceptance-large-font.png')):reasons.append('缺少大字号截图')

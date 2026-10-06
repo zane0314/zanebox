@@ -36,7 +36,7 @@ import org.json.JSONObject
 @Composable internal fun TargetPicker(title:String,value:String,data:AppData,onDismiss:()->Unit,onChoose:(String)->Unit,smart:Boolean=false,none:Boolean=false) {
     val choices=buildList {
         if(none)add("0" to "无")
-        if(smart)addAll(listOf("off" to "关闭 · 使用普通主节点","auto" to "自动选择","region:hk" to "香港","region:us" to "美国","region:kr" to "韩国","region:jp" to "日本","region:sg" to "新加坡","region:tw" to "台湾"))
+        if(smart)addAll(listOf("off" to "关闭 · 使用普通主节点","proxy" to "普通主节点","direct" to "直连","auto" to "自动选择","region:hk" to "香港","region:us" to "美国","region:kr" to "韩国","region:jp" to "日本","region:sg" to "新加坡","region:tw" to "台湾"))
         else if(!none)addAll(listOf("proxy" to "普通主节点","direct" to "直连","block" to "阻止"))
         data.groups.filter{it.enabled}.forEach{add("group:${it.id}" to "分组 · ${it.name}")}
         data.merges.forEach{add("merge:${it.id}" to "汇总组 · ${it.name}")}
@@ -99,9 +99,9 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
     if(value.isBlank())remove(key) else put(key,if(key=="customRule")JSONObject(value) else value.trim())
 }.toString()
 
-@Composable internal fun NodeEditor(node:Node?,data:AppData,onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onSave:(Node)->Unit) {
+@Composable internal fun NodeEditor(node:Node?,data:AppData,initialProtocol:String="vless",onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onSave:(Node)->Unit) {
     var name by remember{mutableStateOf(node?.name ?: "")}
-    var outbound by remember{mutableStateOf(node?.outbound?.let{raw->JSONObject(raw).apply{if(optString("type")=="ssh" && has("username")){if(!has("user"))put("user",get("username"));remove("username")};com.zane.zanebox.config.ConfigBuilder.normalizeTransportHost(this)}.toString()} ?: "{\"type\":\"vless\",\"server_port\":443}")}
+    var outbound by remember{mutableStateOf(node?.outbound?.let{raw->JSONObject(raw).apply{if(optString("type")=="ssh" && has("username")){if(!has("user"))put("user",get("username"));remove("username")};com.zane.zanebox.config.ConfigBuilder.normalizeTransportHost(this)}.toString()} ?: (if(initialProtocol=="chain")"{\"type\":\"chain\",\"node_ids\":[]}" else "{\"type\":\"vless\",\"server_port\":443}"))}
     var group by remember{mutableLongStateOf(node?.groupId ?: data.browseGroupId.takeIf{id->data.groups.any{it.id==id}} ?: data.groups.firstOrNull{it.enabled}?.id ?:0L)}
     var editing by remember{mutableStateOf<NodeField?>(null)}
     var trojanGo by remember{mutableStateOf(node?.metadata?.let{JSONObject(it).optString("editorProtocol")=="trojan-go"} ?:false)}
@@ -155,7 +155,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         }
         add(field("TCP Fast Open","tcp_fast_open","bool"));add(field("UDP 分片","udp_fragment","bool"));add(field("连接超时","connect_timeout"))
     }
-    UiPageList(if(node==null)"手动添加" else "编辑节点",{if(!saving)onDismiss()},action={TextButton(enabled=!saving,onClick={
+    UiPageList(if(node==null && type=="chain")"创建链式代理" else if(node==null)"手动添加" else "编辑节点",{if(!saving)onDismiss()},action={TextButton(enabled=!saving,onClick={
         runCatching{val o=JSONObject(outbound);require(name.isNotBlank()){ "请输入节点名称" };when(type) {
             "chain"->require((o.optJSONArray("node_ids")?.length() ?:0)>0){"请选择链式节点"}
             "custom"->com.zane.zanebox.config.ConfigBuilder.validate(o.getJSONObject("config").toString())
@@ -172,7 +172,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         if(type in listOf("shadowsocksr","mieru","naive"))item{Text("当前内核不提供 ShadowsocksR、Mieru、NaïveProxy 外部插件功能。已有配置可备份和导出，不能作为可用节点保存。",style=MaterialTheme.typography.bodySmall)}
         if(trojanGo)item{Text(uiText("Trojan-Go 使用原生 TLS / WebSocket；外部插件与额外加密层不可用。"),style=MaterialTheme.typography.bodySmall)}
         if(type=="chain") {
-            item{UiSection("链式节点 · 按选择顺序连接")}
+            item{UiSection("链式节点 · 从出口到前置选择")}
             items(data.nodes.filter{it.id!=node?.id},key={"chain${it.id}"}){n->
                 val a=JSONObject(outbound).optJSONArray("node_ids") ?:JSONArray()
                 val ids=(0 until a.length()).map{a.getLong(it)}
@@ -249,7 +249,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
             UiRow("选择器",if(selector)"启用" else "关闭",Icons.Outlined.Tune,onClick={selector=!selector},trailing={UiSwitch(selector,{selector=it},modifier=Modifier.testTag("group_selector"))},modifier=Modifier.testTag("group_selector_row"))
         }}
         item{UiSection("链式代理")}
-        item{UiCard{UiRow("前置代理",targetName(if(front==0L)"0" else "node:$front",data),onClick={target="front"});UiRow("落地代理",targetName(if(landing==0L)"0" else "node:$landing",data),onClick={target="landing"})}}
+        item{UiCard{UiRow("前置代理",targetName(if(front==0L)"0" else "node:$front",data),onClick={target="front"},modifier=Modifier.testTag("group_front_proxy"));UiRow("后置代理（落地）",targetName(if(landing==0L)"0" else "node:$landing",data),onClick={target="landing"},modifier=Modifier.testTag("group_landing_proxy"))}}
         if(groupType==1 || url.isNotBlank()) {
             item{UiSection("订阅更新")}
             item{UiCard{
@@ -284,6 +284,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
     var target by remember{mutableStateOf(rule?.outbound ?: "proxy")};var priority by remember{mutableStateOf(rule?.prioritize ?:false)}
     var advanced by remember{mutableStateOf(rule?.advanced ?:"{}")};var choose by remember{mutableStateOf(false)};var apps by remember{mutableStateOf(false)}
     var editAdvanced by remember{mutableStateOf(false)};var editRouteField by remember{mutableStateOf("")};var error by remember{mutableStateOf("")}
+    var positionChoice by remember{mutableStateOf(false)}
     val matching=runCatching{JSONObject(advanced)}.getOrDefault(JSONObject())
     val routePort=jsonFieldText(matching,"port");val routeSource=jsonFieldText(matching,"source_ip_cidr")
     val routeSourcePort=jsonFieldText(matching,"source_port");val routeRuleset=jsonFieldText(matching,"rule_set")
@@ -298,7 +299,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         onSave((rule ?:RouteRule(0,name)).copy(name=name,domains=domains,packages=packages,ipCidrs=ips,outbound=target,prioritize=priority,advanced=advanced))
     }.onFailure{error=it.message ?: "字段无效"}},modifier=Modifier.testTag("rule_save")){Text(uiText("保存"))}}) {
         item{OutlinedTextField(name,{name=it},label={Text(uiText("规则名称"))},modifier=Modifier.fillMaxWidth().testTag("rule_name"))}
-        item{UiCard{UiRow("出站",targetName(target,data),Icons.Outlined.AccountTree,onClick={choose=true},modifier=Modifier.testTag("rule_target"));UiRow("优先于智能分流",trailing={UiSwitch(priority,{priority=it})})}}
+        item{UiCard{UiRow("出站",targetName(target,data),Icons.Outlined.AccountTree,onClick={choose=true},modifier=Modifier.testTag("rule_target"));UiRow("规则位置",if(priority)"前置 · 在应用策略之前" else "后置 · 在应用策略之后",onClick={positionChoice=true},modifier=Modifier.testTag("rule_position"))}}
         item{OutlinedTextField(domains,{domains=it},label={Text(uiText("域名（每行一个）"))},modifier=Modifier.fillMaxWidth().testTag("rule_domains"))}
         item{OutlinedTextField(ips,{ips=it},label={Text(uiText("IP CIDR（每行一个）"))},modifier=Modifier.fillMaxWidth().testTag("rule_ips"))}
         item{UiCard{UiRow("应用",if(packages.isBlank())"所有应用" else "已选择 ${packages.lines().count{it.isNotBlank()}} 个应用",Icons.Outlined.Apps,onClick={apps=true})}}
@@ -316,6 +317,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         }}
         if(error.isNotBlank() || saveError.isNotBlank())item{Text(error.ifBlank{saveError},color=MaterialTheme.colorScheme.error)}
     }
+    if(positionChoice)ChoiceDialog("规则位置",priority.toString(),listOf("true" to "前置 · 在应用策略之前","false" to "后置 · 在应用策略之后"),{positionChoice=false}){priority=it.toBoolean()}
     if(choose)TargetPicker("出站",target,data,{choose=false},{target=it})
     if(apps)AppsEditor(packages.lines().filter{it.isNotBlank()}.toSet(),{apps=false}){packages=it.joinToString("\n");apps=false}
     if(editAdvanced)TextEditPage(TextEditor("高级匹配",listOf("匹配参数 JSON" to advanced)){JSONObject(it[0]);advanced=it[0]}){editAdvanced=false}

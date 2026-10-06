@@ -43,3 +43,17 @@ internal fun geoAssetCode(kind:String,bytes:ByteArray):String {
     val length=unsigned();require(length in 1..256 && position+length<=bytes.size) { "Geosite 规则名无效" }
     return bytes.copyOfRange(position,position+length.toInt()).toString(Charsets.UTF_8).also { require(it.matches(Regex("[a-zA-Z0-9_@.-]+"))) { "Geosite 规则名无效" } }
 }
+
+internal val builtinSmartRuleFiles=mapOf("speed" to listOf("Speed"),"youtube" to listOf("YouTube"),"telegram" to listOf("Telegram"),"netflix" to listOf("Netflix"),"disney" to listOf("Disney"),"tiktok" to listOf("TikTok"),"x" to listOf("Twitter"),"meta" to listOf("Instagram","Facebook"),"spotify" to listOf("Spotify"),"google" to listOf("Google"),"ai" to listOf("OpenAI"))
+
+/** Missing defaults use bundled rules; an explicitly saved empty rule list stays empty. */
+internal fun withBuiltinSmartRules(data:AppData,read:(String)->String):AppData {
+    val defaults=builtinSmartRuleFiles.filter { (key,_)->data.setting("smart.$key.target",if(key=="speed")"proxy" else "off")!="off" && !data.settings.containsKey("smartRules.$key") && data.setting("smartUrl.$key").isBlank() }
+        .map { (key,names)->"smartRules.$key" to names.joinToString("\n") { read("anybox-rules/$it.list") } }.toMap()
+    return if(defaults.isEmpty())data else data.copy(settings=data.settings+defaults)
+}
+
+internal fun smartPolicyKeys(data:AppData):List<String> {
+    val available=builtinSmartRuleFiles.keys.toList()+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom")else emptyList())+data.settings.keys.filter{it.startsWith("smartCustom.") && it.endsWith(".name")}.map{it.removePrefix("smartCustom.").removeSuffix(".name")}.sorted()
+    return (data.setting("smartPolicyOrder").lines().filter{it in available}+available).distinct()
+}

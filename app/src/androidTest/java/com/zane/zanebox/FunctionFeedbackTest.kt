@@ -22,13 +22,20 @@ class FunctionFeedbackTest {
         compose.onNodeWithTag("network_tools").performClick()
         compose.onNodeWithTag("tools_backup_tab").performClick()
         compose.onNodeWithTag("subpage_list").performScrollToNode(hasText("从 WebDAV 恢复"))
-        compose.onNodeWithText("从 WebDAV 恢复").performClick()
+        compose.onNodeWithText("从 WebDAV 恢复").performScrollTo()
         val feedback=hasText("WebDAV地址无效") and hasAnyAncestor(hasTestTag("page_feedback_WebDAV 备份"))
-        compose.waitUntil(10000) { compose.onNode(feedback).isDisplayed() }
-        compose.onNode(feedback).assertIsDisplayed()
-        compose.onNodeWithTag("webdav_refresh").performClick()
-        compose.waitUntil(10000) { compose.onNode(feedback).isDisplayed() }
-        compose.onNode(feedback).assertIsDisplayed()
+        // Keep synchronization from advancing the entire short Snackbar lifetime before inspection.
+        compose.mainClock.autoAdvance=false
+        try {
+            fun visibleFeedback() {
+                compose.waitUntil(10000) { compose.mainClock.advanceTimeByFrame();compose.onAllNodes(feedback).fetchSemanticsNodes().isNotEmpty() }
+                compose.mainClock.advanceTimeBy(300);compose.onNode(feedback).assertIsDisplayed()
+            }
+            compose.onNodeWithText("从 WebDAV 恢复").performClick();visibleFeedback()
+            compose.mainClock.advanceTimeBy(4500)
+            compose.waitUntil(10000) { compose.mainClock.advanceTimeByFrame();compose.onAllNodes(feedback).fetchSemanticsNodes().isEmpty() }
+            compose.onNodeWithTag("webdav_refresh").performClick();visibleFeedback()
+        } finally {compose.mainClock.autoAdvance=true}
     }
 
     private fun seed(data:AppData):AppViewModel {
@@ -129,7 +136,7 @@ class FunctionFeedbackTest {
         compose.waitUntil(10000) { vm.data.value.rules.isEmpty() }
         compose.onNodeWithTag("page_back").performClick();compose.onNodeWithTag("main_back").performClick()
         compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("settings_general").performClick()
-        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("select_apps"));compose.onNodeWithTag("select_apps").performClick()
+        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("setting_perAppEnabled"));compose.onNodeWithTag("setting_perAppEnabled").performClick()
         compose.waitUntil(10000) { compose.onNodeWithTag("apps_auto").fetchSemanticsNode().config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick) }
         compose.onNodeWithTag("apps_mode_include").performClick()
         compose.onNodeWithTag("apps_auto").performClick();compose.onNodeWithTag("apps_auto_confirm").performClick()
@@ -140,8 +147,8 @@ class FunctionFeedbackTest {
         compose.onNodeWithTag("apps_save").performClick()
         compose.waitUntil(10000) { vm.data.value.setting("perAppPackages").lines().filter { it.isNotBlank() }.toSet()==expected }
         assertEquals(expected,vm.store.snapshot().setting("perAppPackages").lines().toSet())
-        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("select_apps"))
-        compose.onNodeWithTag("select_apps").performClick();compose.onNodeWithTag("apps_mode_exclude").performClick()
+        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("setting_perAppEnabled"))
+        compose.onNodeWithTag("setting_perAppEnabled").performClick();compose.onNodeWithTag("apps_mode_exclude").performClick()
         compose.onNodeWithTag("apps_auto").performClick();compose.onNodeWithTag("apps_auto_confirm").performClick();compose.onNodeWithTag("apps_save").performClick()
         val bypass=installed.filter { it.packageName !in presets && it.uid!=1000 }.map { it.packageName }.toSet()
         compose.waitUntil(10000) { vm.data.value.setting("perAppPackages").lines().filter { it.isNotBlank() }.toSet()==bypass }

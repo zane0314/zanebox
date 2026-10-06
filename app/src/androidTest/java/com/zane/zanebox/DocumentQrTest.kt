@@ -61,10 +61,10 @@ class DocumentQrTest {
             compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("扫码导入").performClick();waitFor("扫码结果导入") { store.snapshot().nodes.any { it.name=="scan-fixture" } }
             intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT),hasType("application/zip"))).respondWith(ActivityResult(Activity.RESULT_OK,Intent().setData(uri(zip))))
             compose.onNodeWithTag("tab_2").performClick()
-            compose.onNodeWithTag("settings_general").performClick();compose.onNodeWithTag("subpage_list").performScrollToNode(hasText("备份与恢复"));compose.onNodeWithText("备份与恢复").performClick();compose.onNodeWithTag("backup_export").performClick();waitFor("ZIP写入") { zip.length()>100 }
+            compose.onNodeWithTag("network_tools").performClick();compose.onNodeWithTag("tools_backup_tab").performClick();compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("backup_export"));compose.onNodeWithTag("backup_export").performScrollTo().performClick();waitFor("ZIP写入") { zip.length()>100 }
             val saved=BackupManager(context).`import`(zip.readBytes());assertEquals(2,saved.nodes.size)
             intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT),hasType("text/plain"))).respondWith(ActivityResult(Activity.RESULT_OK,Intent().setData(uri(text))))
-            compose.onNodeWithTag("page_back").performClick();compose.onNodeWithTag("page_back").performClick()
+            compose.onNodeWithTag("page_back").performClick()
             compose.onNodeWithTag("settings_groups").performClick();compose.onNodeWithTag("manage_group_menu_301").performClick();compose.onNodeWithText("导出节点").performClick()
             waitFor("分组文本写入") { text.length()>0 }
             assertEquals("qr-fixture",com.zane.zanebox.subscription.SubscriptionParser.parse(text.readText()).single().name)

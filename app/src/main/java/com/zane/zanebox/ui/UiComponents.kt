@@ -1,8 +1,10 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class,androidx.compose.ui.ExperimentalComposeUiApi::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class,androidx.compose.ui.ExperimentalComposeUiApi::class,androidx.compose.foundation.ExperimentalFoundationApi::class)
 package com.zane.zanebox.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -31,26 +33,33 @@ import androidx.compose.ui.window.DialogProperties
 
 internal val LocalUiSnackbar=staticCompositionLocalOf<SnackbarHostState?> { null }
 internal val LocalUiBusy=staticCompositionLocalOf { false }
+internal val LocalUiListState=staticCompositionLocalOf<androidx.compose.foundation.lazy.LazyListState?> { null }
+internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
+
+@Composable internal fun ApplyChangesRow(onReload:()->Unit,modifier:Modifier=Modifier) {
+    Surface(color=MaterialTheme.colorScheme.surface) {
+        Row(modifier.fillMaxWidth().clickable(onClick=onReload).padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(uiText("重载代理服务以应用修改"),Modifier.weight(1f),fontSize=14.sp)
+            Spacer(Modifier.width(12.dp))
+            Button(onClick=onReload,modifier=Modifier.testTag("apply_changes")){Text(uiText("重启服务"))}
+        }
+    }
+}
 
 /** Uses the platform switch shape from the AnyBox settings instead of the M3 outlined track. */
-@Composable internal fun UiSwitch(checked:Boolean,onCheckedChange:(Boolean)->Unit,modifier:Modifier=Modifier,enabled:Boolean=true) {
+@Composable internal fun UiSwitch(checked:Boolean,onCheckedChange:((Boolean)->Unit)?,modifier:Modifier=Modifier,enabled:Boolean=true) {
     val primary=MaterialTheme.colorScheme.primary
     val dark=MaterialTheme.colorScheme.onSurface.luminance()>.5f
-    Box(modifier.size(width=48.dp,height=48.dp).semantics(mergeDescendants=true) {
-        role=androidx.compose.ui.semantics.Role.Switch
-        toggleableState=if(checked)androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off
-        if(!enabled)disabled()
-        onClick{if(enabled){onCheckedChange(!checked);true}else false}
-    }) {
+    Box(modifier.size(width=48.dp,height=36.dp).then(if(onCheckedChange==null)Modifier.semantics { role=Role.Switch;toggleableState=if(checked)androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off } else Modifier.toggleable(checked,enabled=enabled,role=Role.Switch,onValueChange=onCheckedChange))) {
         androidx.compose.ui.viewinterop.AndroidView(
-            factory={android.widget.Switch(it).apply{showText=false;splitTrack=false;importantForAccessibility=android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO}},
+            factory={android.widget.Switch(it).apply{showText=false;splitTrack=false;isClickable=false;isFocusable=false;importantForAccessibility=android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO}},
             modifier=Modifier.fillMaxSize(),
             update={view->
                 view.setOnCheckedChangeListener(null);view.isChecked=checked;view.isEnabled=enabled
                 val states=arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf())
                 view.thumbTintList=android.content.res.ColorStateList(states,intArrayOf(primary.toArgb(),if(dark)0xFFBDBDBD.toInt() else 0xFFEEEEEE.toInt()))
                 view.trackTintList=android.content.res.ColorStateList(states,intArrayOf(primary.copy(alpha=.4f).toArgb(),if(dark)0xFF666666.toInt() else 0xFFBDBDBD.toInt()))
-                view.setOnCheckedChangeListener{_,value->onCheckedChange(value)}
+                view.isClickable=false;view.isFocusable=false
             },
         )
     }
@@ -65,8 +74,8 @@ internal val LocalUiBusy=staticCompositionLocalOf { false }
 }
 
 @Composable internal fun UiRow(title:String,subtitle:String="",icon:ImageVector?=null,
-    modifier:Modifier=Modifier,onClick:(()->Unit)?=null,trailing:(@Composable ()->Unit)?=null,iconRes:Int=0,minHeight:Dp=68.dp,titleSize:androidx.compose.ui.unit.TextUnit=13.sp,chevron:Boolean=true,reserveIcon:Boolean=false,summaryLines:Int=1) {
-    Row(modifier.fillMaxWidth().then(if(onClick==null) Modifier else Modifier.clickable(onClick=onClick))
+    modifier:Modifier=Modifier,onClick:(()->Unit)?=null,trailing:(@Composable ()->Unit)?=null,iconRes:Int=0,minHeight:Dp=68.dp,titleSize:androidx.compose.ui.unit.TextUnit=13.sp,chevron:Boolean=true,reserveIcon:Boolean=false,summaryLines:Int=1,onLongClick:(()->Unit)?=null) {
+    Row(modifier.fillMaxWidth().then(if(onLongClick!=null)Modifier.combinedClickable(onClick=onClick ?: {},onLongClick=onLongClick) else if(onClick==null) Modifier else Modifier.clickable(onClick=onClick))
         .heightIn(min=minHeight).padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
         if(iconRes!=0 || icon!=null) { if(iconRes!=0)Icon(painterResource(iconRes),null,Modifier.size(24.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant) else Icon(icon!!,null,Modifier.size(24.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant);Spacer(Modifier.width(14.dp)) } else if(reserveIcon)Spacer(Modifier.width(38.dp))
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -95,21 +104,35 @@ internal val LocalUiBusy=staticCompositionLocalOf { false }
 @Composable internal fun UiPage(title:String,onDismiss:()->Unit,action:(@Composable RowScope.()->Unit)?=null,
     content:@Composable (PaddingValues)->Unit) {
     val density=androidx.compose.ui.platform.LocalDensity.current
+    val navigationInsets=WindowInsets.navigationBars
     val snackbar=LocalUiSnackbar.current
     val busy=LocalUiBusy.current
+    val reload=LocalUiReload.current
     Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
         CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density) {
         val view=androidx.compose.ui.platform.LocalView.current
         val dark=MaterialTheme.colorScheme.onSurface.luminance()>.5f
-        SideEffect { (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let{configureSystemBars(it,view,dark)} }
+        SideEffect { ((view.parent as? androidx.compose.ui.window.DialogWindowProvider) ?: (view as? androidx.compose.ui.window.DialogWindowProvider))?.window?.let{window->
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.setDimAmount(0f)
+            if(android.os.Build.VERSION.SDK_INT>=28)window.attributes=window.attributes.apply {
+                layoutInDisplayCutoutMode=if(android.os.Build.VERSION.SDK_INT>=30)android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                if(android.os.Build.VERSION.SDK_INT>=30)setFitInsetsTypes(0)
+            }
+            configureSystemBars(window,view,dark)
+        } }
         Box(Modifier.fillMaxSize()) {
         UiBackdrop(Modifier.fillMaxSize(),home=false)
-        Scaffold(contentColor=MaterialTheme.colorScheme.onSurface,modifier=Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}.systemBarsPadding().imePadding(),containerColor=androidx.compose.ui.graphics.Color.Transparent,
-            topBar={TopAppBar(expandedHeight=56.dp,title={Text(uiText(title),fontSize=20.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=16.dp))},navigationIcon={
+        Column(Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}.windowInsetsPadding(WindowInsets.safeDrawing.union(navigationInsets))) {
+        Scaffold(contentColor=MaterialTheme.colorScheme.onSurface,modifier=Modifier.weight(1f),contentWindowInsets=WindowInsets(0,0,0,0),containerColor=androidx.compose.ui.graphics.Color.Transparent,
+            topBar={TopAppBar(windowInsets=WindowInsets(0,0,0,0),expandedHeight=56.dp,title={Text(uiText(title),fontSize=20.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=16.dp))},navigationIcon={
                 IconButton(onClick=onDismiss,modifier=Modifier.testTag("page_back")){Icon(Icons.AutoMirrored.Outlined.ArrowBack,"返回")}
             },actions={action?.invoke(this)},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
             content=content)
-        snackbar?.let { SnackbarHost(it,Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(top=56.dp).testTag("page_feedback_$title")) }
+        snackbar?.let { SnackbarHost(it,Modifier.fillMaxWidth().testTag("page_feedback_$title")) }
+        reload?.let{ApplyChangesRow(it)}
+        }
         if(busy)LinearProgressIndicator(Modifier.fillMaxWidth().systemBarsPadding().align(Alignment.TopCenter).testTag("page_busy"))
         }
         }
@@ -119,8 +142,8 @@ internal val LocalUiBusy=staticCompositionLocalOf { false }
 @Composable internal fun UiPageList(title:String,onDismiss:()->Unit,action:(@Composable RowScope.()->Unit)?=null,
     content:LazyListScope.()->Unit) {
     UiPage(title,onDismiss,action) {padding->
-        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("subpage_list"),
-            contentPadding=PaddingValues(horizontal=14.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)
+        LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("subpage_list"),state=LocalUiListState.current ?: androidx.compose.foundation.lazy.rememberLazyListState(),
+            contentPadding=PaddingValues(start=14.dp,end=14.dp,top=12.dp,bottom=24.dp),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)
     }
 }
 

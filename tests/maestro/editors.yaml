@@ -72,6 +72,11 @@ appId: com.zane.zanebox
 - takeScreenshot: reports/ui-1.0.2/current/rule-editor
 - tapOn:
     id: rule_save
+- scrollUntilVisible:
+    element:
+      text: UI-rule
+    direction: DOWN
+    timeout: 60000
 - assertVisible: UI-rule
 - tapOn:
     id: page_back

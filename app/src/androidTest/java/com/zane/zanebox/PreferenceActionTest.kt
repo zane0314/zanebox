@@ -31,7 +31,7 @@ class PreferenceActionTest {
     private val context get() = instrumentation.targetContext
 
     private val uiKeys = setOf(
-        "appTheme", "uiSkin", "launcherIcon", "theme", "appLanguage", "fontScale",
+        "uiSkin", "launcherIcon", "theme", "appLanguage", "fontScale",
         "confirmProfileDelete", "alwaysShowAddress", "hideFromRecentApps", "showBottomBar"
     )
 
@@ -123,7 +123,7 @@ class PreferenceActionTest {
             put("configKeys", JSONArray(preferences.filter { category(it) == "config" }.map { it.key }))
         }.toString(2))
 
-        assertEquals("设置目录必须完整枚举 UiPreferenceCatalog", 70, preferences.size)
+        assertEquals("设置目录必须完整枚举 UiPreferenceCatalog", 68, preferences.size)
         assertEquals("设置目录 JSON 数量不一致", preferences.size, JSONObject(json).getInt("count"))
         assertEquals("存在未知设置分类", preferences.size, categories.values.sum())
         assertTrue("缺少 disabled 分类", categories.containsKey("disabled"))

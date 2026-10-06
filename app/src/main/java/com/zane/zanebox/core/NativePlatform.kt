@@ -77,7 +77,7 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
     override fun openTun(singTunOptionsJson:String,tunPlatformOptionsJson:String):Long {
         if(com.zane.zanebox.BuildConfig.DEBUG)java.io.File(context.cacheDir,"tun-options.json").writeText(singTunOptionsJson)
         val o=JSONObject(singTunOptionsJson)
-        val builder=checkNotNull(vpn) { "仅代理模式没有VPN接口" }.Builder().setSession("zanebox").setMtu(o.optInt("MTU",1500))
+        val builder=checkNotNull(vpn) { "仅代理模式没有VPN接口" }.Builder().setSession("Links").setMtu(o.optInt("MTU",1500))
         fun strings(key:String):List<String> { val a=o.optJSONArray(key) ?: return emptyList();return (0 until a.length()).map { a.getString(it) } }
         fun prefix(value:String,add:(String,Int)->Unit) { val parts=value.split('/');require(parts.size==2);add(parts[0],parts[1].toInt()) }
         strings("Inet4Address").forEach { prefix(it,builder::addAddress) }

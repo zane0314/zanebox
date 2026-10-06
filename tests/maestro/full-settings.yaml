@@ -34,6 +34,11 @@ appId: com.zane.zanebox
 - tapOn:
     id: setting_appLanguage
 - tapOn: 简体中文
+- scrollUntilVisible:
+    element:
+      text: 简体中文
+    direction: UP
+    timeout: 60000
 - assertVisible: 简体中文
 - scrollUntilVisible:
     element:
@@ -51,16 +56,6 @@ appId: com.zane.zanebox
 - tapOn:
     id: setting_launcherIcon
 - tapOn: Pixel
-- scrollUntilVisible:
-    element:
-      id: setting_appTheme
-    direction: DOWN
-    timeout: 60000
-- tapOn:
-    id: setting_appTheme
-- tapOn:
-    id: theme_color_1
-- assertVisible: '#f44336'
 - scrollUntilVisible:
     element:
       id: setting_theme
@@ -267,14 +262,12 @@ appId: com.zane.zanebox
     timeout: 60000
 - tapOn:
     id: setting_perAppEnabled
-- scrollUntilVisible:
-    element:
-      id: setting_perAppMode
-    direction: DOWN
-    timeout: 60000
 - tapOn:
-    id: setting_perAppMode
-- tapOn: 仅代理已选应用
+    id: apps_mode_include
+- tapOn:
+    id: apps_mode_off
+- tapOn:
+    id: page_back
 - scrollUntilVisible:
     element:
       id: setting_bypassLan
@@ -833,57 +826,82 @@ appId: com.zane.zanebox
     id: page_back
 - tapOn:
     id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_appLanguage
+    direction: UP
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      text: 简体中文
+    direction: UP
+    timeout: 60000
 - assertVisible: 简体中文
 - scrollUntilVisible:
     element:
       id: setting_serviceMode
     direction: UP
     timeout: 60000
-- assertVisible: 本地代理
-- assertVisible: 系统
+- scrollUntilVisible:
+    element:
+      text: '本地代理'
+    direction: DOWN
+    timeout: 60000
+- assertVisible: '本地代理'
+- scrollUntilVisible:
+    element:
+      text: '系统'
+    direction: DOWN
+    timeout: 60000
+- assertVisible: '系统'
+- scrollUntilVisible:
+    element:
+      text: '1400'
+    direction: DOWN
+    timeout: 60000
 - assertVisible: '1400'
 - scrollUntilVisible:
     element:
-      id: setting_routeMode
+      text: '全局'
     direction: DOWN
     timeout: 60000
-- assertVisible: 全局
+- assertVisible: '全局'
 - scrollUntilVisible:
     element:
-      id: setting_ipv6Mode
+      text: '优先 IPv4'
     direction: DOWN
     timeout: 60000
-- assertVisible: 优先 IPv4
+- assertVisible: '优先 IPv4'
 - scrollUntilVisible:
     element:
-      id: setting_dnsRemote
+      text: 'https://1.1.1.1/dns-query'
     direction: DOWN
     timeout: 60000
-- assertVisible: https://1.1.1.1/dns-query
+- assertVisible: 'https://1.1.1.1/dns-query'
 - scrollUntilVisible:
     element:
-      id: setting_dnsDirect
+      text: 'local'
     direction: DOWN
     timeout: 60000
-- assertVisible: local
+- assertVisible: 'local'
 - scrollUntilVisible:
     element:
-      id: setting_httpProxyBypass
+      text: 'example.com'
     direction: DOWN
     timeout: 60000
-- assertVisible: example.com
+- assertVisible: 'example.com'
 - scrollUntilVisible:
     element:
-      id: setting_mixedPort
+      text: '2082'
     direction: DOWN
     timeout: 60000
 - assertVisible: '2082'
 - scrollUntilVisible:
     element:
-      id: setting_appTLSVersion
+      text: 'TLS 1.3'
     direction: DOWN
     timeout: 60000
-- assertVisible: TLS 1.3
+- assertVisible: 'TLS 1.3'
 - scrollUntilVisible:
     element:
       id: reset_settings
@@ -905,6 +923,11 @@ appId: com.zane.zanebox
 - tapOn:
     id: setting_appLanguage
 - tapOn: 简体中文
+- scrollUntilVisible:
+    element:
+      text: 简体中文
+    direction: UP
+    timeout: 60000
 - assertVisible: 简体中文
 - tapOn:
     id: page_back

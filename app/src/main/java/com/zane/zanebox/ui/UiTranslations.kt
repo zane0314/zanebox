@@ -70,7 +70,7 @@ private val translations=mapOf(
     "日志" to tr("日志","日誌","Logs"),
     "工具" to tr("工具","工具","Tools"),
     "文档" to tr("文档","文件","Documentation"),
-    "关于 zanebox" to tr("关于 zanebox","關於 zanebox","About zanebox"),
+    "关于 Links" to tr("关于 Links","關於 Links","About Links"),
     "备份与恢复" to tr("备份与恢复","備份與還原","Backup & Restore"),
     "流量仪表" to tr("流量仪表","流量儀表","Traffic Dashboard"),
     "节点选择" to tr("节点选择","節點選擇","Select Node"),

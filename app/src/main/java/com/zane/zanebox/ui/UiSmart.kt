@@ -30,11 +30,13 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
     var ruleSource by remember{mutableStateOf("")};var updateChoice by remember{mutableStateOf("")}
     var apps by remember{mutableStateOf("")};var expanded by remember{mutableStateOf("")}
     var confirmDelete by remember{mutableStateOf("")}
-    val builtIn=listOf("youtube" to "YouTube","telegram" to "Telegram","netflix" to "Netflix","disney" to "Disney+","tiktok" to "TikTok","x" to "X","meta" to "Instagram / Facebook","spotify" to "Spotify","google" to "Google","ai" to "AI 应用")
+    var moving by remember{mutableStateOf("")}
+    val builtIn=listOf("speed" to "Speed · IP / DNS / 测速","youtube" to "YouTube","telegram" to "Telegram","netflix" to "Netflix","disney" to "Disney+","tiktok" to "TikTok","x" to "X","meta" to "Instagram / Facebook","spotify" to "Spotify","google" to "Google","ai" to "AI 应用")
+    val policyOrder=com.zane.zanebox.config.smartPolicyKeys(data)
     val custom=data.settings.filterKeys{it.startsWith("smartCustom.") && it.endsWith(".name")}.map{it.key.removePrefix("smartCustom.").removeSuffix(".name") to it.value}
     Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
         UiSection("路由规则")
-        UiCard{UiRow("路由规则","${data.rules.size} 条规则",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}
+        UiCard{UiRow("路由规则","前置 ${data.rules.count{it.prioritize}} · 后置 ${data.rules.count{!it.prioritize}}",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}
         UiSection("分流节点组")
         UiCard{UiRow(data.merges.firstOrNull{it.id.toString()==data.setting("smartSourceMergeId")}?.name ?: data.groups.firstOrNull{it.id.toString()==data.setting("smartSourceGroupId")}?.name ?: "默认汇总组",
             "${data.nodes.count{n->data.groups.any{it.id==n.groupId && it.enabled}}} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,onClick={source=true},modifier=Modifier.testTag("smart_source"))}
@@ -43,15 +45,16 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         })}
         UiCard{UiRow("管理节点汇总组","合并多个分组或指定节点为分流目标",Icons.Outlined.Hub,iconRes=R.drawable.zb_ref_ic_mingcute_group_24,onClick=onMerges,modifier=Modifier.testTag("smart_merges"))}
         UiSection("应用策略")
-        (builtIn+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom" to "自定义规则")else emptyList())+custom).forEach{(key,title)->
-            val value=data.setting("smart.$key.target","off")
-            UiCard{UiRow(title,if(value=="off")"使用普通主节点" else targetName(value,data),when(key){"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
-                onClick={expanded=if(expanded==key)"" else key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
+        val policies=(builtIn+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom" to "自定义规则")else emptyList())+custom).toMap()
+        policyOrder.mapNotNull{key->policies[key]?.let{key to it}}.forEach{(key,title)->
+            val value=data.setting("smart.$key.target",if(key=="speed")"proxy" else "off")
+            UiCard{UiRow(title,if(value=="off")"使用普通主节点" else targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
+                onClick={expanded=if(expanded==key)"" else key},onLongClick={moving=key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
                 if(expanded==key) {
                     UiRow("分流目标",targetName(value,data),onClick={target=key})
-                    UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{"自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
+                    UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(key in builtIn.map{it.first} && !data.settings.containsKey("smartRules.$key"))"内置规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
+                    UiRow("选择应用","${data.setting("smartCustom.$key.packages").lines().count{it.isNotBlank()}} 个应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
                     if(custom.any{it.first==key}) {
-                        UiRow("应用选择","${data.setting("smartCustom.$key.packages").lines().count{it.isNotBlank()}} 个应用",Icons.Outlined.Apps,onClick={apps=key})
                         UiRow("重命名",onClick={form("重命名",listOf("名称" to title)){values->require(values[0].isNotBlank());require((builtIn+custom).none{it.first!=key && it.second==values[0]}){"名称已存在"};vm.setting("smartCustom.$key.name",values[0])}})
                         UiRow("删除应用组",onClick={confirmDelete=key})
                     }
@@ -61,7 +64,12 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};val key="custom_${vm.store.nextId()}";vm.setting("smartCustom.$key.name",v[0])}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text("添加自定义应用组")}
         if(data.setting("serviceMode","vpn")!="vpn")Text("智能应用路由依赖 VPN 模式。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
     }
-    if(target.isNotBlank())TargetPicker("分流目标",data.setting("smart.$target.target","off"),data,{target=""},{vm.selectSmartTarget(target,it)},smart=true)
+    if(moving.isNotBlank())UiAlertDialog(onDismissRequest={moving=""},title={Text("移动策略")},text={Column {
+        val index=policyOrder.indexOf(moving)
+        TextButton(onClick={vm.moveSmartPolicy(moving,-1);moving=""},enabled=index>0,modifier=Modifier.testTag("smart_move_up")){Text(uiText("上移"))}
+        TextButton(onClick={vm.moveSmartPolicy(moving,1);moving=""},enabled=index>=0 && index<policyOrder.lastIndex,modifier=Modifier.testTag("smart_move_down")){Text(uiText("下移"))}
+    }},confirmButton={TextButton(onClick={moving=""}){Text(uiText("取消"))}})
+    if(target.isNotBlank())TargetPicker("分流目标",data.setting("smart.$target.target",if(target=="speed")"proxy" else "off"),data,{target=""},{vm.selectSmartTarget(target,it)},smart=true)
     if(source)ChoiceDialog("分流节点组",if(data.setting("smartSourceMergeId","0")!="0")"merge:${data.setting("smartSourceMergeId")}" else "group:${data.setting("smartSourceGroupId","0")}",
         listOf("group:0" to "全部启用节点")+data.merges.map{"merge:${it.id}" to it.name}+data.groups.filter{it.enabled}.map{"group:${it.id}" to it.name},{source=false}){value->vm.edit{d->d.copy(settings=d.settings+mapOf("smartSourceMergeId" to if(value.startsWith("merge:"))value.substringAfter(':') else "0","smartSourceGroupId" to if(value.startsWith("group:"))value.substringAfter(':') else "0"))}}
     if(ruleSource.isNotBlank())RuleSourcePage(ruleSource,data,vm){ruleSource=""}
@@ -89,7 +97,11 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
 @Composable
 private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
     val initialUrl=data.setting("smartUrl.$serviceKey")
-    val initialRules=data.setting("smartRules.$serviceKey")
+    val initialRules=remember(serviceKey,data.settings) {
+        if(data.settings.containsKey("smartRules.$serviceKey"))data.setting("smartRules.$serviceKey")
+        else if(data.setting("smartUrl.$serviceKey").isBlank())com.zane.zanebox.config.builtinSmartRuleFiles[serviceKey]?.joinToString("\n") { name->vm.getApplication<android.app.Application>().assets.open("anybox-rules/$name.list").bufferedReader().use{it.readText()} }.orEmpty()
+        else ""
+    }
     var url by remember(serviceKey,initialUrl){mutableStateOf(initialUrl)}
     var rules by remember(serviceKey,initialRules){mutableStateOf(initialRules)}
     var error by remember{mutableStateOf("")}
