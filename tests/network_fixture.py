@@ -10,6 +10,11 @@ def record(kind, destination, agent=None):
     with lock, open(a.log,'a') as f:f.write(json.dumps({'time':time.time(),'exit':kind,'destination':destination,**({'userAgent':agent} if agent else {})})+'\n')
 def response(marker,payload=None):
     body=payload if payload is not None else marker.encode();return b'HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body
+def subscription_response(path):
+    if not path.startswith(('/options-subscription','/subscription')):return None
+    nodes=[{'type':'socks','tag':'fixture A','server':'10.0.2.2','server_port':19081},{'type':'socks','tag':'fixture B','server':'10.0.2.2','server_port':19082}]
+    if path.startswith('/options-subscription'):nodes.insert(1,dict(nodes[0],tag='fixture A duplicate'))
+    return json.dumps({'outbounds':nodes}).encode()
 def asset_response(path):
     if not path.startswith('/asset/'):return None
     if path=='/asset/fail.db':return b'HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
@@ -24,10 +29,8 @@ class HTTP(BaseHTTPRequestHandler):
         asset=asset_response(self.path)
         if asset is not None:self.connection.sendall(asset);return
         record('DIRECT',self.path,self.headers.get('User-Agent'))
-        if self.path.startswith('/options-subscription'):
-            body=json.dumps({'outbounds':[{'type':'socks','tag':'fixture A','server':'10.0.2.2','server_port':19081},{'type':'socks','tag':'fixture A duplicate','server':'10.0.2.2','server_port':19081},{'type':'socks','tag':'fixture B','server':'10.0.2.2','server_port':19082}]}).encode()
-        elif self.path.startswith('/subscription'):
-            body=json.dumps({'outbounds':[{'type':'socks','tag':'fixture A','server':'10.0.2.2','server_port':19081},{'type':'socks','tag':'fixture B','server':'10.0.2.2','server_port':19082}]}).encode()
+        body=subscription_response(self.path)
+        if body is not None:pass
         elif self.path.startswith('/trace'):body=b'ip=10.0.2.2\n'
         else:body=b'DIRECT'
         self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
@@ -65,6 +68,8 @@ class SOCKS(socketserver.BaseRequestHandler):
             path=b.split(b' ',2)[1].decode()
             asset=asset_response(path)
             if asset is not None:self.request.sendall(asset);return
+            subscription=subscription_response(path)
+            if subscription is not None:self.request.sendall(response('',subscription));return
             if path.startswith('/test'):time.sleep((a.delay_a_ms if marker=='EXIT_A' else a.delay_b_ms)/1000)
             if '/hang' in path:time.sleep(12)
             if '/trace' in path:marker='ip='+('203.0.113.10' if marker=='EXIT_A' else '203.0.113.11')+'\n'

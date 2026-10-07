@@ -25,6 +25,10 @@ import com.zane.zanebox.core.SingBoxEngine
 import com.zane.zanebox.data.AppData
 import com.zane.zanebox.data.NodeStatusUpdate
 import com.zane.zanebox.data.ZaneStore
+import com.zane.zanebox.subscription.SubscriptionScheduler
+import com.zane.zanebox.subscription.SubscriptionPlan
+import com.zane.zanebox.subscription.SubscriptionUpdater
+import com.zane.zanebox.subscription.update
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
@@ -47,6 +51,7 @@ import java.util.concurrent.atomic.AtomicReference
 class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):ContextWrapper(owner) {
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private val access=Mutex()
+    private val subscriptionApply=Mutex()
     private val commands=Channel<Pair<String,String>>(Channel.UNLIMITED)
     private val current=AtomicReference(RuntimeSnapshot())
     private val callbacks=RemoteCallbackList<IRuntimeCallback>()
@@ -59,6 +64,10 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private var speed:SpeedTestSession?=null
     private var speedJob:Job?=null
     private var ruleUpdates:Job?=null
+    private var subscriptionUpdates:Job?=null
+    @Volatile private var destroyed=false
+    private var ownsSubscriptionAlarm=false
+    private val subscriptionAlarm by lazy { PendingIntent.getBroadcast(this,2,Intent("$packageName.SUBSCRIPTION_UPDATE").setPackage(packageName).addFlags(Intent.FLAG_RECEIVER_FOREGROUND),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) }
     private var stunJob:Job?=null
     private val stunAccess=Mutex()
     @Volatile private var stunVersion=0L
@@ -76,6 +85,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private val wakeReceiver=object:BroadcastReceiver() {
         override fun onReceive(context:Context,intent:Intent) {
             if(intent.action==Intent.ACTION_SCREEN_ON && current.get().state==2 && store.snapshot().bool("wakeResetConnections",false))dispatch("wakeReset","")
+            if(intent.action=="$packageName.SUBSCRIPTION_UPDATE")checkSubscriptionUpdates()
         }
     }
     private val connectionBytes=LinkedHashMap<String,Pair<Long,Long>>()
@@ -97,7 +107,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         }
         platform.initialize()
         engine=SingBoxEngine(platform)
-        androidx.core.content.ContextCompat.registerReceiver(this,wakeReceiver,IntentFilter(Intent.ACTION_SCREEN_ON),androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+        androidx.core.content.ContextCompat.registerReceiver(this,wakeReceiver,IntentFilter(Intent.ACTION_SCREEN_ON).apply{addAction("$packageName.SUBSCRIPTION_UPDATE")},androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         val saved=store.snapshot().setting("trafficData")
         if(saved.isNotBlank()) runCatching { val data=JSONObject(saved);listOf("apps","domains","nodes").forEach { counters.put(it,data.optJSONObject(it) ?: JSONObject()) } }
         scope.launch { for((action,payload) in commands) execute(action,payload) }
@@ -209,19 +219,27 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private suspend fun applySubscription(payload:String) {
         val args=JSONObject(payload);val request=args.getString("request");val id=args.getLong("groupId")
         fun completed(error:String="")=event("subscriptionApplied",JSONObject().put("request",request).put("error",error).toString())
-        try {
-            val test=access.withLock {
-                check(reloadCore(automatic=true,subscription=true)) { "订阅已保存，但内核应用失败，原连接已保留" }
-                val data=store.snapshot()
-                val ids=data.nodes.filter { it.groupId==id && data.groups.any { g->g.id==id && g.enabled } }.map{it.id}
-                startTests(JSONArray(ids))
-            }
-            // Wait outside the command queue, so stop/select commands remain responsive during tests.
-            scope.launch {
-                test?.join()
-                completed(if(test?.isCancelled==true)"订阅已应用，延迟测试被取消" else "")
-            }
-        } catch(e:CancellationException) { throw e } catch(e:Exception) {completed(safeError(e))}
+        scope.launch {
+            try {withTimeout(7*60000L) {subscriptionApply.withLock {
+                var ownedTest:Job?=null
+                try {
+                    ownedTest=access.withLock {
+                        check(reloadCore(automatic=true,subscription=true)) { "订阅已保存，但内核应用失败，原连接已保留" }
+                        val data=store.snapshot()
+                        val ids=data.nodes.filter { it.groupId==id && data.groups.any { g->g.id==id && g.enabled } }.map{it.id}
+                        startTests(JSONArray(ids))
+                    }
+                    // Wait outside the command queue, so stop/select stay responsive.
+                    ownedTest?.join()
+                    completed(if(ownedTest?.isCancelled==true)"订阅已应用，延迟测试被取消" else "")
+                } finally {ownedTest?.takeIf{it.isActive}?.let { job ->
+                    job.cancel()
+                    if(tests===job){engine.cancelTests();event("testing","[]")}
+                    withContext(NonCancellable){withTimeoutOrNull(5000){job.join()}}
+                }}
+            }}} catch(e:TimeoutCancellationException) {completed("订阅自动应用或测速超时，将自动重试")}
+            catch(e:CancellationException) { throw e } catch(e:Exception) {completed(safeError(e))}
+        }
     }
     private suspend fun reloadCore(automatic:Boolean,subscription:Boolean=false):Boolean {
         if(current.get().state!=2){event("message","设置已保存，下次连接时应用");return true}
@@ -275,6 +293,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             val snapshot=RuntimeSnapshot(state=2,started=SystemClock.elapsedRealtime(),generation=current.get().generation,mixedHost=mixedHost,mixedPort=mixed?.optInt("listen_port") ?:0)
             publish(snapshot);notification("已连接")
             startSampler(snapshot.generation)
+            armSubscriptionAlarm()
             startRuleUpdates()
             val warnings=ConfigBuilder.targetWarnings(data)
             if(warnings.isNotEmpty()) event("message",warnings.joinToString("\n")) else event("message","已连接")
@@ -317,12 +336,13 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         foregroundStop()
     }
     private fun stopCore(terminal:Boolean=true,syncSelection:Boolean=true) {
+        if(terminal)subscriptionUpdates?.cancel()
         releaseWakeLock()
-        if(current.get().state==0) { if(terminal) { foregroundStop();owner.stopSelf() };return }
+        if(current.get().state==0) { if(terminal) {cancelSubscriptionAlarm();foregroundStop();owner.stopSelf()};return }
         val data=store.snapshot();val selections=readSelections(data);if(syncSelection)syncDefaultSelection(data,selections)
         if(data.bool("statsEnabled",true))runCatching { sampleConnections(api("/connections")) }
         val old=current.get();publish(old.copy(state=3));sampler?.cancel();sampler=null;ruleUpdates?.cancel();ruleUpdates=null
-        try { recordTraffic(data,engine.close(),selections);persistTraffic();connectionBytes.clear() } finally { publish(RuntimeSnapshot(generation=old.generation+1,txTotal=sessionTx,rxTotal=sessionRx));if(terminal) { foregroundStop();owner.stopSelf() };event("message","已断开") }
+        try { recordTraffic(data,engine.close(),selections);persistTraffic();connectionBytes.clear() } finally { publish(RuntimeSnapshot(generation=old.generation+1,txTotal=sessionTx,rxTotal=sessionRx));if(terminal) {cancelSubscriptionAlarm();foregroundStop();owner.stopSelf()};event("message","已断开") }
     }
     private suspend fun selectNode(id:Long) {
         val before=store.snapshot();val node=before.nodes.firstOrNull { it.id==id } ?: error("节点不存在")
@@ -376,6 +396,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 delay(1000)
                 iteration++
                 val data=store.snapshot()
+                if(iteration%30==1)checkSubscriptionUpdates()
                 // Controller HTTP calls run outside the runtime lock so user commands never queue behind them.
                 // Selector state only feeds traffic attribution and panel-selection sync, so 5 s is enough.
                 if(iteration%5==1) readSelections(data).takeIf { it.length()>0 }?.let { selections=it }
@@ -591,6 +612,45 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             delay(60000)
         } }
     }
+    @Synchronized private fun cancelSubscriptionAlarm() {
+        if(ownsSubscriptionAlarm){getSystemService(android.app.AlarmManager::class.java).cancel(subscriptionAlarm);ownsSubscriptionAlarm=false}
+    }
+    @Synchronized private fun armSubscriptionAlarm() {
+        val alarms=getSystemService(android.app.AlarmManager::class.java)
+        if(destroyed){cancelSubscriptionAlarm();return}
+        val next=if(current.get().state==2)store.snapshot().groups.filter{runCatching{SubscriptionPlan.scheduled(it)}.getOrDefault(false)}.minOfOrNull{SubscriptionPlan.nextAt(it)} else null
+        if(next==null)cancelSubscriptionAlarm()
+        else {
+            val at=maxOf(next,System.currentTimeMillis()+1000)
+            if(Build.VERSION.SDK_INT<31 || alarms.canScheduleExactAlarms())try {
+                alarms.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP,at,subscriptionAlarm)
+            } catch(_:SecurityException) {alarms.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP,at,subscriptionAlarm)}
+            else alarms.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP,at,subscriptionAlarm)
+            ownsSubscriptionAlarm=true
+        }
+    }
+    @Synchronized private fun checkSubscriptionUpdates() {
+        if(destroyed || current.get().state!=2 || subscriptionUpdates?.isActive==true)return
+        val due=store.snapshot().groups.filter{runCatching{SubscriptionPlan.scheduled(it) && SubscriptionPlan.nextAt(it)<=System.currentTimeMillis()}.getOrDefault(false)}
+        if(due.isEmpty()){armSubscriptionAlarm();return}
+        subscriptionUpdates=scope.launch {
+            try {
+                for(group in due) {
+                    if(current.get().state!=2)break
+                    val lock=(getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"zanebox:subscription").apply{setReferenceCounted(false);acquire(8*60000L)}
+                    try {withTimeout(8*60000L) {
+                        val pending=JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optString("state") in setOf("applying","apply-error")
+                        val updated=if(pending)group else SubscriptionUpdater.update(store,group,this@ZaneRuntime,connected=true,automatic=true)
+                        // The :bg process must not initialize a second WorkManager instance.
+                        SubscriptionScheduler.apply(this@ZaneRuntime,store,updated,automatic=true,schedule=false)
+                    }} catch(e:TimeoutCancellationException) {event("message","后台订阅更新超时，将自动重试")}
+                    catch(e:CancellationException) {throw e}
+                    catch(e:Exception) {event("message","后台订阅更新未完成，将自动重试：${safeError(e)}")}
+                    finally {if(lock.isHeld)lock.release()}
+                }
+            } finally {armSubscriptionAlarm()}
+        }
+    }
     /** Status changes always go through startForeground; per-second rate text only re-posts when it actually changed. */
     @Synchronized private fun notification(text:String,rate:Boolean=false) {
         val data=store.snapshot()
@@ -609,6 +669,8 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     @Synchronized private fun foregroundStop() { inForeground=false;notificationText="";if(Build.VERSION.SDK_INT>=24)owner.stopForeground(Service.STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") owner.stopForeground(true) }
     fun revoke() { dispatch("stop","") }
     fun destroy() {
+        destroyed=true
+        cancelSubscriptionAlarm()
         releaseWakeLock();runCatching { unregisterReceiver(wakeReceiver) }
         commands.close();scope.cancel();engine.cancelTests();speed?.cancel()
         // onDestroy runs on the main thread; a start stuck in native code must not turn into an ANR.

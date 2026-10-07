@@ -12,6 +12,15 @@ import okhttp3.mockwebserver.MockResponse
 class SubscriptionUpdateTest {
     private val outbound="{\"type\":\"trojan\",\"server\":\"edge.example\",\"server_port\":443,\"password\":\"pw\",\"tls\":{\"enabled\":true}}"
     private val group=Group(1,"订阅","https://subscription.example/list",options="{\"future\":\"preserve\"}")
+    @Test fun automaticUpdateCannotOverwriteAnInflightLeaseOrNewerData() {
+        val initial=AppData(groups=listOf(group))
+        val first=SubscriptionUpdater.begin(initial,group,"automatic-a",1000,automatic=true)
+        try {SubscriptionUpdater.begin(first,group,"automatic-b",1100,automatic=true);fail("parallel automatic request")} catch(_:IllegalArgumentException) {}
+        assertEquals("automatic-a",JSONObject(first.groups.single().options).getJSONObject("subscriptionRuntime").getString("request"))
+        val newer=initial.copy(groups=listOf(group.copy(updatedAt=2000)))
+        try {SubscriptionUpdater.begin(newer,group,"stale",3000,automatic=true);fail("old snapshot")} catch(_:IllegalArgumentException) {}
+        assertEquals("replacement",JSONObject(SubscriptionUpdater.begin(first,group,"replacement",602000,automatic=true).groups.single().options).getJSONObject("subscriptionRuntime").getString("request"))
+    }
     @Test fun filterFindModesDeduplicateAndRejectEmpty() = runBlocking {
         val nodes=listOf(ParsedNode("日本 A",outbound),ParsedNode("美国",outbound),ParsedNode("日本 B",outbound))
         assertEquals(2,SubscriptionOptions.parse("{\"filterMode\":1,\"filterRegex\":\"日本\"}").select(nodes).size)

@@ -19,17 +19,17 @@ suspend fun SubscriptionUpdater.update(store:ZaneStore,group:Group,context:Conte
     require(!options.updateWhenConnectedOnly || connected) { "此订阅只在代理已连接时更新，已保留原节点" }
     if(automatic) require(SubscriptionPlan.shouldUpdate(group,System.currentTimeMillis(),connected)) { "此订阅尚未到自动更新时间" }
     val request=UUID.randomUUID().toString()
-    val started=store.update { begin(it,group,request,System.currentTimeMillis()) }
+    val started=store.update { begin(it,group,request,System.currentTimeMillis(),automatic) }
     val baseline=started.groups.first { it.id==group.id }
     try {
         val fetched=SubscriptionClient.fetch(baseline.subscriptionUrl,options.customUserAgent,started.settings)
         val parsed=prepare(SubscriptionParser.parse(fetched.body),options,started.bool("ipv6",false),started.setting("dnsStrategyServer",started.setting("domainStrategy"))) { host -> withTimeoutOrNull(10000) { resolve(context,host) } ?: error("节点 DNS 解析超时") }
         store.update { apply(it,baseline,parsed,fetched.userInfo,System.currentTimeMillis()) { store.nextId() } }.groups.first { it.id==group.id }
     } catch(e:CancellationException) {
-        store.update { record(it,group.id,"cancelled",System.currentTimeMillis(),request=request) };throw e
+        store.update { record(it,group.id,"cancelled",System.currentTimeMillis(),nextAttempt=if(automatic)System.currentTimeMillis()+5*60000L else 0,request=request) };throw e
     } catch(e:Exception) {
         val stale=e.message?.contains("过期")==true || e.message?.contains("已变更")==true
-        store.update { record(it,group.id,if(stale) "stale" else "error",System.currentTimeMillis(),if(stale) "订阅响应已过期" else safeSubscriptionError(e),request=request) };throw e
+        store.update { record(it,group.id,if(stale) "stale" else "error",System.currentTimeMillis(),if(stale) "订阅响应已过期" else safeSubscriptionError(e),nextAttempt=if(automatic)System.currentTimeMillis()+5*60000L else 0,request=request) };throw e
     }
 }
 

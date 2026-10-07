@@ -10,7 +10,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** WorkManager persists every schedule across process death/reboot; no VPN runtime loop owns it. */
+/** WorkManager persists disconnected schedules; the active foreground runtime also checks due work. */
 object SubscriptionScheduler {
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private val initialized=AtomicBoolean()
@@ -63,7 +63,7 @@ object SubscriptionScheduler {
         }
     }
     internal fun next(context:Context,group:Group) { if(SubscriptionPlan.scheduled(group)) enqueue(context,group,ExistingWorkPolicy.APPEND_OR_REPLACE) }
-    suspend fun apply(context:Context,store:ZaneStore,group:Group,automatic:Boolean) {
+    suspend fun apply(context:Context,store:ZaneStore,group:Group,automatic:Boolean,schedule:Boolean=true) {
         val id=group.id;val request=JSONObject(group.options).getJSONObject("subscriptionRuntime").getString("request")
         try {
             onUpdated(context,id)
@@ -71,7 +71,7 @@ object SubscriptionScheduler {
         } catch(e:CancellationException) { throw e } catch(e:Exception) {
             store.update { SubscriptionUpdater.record(it,id,"apply-error",System.currentTimeMillis(),"订阅已保存，自动应用或延迟测试失败（${e.javaClass.simpleName}）",nextAttempt=System.currentTimeMillis()+retryDelay,request=request) };throw e
         } finally {
-            store.snapshot().groups.firstOrNull{it.id==id && SubscriptionPlan.scheduled(it)}?.let { enqueue(context,it,if(automatic)ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE) }
+            if(schedule)store.snapshot().groups.firstOrNull{it.id==id && SubscriptionPlan.scheduled(it)}?.let { enqueue(context,it,if(automatic)ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE) }
             updated(id)
         }
     }

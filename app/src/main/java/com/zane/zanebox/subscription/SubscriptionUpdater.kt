@@ -41,10 +41,12 @@ object SubscriptionUpdater {
     }
     private fun literal(host:String):Boolean = host.contains(':') || host.split('.').let { parts -> parts.size==4 && parts.all { it.toIntOrNull() in 0..255 } }
     private fun journal(options:String,block:(JSONObject)->Unit):String = JSONObject(options).apply { val state=optJSONObject("subscriptionRuntime") ?: JSONObject();block(state);put("subscriptionRuntime",state) }.toString()
-    fun begin(current:AppData,expected:Group,request:String,now:Long):AppData {
+    fun begin(current:AppData,expected:Group,request:String,now:Long,automatic:Boolean=false):AppData {
         val group=current.groups.find { it.id==expected.id } ?: error("订阅组已删除")
         require(group.subscriptionUrl==expected.subscriptionUrl && SubscriptionOptions.signature(group.options)==SubscriptionOptions.signature(expected.options)) { "订阅组 URL 或选项已变更，请重新更新" }
-        return current.copy(groups=current.groups.map { if(it.id!=group.id) it else it.copy(options=journal(it.options) { state -> state.put("request",request).put("state","updating").put("lastAttempt",now);state.remove("error");state.remove("nextAttempt") }) })
+        val runtime=JSONObject(group.options).optJSONObject("subscriptionRuntime")
+        if(automatic)require(group.updatedAt==expected.updatedAt && !(runtime?.optString("state")=="updating" && now-runtime.optLong("lastAttempt")<10*60000L)) { "订阅已变更或已有更新任务，已保留当前数据" }
+        return current.copy(groups=current.groups.map { if(it.id!=group.id) it else it.copy(options=journal(it.options) { state -> state.put("request",request).put("state","updating").put("lastAttempt",now).put("nextAttempt",now+10*60000L);state.remove("error") }) })
     }
     fun apply(current:AppData,baseline:Group,parsed:List<ParsedNode>,userInfo:String,now:Long,nextId:()->Long):AppData {
         require(parsed.isNotEmpty()) { "订阅没有有效节点，已保留原节点" }
