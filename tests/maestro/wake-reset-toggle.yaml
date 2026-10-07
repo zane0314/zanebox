@@ -1,0 +1,21 @@
+appId: com.zane.zanebox
+---
+- assertVisible:
+    id: home_header
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_wakeResetConnections
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_wakeResetConnections
+- takeScreenshot: reports/ui-1.0.2/current/wake-reset-toggle
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible: '代理开关：断开'

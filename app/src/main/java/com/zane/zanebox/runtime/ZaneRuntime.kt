@@ -91,7 +91,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private var wakeLock:android.os.PowerManager.WakeLock?=null
     private val wakeReceiver=object:BroadcastReceiver() {
         override fun onReceive(context:Context,intent:Intent) {
-            if(intent.action==Intent.ACTION_SCREEN_ON && current.get().connectionState==RuntimeState.CONNECTED && appliedData?.bool("wakeResetConnections")==true)dispatch("wakeReset","")
+            if(intent.action==Intent.ACTION_SCREEN_ON && current.get().connectionState==RuntimeState.CONNECTED)dispatch("wakeReset","")
             if(intent.action=="$packageName.SUBSCRIPTION_UPDATE")scope.launch {ready.await();checkSubscriptionUpdates()}
             if(intent.action==android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)scope.launch {ready.await();access.withLock {syncIdle()}}
         }
@@ -176,7 +176,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 RuntimeCommand.LOGS -> { val log=File(cacheDir,"neko.log");event("logs",JSONArray(LogTail.read(log)).toString()) }
                 RuntimeCommand.CLEAR_LOGS -> { File(cacheDir,"neko.log").writeText("");event("logs","[]") }
                 RuntimeCommand.SYSTEM_LOGS -> { val process=ProcessBuilder("logcat","-d","-t","500").redirectErrorStream(true).start();val lines=process.inputStream.bufferedReader().use { it.readLines().takeLast(500) };process.waitFor();event("logs",JSONArray(lines).toString()) }
-                RuntimeCommand.WAKE_RESET -> access.withLock { if(current.get().connectionState==RuntimeState.CONNECTED)Libcore.resetAllConnections(true) }
+                RuntimeCommand.WAKE_RESET -> access.withLock { if(current.get().connectionState==RuntimeState.CONNECTED && store.snapshot().bool("wakeResetConnections")) {Libcore.resetAllConnections(true);android.util.Log.i("LinksRuntime","wakeReset applied=true thread=${Thread.currentThread().name}")} }
                 RuntimeCommand.ASSET -> access.withLock { installAsset(payload) }
                 RuntimeCommand.IP -> queryIp()
                 RuntimeCommand.TRAFFIC -> event("traffic",traffic.trafficJson())

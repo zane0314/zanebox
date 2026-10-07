@@ -49,4 +49,22 @@ class OptimizationRuntimeTest {
             } finally {client.stop();client.close();server.close();responder.join(1000)}
         }
     }
+    @Test fun wakeResetUsesLiveSettingsWithoutReloadOrMainThreadDatabaseRead() {
+        fun shell(command:String)=ins.uiAutomation.executeShellCommand(command).use {java.io.FileInputStream(it.fileDescriptor).bufferedReader().readText()}
+        ZaneStore(context).use {store ->
+            store.replace(base());val client=ServiceClient(context)
+            try {
+                client.start();waitFor("connect"){client.snapshot.value.state==2};val generation=client.snapshot.value.generation
+                store.putSetting("wakeResetConnections","true");shell("logcat -c")
+                shell("input keyevent 223");Thread.sleep(200);shell("input keyevent 224")
+                waitFor("live wake reset"){shell("logcat -d -s LinksRuntime:I").contains("wakeReset applied=true thread=DefaultDispatcher")}
+                assertEquals(generation,client.snapshot.value.generation);assertEquals("EXIT_A",exit())
+                store.putSetting("wakeResetConnections","false");shell("logcat -c")
+                shell("input keyevent 223");Thread.sleep(200);shell("input keyevent 224");Thread.sleep(1000)
+                assertFalse(shell("logcat -d -s LinksRuntime:I").contains("wakeReset applied=true"))
+                assertEquals(generation,client.snapshot.value.generation);assertEquals("EXIT_A",exit())
+            } finally {shell("input keyevent 224");client.stop();waitFor("stop"){client.snapshot.value.state==0};client.close()}
+        }
+    }
+
 }

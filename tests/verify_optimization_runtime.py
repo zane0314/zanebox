@@ -21,7 +21,7 @@ def database(label):
 def start():
     began=time.monotonic();shell('am','start-foreground-service','-n','com.zane.zanebox/.runtime.ZaneProxyService','-a','start');wait('connected',connected);return (time.monotonic()-began)*1000
 def stop():shell('am','startservice','-n','com.zane.zanebox/.runtime.ZaneProxyService','-a','stop');wait('stopped',lambda:not connected())
-old=root/'reports/background-1.0.15/Links-1.0.15.apk';new=pathlib.Path(sys.argv[2])
+old=pathlib.Path(os.environ.get('ZANE_OPT_PREVIOUS_APK',str(root/'reports/background-1.0.15/Links-1.0.15.apk')));new=pathlib.Path(sys.argv[2])
 subprocess.check_call(adb+['install',str(old)],stdout=subprocess.DEVNULL);subprocess.check_call(adb+['root'],stdout=subprocess.DEVNULL);subprocess.check_call(adb+['wait-for-device']);subprocess.check_call(adb+['forward','tcp:12080','tcp:2080'])
 fixture=out/'fixture.db'
 with sqlite3.connect(fixture) as c:
@@ -63,5 +63,5 @@ for line in logs.splitlines():assert not('LinksStore:' in line and 'thread=main'
 saved=database('after-idle-sampling')['settings'].get('trafficData','');assert saved!=prior,'traffic did not persist at 60s'
 stop();tail=database('after-stop')['settings']['trafficData'];assert json.loads(tail)['nodes'],'tail traffic missing'
 shell('input','keyevent','224');shell('wm','dismiss-keyguard')
-result={'status':'PASS','nodes':1000,'oldStartMs':old_times,'newStartMs':new_times,'oldWarmMedianMs':statistics.median(old_times[1:]),'newWarmMedianMs':statistics.median(new_times[1:]),'sameKeyUpgradeFrom':'1.0.15/16','nodesGroupsAndSettingsPreserved':True,'visibleIntervalMs':1000,'screenOffIntervalMs':10000,'persistIntervalMs':60000,'tailTrafficSaved':True,'noMainThreadSnapshotDuringUiStartup':True,'periodicReconcileWorkWithoutTimedSubscriptions':work_count}
+result={'status':'PASS','nodes':1000,'oldStartMs':old_times,'newStartMs':new_times,'oldWarmMedianMs':statistics.median(old_times[1:]),'newWarmMedianMs':statistics.median(new_times[1:]),'sameKeyUpgradeFromApk':old.name,'nodesGroupsAndSettingsPreserved':True,'visibleIntervalMs':1000,'screenOffIntervalMs':10000,'persistIntervalMs':60000,'tailTrafficSaved':True,'noMainThreadSnapshotDuringUiStartup':True,'periodicReconcileWorkWithoutTimedSubscriptions':work_count}
 (out/'runtime-performance.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
