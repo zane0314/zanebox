@@ -35,6 +35,19 @@ class AutomaticApplyTest {
         try {assertEquals(expected,connection.inputStream.bufferedReader().use{it.readText()}.trim())}finally{connection.disconnect()}
     }
     private fun stop() {compose.runOnIdle{vm.service.stop()};compose.waitUntil(10000){vm.service.snapshot.value.state==0}}
+    @Test fun subscriptionAppliesAndTestsWhileUiReconcilesSchedules() {
+        start()
+        try {
+            vm.store.update{it.copy(groups=it.groups.map{g->g.copy(subscriptionUrl="http://10.0.2.2:19080/options-subscription",updatedAt=System.currentTimeMillis(),options="""{"autoUpdate":true,"autoUpdateDelay":60,"filterMode":1,"filterRegex":"fixture B$"}""")},settings=it.settings+("testUrl" to "http://203.0.113.9:19080/test"))};vm.store.reload()
+            compose.runOnIdle{vm.updateGroup(vm.data.value.groups.single())}
+            compose.waitUntil(30000){!vm.busy.value && vm.data.value.nodes.size==1 && vm.data.value.nodes.single().ping>0}
+            assertExit("EXIT_B")
+            assertEquals("success",org.json.JSONObject(vm.store.snapshot().groups.single().options).getJSONObject("subscriptionRuntime").getString("state"))
+            assertFalse(vm.message.value.contains("应用修改"))
+        } finally {
+            vm.store.update{it.copy(groups=it.groups.map{g->g.copy(options="{}")})};runBlocking{com.zane.zanebox.subscription.SubscriptionScheduler.reconcile(compose.activity,vm.store.snapshot())};stop()
+        }
+    }
     @Test fun safeSettingAppliesAutomaticallyAndLiveSettingDoesNotRestart() {
         start()
         val events=CopyOnWriteArrayList<String>()

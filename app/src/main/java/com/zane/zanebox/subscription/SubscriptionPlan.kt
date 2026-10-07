@@ -10,7 +10,11 @@ object SubscriptionPlan {
         val last=group.updatedAt.takeIf { it>0 } ?: legacy
         return if(last<=0) 0 else last + options.autoUpdateDelay*60000L
     }
-    fun nextAt(group:Group):Long = maxOf(dueAt(group),JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optLong("nextAttempt") ?: 0L)
+    fun nextAt(group:Group):Long {
+        val runtime=JSONObject(group.options).optJSONObject("subscriptionRuntime")
+        val retry=runtime?.optLong("nextAttempt") ?: 0L
+        return if(runtime?.optString("state") in setOf("applying","apply-error") && retry>0)retry else maxOf(dueAt(group),retry)
+    }
     fun shouldUpdate(group:Group,now:Long,connected:Boolean):Boolean {
         val options=SubscriptionOptions.parse(group.options)
         return group.enabled && group.subscriptionUrl.isNotBlank() && options.autoUpdate && now>=dueAt(group) && (!options.updateWhenConnectedOnly || connected)

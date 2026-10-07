@@ -72,5 +72,7 @@ class SubscriptionUpdateTest {
         assertTrue(SubscriptionPlan.shouldUpdate(automatic.copy(options="{\"autoUpdate\":true,\"autoUpdateDelay\":5}"),301000,false))
         assertFalse(SubscriptionPlan.shouldUpdate(automatic.copy(enabled=false),301000,true))
         assertEquals(1440,SubscriptionOptions.parse("{}").autoUpdateDelay)
+        val pending=automatic.copy(options="""{"autoUpdate":true,"autoUpdateDelay":60,"subscriptionRuntime":{"state":"apply-error","nextAttempt":9000}}""")
+        assertEquals(9000L,SubscriptionPlan.nextAt(pending))
     }
 }

@@ -46,7 +46,8 @@ object SubscriptionScheduler {
         (previous-active).forEach { id -> work.cancelUniqueWork(name(id.toLong()));prefs.edit().remove("signature.$id").apply() }
         prefs.edit().putStringSet("ids",active).apply()
     }
-    private fun signature(group:Group)=NodeIdentity.key(JSONObject().put("url",group.subscriptionUrl).put("options",SubscriptionOptions.signature(group.options)).toString())+":"+group.updatedAt+":"+SubscriptionPlan.nextAt(group)
+    // Runtime progress must not REPLACE/cancel the Worker that is still applying it.
+    private fun signature(group:Group)=NodeIdentity.key(JSONObject().put("url",group.subscriptionUrl).put("options",SubscriptionOptions.signature(group.options)).toString())
     private fun enqueue(context:Context,group:Group,policy:ExistingWorkPolicy,delay:Long?=null) {
         val wait=delay ?: (SubscriptionPlan.nextAt(group)-System.currentTimeMillis()).coerceAtLeast(0)
         val request=OneTimeWorkRequestBuilder<SubscriptionUpdateWorker>().setInputData(workDataOf("groupId" to group.id)).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).setInitialDelay(wait,TimeUnit.MILLISECONDS).addTag(GROUP_TAG).build()
@@ -62,6 +63,18 @@ object SubscriptionScheduler {
         }
     }
     internal fun next(context:Context,group:Group) { if(SubscriptionPlan.scheduled(group)) enqueue(context,group,ExistingWorkPolicy.APPEND_OR_REPLACE) }
+    suspend fun apply(context:Context,store:ZaneStore,group:Group,automatic:Boolean) {
+        val id=group.id;val request=JSONObject(group.options).getJSONObject("subscriptionRuntime").getString("request")
+        try {
+            onUpdated(context,id)
+            store.update { SubscriptionUpdater.record(it,id,"success",System.currentTimeMillis(),request=request) }
+        } catch(e:CancellationException) { throw e } catch(e:Exception) {
+            store.update { SubscriptionUpdater.record(it,id,"apply-error",System.currentTimeMillis(),"订阅已保存，自动应用或延迟测试失败（${e.javaClass.simpleName}）",nextAttempt=System.currentTimeMillis()+retryDelay,request=request) };throw e
+        } finally {
+            store.snapshot().groups.firstOrNull{it.id==id && SubscriptionPlan.scheduled(it)}?.let { enqueue(context,it,if(automatic)ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE) }
+            updated(id)
+        }
+    }
     internal const val retryDelay=RETRY_DELAY
     suspend fun status(context:Context):List<SubscriptionBackgroundStatus> = withContext(Dispatchers.IO) {
         val store=ZaneStore(context)
@@ -90,17 +103,16 @@ class SubscriptionUpdateWorker(context:Context,params:WorkerParameters):Coroutin
             expected=group
             if(!SubscriptionPlan.scheduled(group)) return Result.success()
             val now=System.currentTimeMillis()
-            if(now<SubscriptionPlan.dueAt(group)) { SubscriptionScheduler.next(applicationContext,group);return Result.success() }
+            val pendingApply=group.updatedAt>0 && JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optString("state") in setOf("applying","apply-error")
+            if(!pendingApply && now<SubscriptionPlan.dueAt(group)) { SubscriptionScheduler.next(applicationContext,group);return Result.success() }
             val options=SubscriptionOptions.parse(group.options)
             val connected=if(options.updateWhenConnectedOnly) withTimeoutOrNull(15000) { SubscriptionScheduler.connectionCheck(applicationContext) } ?: false else false
-            if(options.updateWhenConnectedOnly && !connected) {
+            if(!pendingApply && options.updateWhenConnectedOnly && !connected) {
                 val postponed=store.update { SubscriptionUpdater.record(it,id,"waiting-connection",now,nextAttempt=now+SubscriptionScheduler.retryDelay) }.groups.first { it.id==id }
                 SubscriptionScheduler.next(applicationContext,postponed);return Result.success()
             }
-            val updated=SubscriptionUpdater.update(store,group,applicationContext,connected,automatic=true)
-            SubscriptionScheduler.next(applicationContext,updated)
-            SubscriptionScheduler.updated(id)
-            runCatching { SubscriptionScheduler.onUpdated(applicationContext,id) }
+            val updated=if(pendingApply)group else SubscriptionUpdater.update(store,group,applicationContext,connected,automatic=true)
+            try {SubscriptionScheduler.apply(applicationContext,store,updated,automatic=true)} catch(e:CancellationException) {throw e} catch(_:Exception) {}
             return Result.success()
         } catch(e:CancellationException) { throw e } catch(e:Exception) {
             val now=System.currentTimeMillis()

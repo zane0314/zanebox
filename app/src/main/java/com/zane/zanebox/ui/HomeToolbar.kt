@@ -3,6 +3,8 @@ package com.zane.zanebox.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountTree
@@ -40,7 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
         val label=uiText(listOf("连接","连接中…","断开","断开中…","连接").getOrElse(state){"同步中"})
         val description=uiText("代理开关")+"："+label
         Box(Modifier.align(Alignment.TopCenter).offset(y=10.dp).size(82.dp).testTag("connect_toggle")
-            .semantics{contentDescription=description}.clickable(enabled=state!=1 && state!=3,onClick=onToggle)) {
+            .semantics{contentDescription=description}.clip(CircleShape).clickable(enabled=state!=1 && state!=3,onClick=onToggle)) {
             AndroidView(factory={ZanePowerButton(it).apply{isClickable=false;isFocusable=false}},update={it.render(state,false)},modifier=Modifier.fillMaxSize())
         }
         Text(label,Modifier.align(Alignment.TopCenter).offset(y=92.dp).testTag("tab_0").clickable(enabled=state!=1 && state!=3,onClick=onToggle),fontSize=12.sp,lineHeight=16.sp)

@@ -39,7 +39,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val webdavEntries=MutableStateFlow<List<WebDavEntry>>(emptyList())
     init {
         service.connect()
-        viewModelScope.launch { SubscriptionScheduler.updates.collect { withContext(Dispatchers.IO) { store.reload() };message.value="后台订阅已更新，请点击应用修改" } }
+        viewModelScope.launch { SubscriptionScheduler.updates.collect { withContext(Dispatchers.IO) { store.reload() } } }
         viewModelScope.launch { data.map { value -> value.groups.map { group -> listOf(group.id,group.enabled,group.subscriptionUrl,group.updatedAt,SubscriptionOptions.signature(group.options)) } }.distinctUntilChanged().drop(1).collect { withContext(Dispatchers.IO) { SubscriptionScheduler.reconcile(getApplication(),store.snapshot()) } } }
         viewModelScope.launch { service.events.collect { message.value = it; withContext(Dispatchers.IO) { store.reload() } } }
         viewModelScope.launch { service.testResults.collect { withContext(Dispatchers.IO) { store.reload() } } }
@@ -176,9 +176,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val context=getApplication<Application>()
         val options=SubscriptionOptions.parse(group.options)
         val connected=service.snapshot.value.state==2 || (options.updateWhenConnectedOnly && SubscriptionScheduler.connectionCheck(context))
-        SubscriptionUpdater.update(store,group,context,connected)
+        val updated=SubscriptionUpdater.update(store,group,context,connected)
         SubscriptionScheduler.reconcile(context,store.snapshot())
-        saved("订阅已更新")
+        SubscriptionScheduler.apply(context,store,updated,automatic=false)
+        message.value="订阅已更新并完成延迟测试"
     }
     fun saveGroup(group:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { SubscriptionOptions.parse(group.options);store.update { d->
         val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}") else emptySet()

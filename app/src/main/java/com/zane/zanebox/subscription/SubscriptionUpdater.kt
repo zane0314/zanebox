@@ -74,7 +74,7 @@ object SubscriptionUpdater {
         val disabledTargets=current.groups.filterNot { it.enabled }.map { "group:${it.id}" }.toSet()+all.filter { it.groupId !in enabledIds }.map { "node:${it.id}" }
         settings.entries.forEach { entry -> if(entry.key.startsWith("smart.") && entry.key.endsWith(".target") && entry.value in disabledTargets) entry.setValue("off") }
         return current.copy(nodes=all,settings=settings,
-            groups=current.groups.map { g -> val cleaned=g.copy(frontProxy=if(g.frontProxy in removed)0 else g.frontProxy,landingProxy=if(g.landingProxy in removed)0 else g.landingProxy);if(g.id!=group.id) cleaned else cleaned.copy(updatedAt=now,userInfo=userInfo,options=JSONObject(journal(cleaned.options) { state -> state.put("state","success").put("lastSuccess",now);state.remove("error");state.remove("nextAttempt") }).put("subscriptionLastUpdated",now/1000).toString()) },
+            groups=current.groups.map { g -> val cleaned=g.copy(frontProxy=if(g.frontProxy in removed)0 else g.frontProxy,landingProxy=if(g.landingProxy in removed)0 else g.landingProxy);if(g.id!=group.id) cleaned else cleaned.copy(updatedAt=now,userInfo=userInfo,options=JSONObject(journal(cleaned.options) { state -> state.put("state","applying").put("lastSuccess",now).put("nextAttempt",now+5*60000L);state.remove("error") }).put("subscriptionLastUpdated",now/1000).toString()) },
             rules=current.rules.map { if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in removed) it.copy(outbound="proxy") else it },
             merges=current.merges.map { it.copy(nodeIds=it.nodeIds.filter { id -> id !in removed },selectedId=if(it.selectedId in removed)0 else it.selectedId) })
     }

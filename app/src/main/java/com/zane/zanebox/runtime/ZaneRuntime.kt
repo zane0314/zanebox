@@ -125,6 +125,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 "start" -> access.withLock { if(current.get().state !in listOf(1,2,3)) startCore() }
                 "stop" -> access.withLock { stopCore() }
                 "reload","autoReload" -> access.withLock {reloadCore(action=="autoReload")}
+                "subscriptionUpdated" -> applySubscription(payload)
                 "liveSettings" -> access.withLock {applyLiveSettings(store.snapshot())}
                 "select" -> access.withLock { selectNode(payload.toLong()) }
                 "selectAuto" -> access.withLock {
@@ -205,26 +206,46 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         if(!running || !data.bool("acquireWakeLock",false))releaseWakeLock()
         else if(wakeLock==null)wakeLock=(getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"zanebox:proxy").apply {setReferenceCounted(false);acquire()}
     }
-    private suspend fun reloadCore(automatic:Boolean) {
-        if(current.get().state!=2){event("message","设置已保存，下次连接时应用");return}
+    private suspend fun applySubscription(payload:String) {
+        val args=JSONObject(payload);val request=args.getString("request");val id=args.getLong("groupId")
+        fun completed(error:String="")=event("subscriptionApplied",JSONObject().put("request",request).put("error",error).toString())
+        try {
+            val test=access.withLock {
+                check(reloadCore(automatic=true,subscription=true)) { "订阅已保存，但内核应用失败，原连接已保留" }
+                val data=store.snapshot()
+                val ids=data.nodes.filter { it.groupId==id && data.groups.any { g->g.id==id && g.enabled } }.map{it.id}
+                startTests(JSONArray(ids))
+            }
+            // Wait outside the command queue, so stop/select commands remain responsive during tests.
+            scope.launch {
+                test?.join()
+                completed(if(test?.isCancelled==true)"订阅已应用，延迟测试被取消" else "")
+            }
+        } catch(e:CancellationException) { throw e } catch(e:Exception) {completed(safeError(e))}
+    }
+    private suspend fun reloadCore(automatic:Boolean,subscription:Boolean=false):Boolean {
+        if(current.get().state!=2){event("message","设置已保存，下次连接时应用");return true}
         val previous=appliedData ?: error("运行配置不可用")
-        val incoming=store.snapshot()
-        if(automatic && com.zane.zanebox.ui.hasManualSettingsPending(previous,incoming)) {
-            event("message","存在需要手动应用的设置，请手动应用修改使配置生效");return
+        val saved=store.snapshot()
+        val incoming=if(subscription)saved.copy(settings=saved.settings+com.zane.zanebox.ui.manualApplyDefaults.mapValues { (key,default)->previous.setting(key,default) }) else saved
+        if(automatic && !subscription && com.zane.zanebox.ui.hasManualSettingsPending(previous,incoming)) {
+            event("message","存在需要手动应用的设置，请手动应用修改使配置生效");return false
         }
         val next=try {runtimeConfig(incoming).also{engine.validate(it)}} catch(e:Exception) {
-            event("message","配置校验失败，已保留原连接：${safeError(e)}；请应用修改后重试");return
+            event("message","配置校验失败，已保留原连接：${safeError(e)}；请应用修改后重试");return false
         }
         if(automatic && next==runtimeConfig(previous)) {
             applyLiveSettings(incoming);appliedData=incoming
-            event("message","设置已应用，无需重启");return
+            event("message","设置已应用，无需重启");return true
         }
         stopCore(terminal=false,syncSelection=false)
         try {startCore(incoming);event("message",if(automatic)"设置已自动应用" else "设置已应用")}
         catch(failure:Exception) {
             try {startCore(previous);event("message","重载失败，已恢复原连接；保存设置仍待应用修改：${safeError(failure)}")}
             catch(recovery:Exception) {event("message","重载失败，恢复原连接也失败：${safeError(recovery)}")}
+            return false
         }
+        return true
     }
     private suspend fun startCore(overrideData:AppData?=null) {
         val previous=current.get();publish(RuntimeSnapshot(state=1,generation=previous.generation+1));notification("正在连接")
@@ -462,12 +483,12 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             return if(connection.responseCode==204) "{}" else connection.inputStream.use { input -> val out=java.io.ByteArrayOutputStream();val bytes=ByteArray(4096);val limit=if(path=="/connections")256*1024 else 1024*1024;while(true) { val n=input.read(bytes);if(n<0)break;require(out.size()+n<=limit) { "控制响应过大" };out.write(bytes,0,n) };out.toString("UTF-8") }
         } finally { connection.disconnect() }
     }
-    private fun startTests(ids:JSONArray) {
+    private fun startTests(ids:JSONArray):Job? {
         tests?.cancel();engine.cancelTests()
         val data=store.snapshot();val generation=current.get().generation
         val selected=(0 until ids.length()).map { ids.getLong(it) }.distinct()
         require(selected.size<=10000)
-        if(selected.isEmpty()) { event("testing","[]");event("message","没有可测速的节点");return }
+        if(selected.isEmpty()) { event("testing","[]");event("message","没有可测速的节点");return null }
         val outbounds=data.nodes.associate { it.id to it.outbound }
         event("testing",JSONArray(selected).toString())
         event("message","正在测试 ${selected.size} 个节点")
@@ -492,6 +513,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             event("testing","[]")
             event("message","测速完成：${selected.size} 个节点")
         }
+        return tests
     }
     private fun startSpeed(request:JSONObject) {
         speed?.cancel();speedJob?.cancel()

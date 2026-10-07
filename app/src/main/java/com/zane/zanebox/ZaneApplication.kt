@@ -9,6 +9,7 @@ class ZaneApplication : Application() {
         mainProcess=process==packageName
         if(mainProcess) {
             com.zane.zanebox.subscription.SubscriptionScheduler.connectionCheck={ context -> com.zane.zanebox.runtime.ServiceClient.isConnected(context) }
+            com.zane.zanebox.subscription.SubscriptionScheduler.onUpdated={ context,id -> com.zane.zanebox.runtime.ServiceClient.updateSubscription(context,id) }
             com.zane.zanebox.subscription.SubscriptionScheduler.initialize(this)
         }
     }

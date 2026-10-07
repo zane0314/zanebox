@@ -1,0 +1,10 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- assertVisible: 旧地址
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: '代理开关：断开'
+    timeout: 30000
+- pressKey: Home

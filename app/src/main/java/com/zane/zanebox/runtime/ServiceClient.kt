@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.channels.Channel
 import com.zane.zanebox.data.ZaneStore
 import com.zane.zanebox.data.AppData
@@ -52,6 +54,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private val connectionState=MutableStateFlow("{}");val connections:StateFlow<String> = connectionState
     private val speedState=MutableStateFlow("");val speedResult:StateFlow<String> = speedState
     private val validationState=MutableStateFlow<Map<String,String>>(emptyMap());val validationResults:StateFlow<Map<String,String>> = validationState
+    private val subscriptionResults=MutableStateFlow<Map<String,String>>(emptyMap())
     private val panelState=MutableStateFlow("");val panelUrl:StateFlow<String> = panelState
     private val stunState=MutableStateFlow("{}");val stunResult:StateFlow<String> = stunState
     @Volatile private var remote:IRuntime?=null
@@ -76,6 +79,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
             "connections" -> connectionState.value=payload
             "speed" -> speedState.value=payload
             "validation" -> { val o=JSONObject(payload);validationState.update { it+(o.getString("name") to o.optString("error")) } }
+            "subscriptionApplied" -> { val o=JSONObject(payload);subscriptionResults.update { it+(o.getString("request") to o.optString("error")) } }
             "panel" -> panelState.value=payload
             "stun" -> stunState.value=payload
             "restored" -> { event.tryEmit("备份已恢复");val o=JSONObject(payload);if(o.optBoolean("modeChanged"))submit { ensureMode();if(o.optBoolean("running"))startRemote() } }
@@ -83,7 +87,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
     }
     private val connection=object:ServiceConnection {
-        override fun onServiceConnected(name:ComponentName,service:IBinder) { remote=IRuntime.Stub.asInterface(service);scope.launch { runCatching { remote?.registerCallback(callback);remote?.getSnapshot()?.let { state.value=RuntimeSnapshot.parse(it) } }.onFailure { event.emit("服务连接失败") } } }
+        override fun onServiceConnected(name:ComponentName,service:IBinder) { scope.launch { runCatching { val runtime=IRuntime.Stub.asInterface(service);runtime.registerCallback(callback);state.value=RuntimeSnapshot.parse(runtime.getSnapshot());remote=runtime }.onFailure { event.emit("服务连接失败") } } }
         override fun onServiceDisconnected(name:ComponentName) { remote=null;clearPendingTests();state.value=RuntimeSnapshot(error="后台服务已断开") }
         // A dead binding never reconnects by itself (e.g. after the APK is updated); rebind so later commands work.
         override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
@@ -107,6 +111,16 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         withTimeout(20000) { while(remote==null)delay(50) }
     }
     suspend fun readSnapshot():RuntimeSnapshot { ensureBinding();return RuntimeSnapshot.parse(remote!!.getSnapshot()) }
+    suspend fun applySubscription(groupId:Long) = subscriptionApply.withLock {
+        val request=java.util.UUID.randomUUID().toString()
+        try {
+            ensureBinding()
+            remote!!.command("subscriptionUpdated",JSONObject().put("groupId",groupId).put("request",request).toString())
+            // ponytail: bounded by ordinary WorkManager's execution window; use foreground work for very large subscriptions.
+            val error=withTimeout(8*60*1000L) { subscriptionResults.first { it.containsKey(request) }.getValue(request) }
+            check(error.isBlank()) { error }
+        } finally { subscriptionResults.update { it-request } }
+    }
     private fun command(action:String,payload:String="") { submit { ensureBinding();remote!!.command(action,payload) } }
     private fun startRemote() { ContextCompat.startForegroundService(context,Intent(context,boundClass).setAction("foreground"));remote!!.command("start","") }
     fun start() { submit { ensureMode();startRemote() } }
@@ -159,6 +173,8 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     } }
     fun close() { commands.close();runCatching { remote?.unregisterCallback(callback) };if(bound) { context.unbindService(connection);bound=false };remote=null;scope.cancel() }
     companion object {
+        // ponytail: serialize group application/tests; foreground work is needed if queues exceed WorkManager's window.
+        private val subscriptionApply=Mutex()
         private fun runningServiceClass(context:Context):Class<*>? {
             @Suppress("DEPRECATION") val running=(context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getRunningServices(50).firstOrNull { it.foreground && it.service.packageName==context.packageName && it.service.className in setOf(ZaneVpnService::class.java.name,ZaneProxyService::class.java.name) } ?: return null
             return if(running.service.className==ZaneProxyService::class.java.name)ZaneProxyService::class.java else ZaneVpnService::class.java
@@ -167,6 +183,10 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
             val target=runningServiceClass(context) ?: return false
             val client=ServiceClient(context,target)
             return try { withTimeout(5000) { client.readSnapshot().state==2 } } catch(_:Exception) { false } finally { client.close() }
+        }
+        suspend fun updateSubscription(context:Context,groupId:Long) {
+            val client=ServiceClient(context,runningServiceClass(context) ?: RuntimeServiceTarget.serviceClass(context))
+            try {client.applySubscription(groupId)} finally {client.close()}
         }
     }
 }
