@@ -57,7 +57,7 @@ import org.json.JSONObject
     }
     val choices=buildList {
         if(none)add("0" to "无")
-        if(smart)addAll(listOf("proxy" to "代理","direct" to "直连","auto" to "自动选择"))
+        if(smart)addAll(listOf("off" to "关闭","proxy" to "代理","direct" to "直连","auto" to "自动选择"))
         else if(!none)addAll(listOf("proxy" to "代理","direct" to "直连","block" to "阻止"))
         data.groups.filter{it.enabled}.forEach{add("group:${it.id}" to "分组 · ${it.name}")}
         data.merges.forEach{add("merge:${it.id}" to "汇总组 · ${it.name}")}
@@ -71,7 +71,7 @@ import org.json.JSONObject
     }
 }
 internal fun targetName(value:String,data:AppData):String = when(normalizeSmartTarget(value)) {
-    "auto"->"自动选择";"proxy"->"代理";"direct"->"直连";"block"->"阻止";"0"->"无"
+    "off"->"关闭";"auto"->"自动选择";"proxy"->"代理";"direct"->"直连";"block"->"阻止";"0"->"无"
     else->when(value.substringBefore(':')) {
         "node"->data.nodes.firstOrNull{it.id==value.substringAfter(':').toLongOrNull()}?.name ?: "节点已删除"
         "group"->data.groups.firstOrNull{it.id==value.substringAfter(':').toLongOrNull()}?.name ?: "分组已删除"

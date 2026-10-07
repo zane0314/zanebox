@@ -6,7 +6,7 @@ import org.json.JSONObject
 
 internal suspend fun routeAssetUrl(kind:String,data:AppData,proxy:java.net.Proxy?=null):String {
     require(kind in listOf("geoip","geosite"))
-    val provider=data.setting("rulesProvider","0")
+    val provider=data.setting("rulesProvider")
     if(provider=="4")return data.setting(if(kind=="geoip")"rulesGeoipUrl" else "rulesGeositeUrl").also { require(it.isNotBlank()) { "请配置资源 URL" } }
     val repo=when(provider) {
         "0"->"SagerNet/sing-$kind"
@@ -46,7 +46,7 @@ internal fun geoAssetCode(kind:String,bytes:ByteArray):String {
 
 internal val builtinSmartRuleFiles=mapOf("speed" to listOf("Speed"),"youtube" to listOf("YouTube"),"telegram" to listOf("Telegram"),"netflix" to listOf("Netflix"),"disney" to listOf("Disney"),"tiktok" to listOf("TikTok"),"x" to listOf("Twitter"),"meta" to listOf("Instagram","Facebook"),"spotify" to listOf("Spotify"),"google" to listOf("Google"),"ai" to listOf("OpenAI"))
 
-internal fun normalizeSmartTarget(value:String)=if(value.isBlank() || value=="off" || value.startsWith("region:"))"proxy" else value
+internal fun normalizeSmartTarget(value:String)=if(value.isBlank() || value.startsWith("region:"))"proxy" else value
 internal fun smartTarget(data:AppData,key:String)=normalizeSmartTarget(data.setting("smart.$key.target","proxy"))
 
 internal val unsupportedSmartRuleTypes=setOf("USER-AGENT","IP-ASN","OR")

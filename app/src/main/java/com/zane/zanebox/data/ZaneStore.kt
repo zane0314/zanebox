@@ -12,13 +12,13 @@ data class NodeStatusUpdate(val id:Long, val outbound:String, val ping:Int, val 
 /**
  * SQLite serializes read-modify-write transactions across UI and :bg processes.
  *
- * Schema v2 keeps the AppData API but stores it in three parts so hot writes stay small:
- * - state.payload: AppData without per-node test/traffic fields and without cold settings;
+ * Schema v3 keeps the AppData API but stores it in three parts so hot writes stay small:
+ * - state.payload: AppData without per-node test/traffic fields and without settings;
  * - node_status: ping/status/tx/rx rows (latency tests write only these);
- * - kv: cold or bulky settings (traffic counters, rule lists, legacy migration blobs).
+ * - kv: all settings (including traffic counters, rule lists, legacy migration blobs).
  * Each part has its own revision so a snapshot only re-reads what another process changed.
  */
-class ZaneStore(context:Context,databaseName:String="zanebox.db") : SQLiteOpenHelper(context.applicationContext,databaseName,null,2) {
+class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolean=true) : SQLiteOpenHelper(context.applicationContext,databaseName,null,3) {
     private data class NodeState(val ping:Int=-1,val status:Int=0,val tx:Long=0,val rx:Long=0)
     private class Cache(val revision:Long,val statusRevision:Long,val kvRevision:Long,val base:AppData,val baseJson:String,val status:Map<Long,NodeState>,val kv:Map<String,String>,provided:AppData?=null) {
         val merged:AppData by lazy { provided ?: merge(base,status,kv) }
@@ -26,7 +26,7 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db") : SQLiteOpenHe
     private val state = MutableStateFlow(AppData())
     val data:StateFlow<AppData> = state
     @Volatile private var cache:Cache?=null
-    init { setWriteAheadLoggingEnabled(true);reload() }
+    init { setWriteAheadLoggingEnabled(true);if(autoLoad)reload() }
     override fun onCreate(db:SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS state(id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL,revision INTEGER NOT NULL,status_revision INTEGER NOT NULL DEFAULT 0,kv_revision INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE IF NOT EXISTS sequence(id INTEGER PRIMARY KEY CHECK(id=1),value INTEGER NOT NULL)")
@@ -40,17 +40,24 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db") : SQLiteOpenHe
         db.execSQL("CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY,value TEXT,revision INTEGER NOT NULL)")
     }
     override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int) {
-        require(oldVersion==1 && newVersion==2) { "数据库迁移未定义：$oldVersion → $newVersion" }
-        db.execSQL("ALTER TABLE state ADD COLUMN status_revision INTEGER NOT NULL DEFAULT 0")
-        db.execSQL("ALTER TABLE state ADD COLUMN kv_revision INTEGER NOT NULL DEFAULT 0")
-        createPartTables(db)
-        val legacy=db.rawQuery("SELECT payload FROM state WHERE id=1",null).use { if(it.moveToFirst()) AppData.fromJson(it.getString(0)) else AppData() }
-        val (base,status,kv)=split(legacy)
-        status.forEach { (id,value) -> writeStatus(db,id,value) }
-        kv.forEach { (key,value) -> writeKv(db,key,value,1) }
-        db.execSQL("UPDATE state SET payload=?,revision=revision+1,status_revision=1,kv_revision=1 WHERE id=1",arrayOf(base.toJson()))
+        require(oldVersion in 1..2 && newVersion==3) { "数据库迁移未定义：$oldVersion → $newVersion" }
+        if(oldVersion==1) {
+            db.execSQL("ALTER TABLE state ADD COLUMN status_revision INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE state ADD COLUMN kv_revision INTEGER NOT NULL DEFAULT 0")
+            createPartTables(db)
+        }
+        val legacy=db.rawQuery("SELECT payload FROM state WHERE id=1",null).use { require(it.moveToFirst());AppData.fromJson(it.getString(0)) }
+        val (base,status,settings)=split(legacy)
+        if(oldVersion==1)status.forEach { (id,value) -> writeStatus(db,id,value) }
+        val revision=db.rawQuery("SELECT kv_revision FROM state",null).use { it.moveToFirst();it.getLong(0)+1 }
+        // Existing kv values (including tombstones) are authoritative in v2.
+        val existing=db.rawQuery("SELECT key FROM kv",null).use { c -> buildSet {while(c.moveToNext())add(c.getString(0))} }
+        settings.filterKeys { it !in existing }.forEach { (key,value) -> writeKv(db,key,value,revision) }
+        db.execSQL("UPDATE state SET payload=?,revision=revision+1,kv_revision=? WHERE id=1",arrayOf(base.toJson(),revision))
+        if(oldVersion==1)db.execSQL("UPDATE state SET status_revision=1 WHERE id=1")
     }
     private fun load(db:SQLiteDatabase):Cache {
+        android.util.Log.d("LinksStore","snapshot thread=${Thread.currentThread().name}")
         // Revisions are read before content: content can only be newer than its label, never older.
         val (revision,statusRevision,kvRevision)=db.rawQuery("SELECT revision,status_revision,kv_revision FROM state WHERE id=1",null).use { require(it.moveToFirst());Triple(it.getLong(0),it.getLong(1),it.getLong(2)) }
         val old=cache
@@ -66,16 +73,22 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db") : SQLiteOpenHe
         }
         return Cache(revision,statusRevision,kvRevision,base,baseJson,status,kv).also { cache=it }
     }
-    fun snapshot():AppData = load(readableDatabase).merged
+    @Synchronized fun snapshot():AppData {
+        val db=readableDatabase
+        db.beginTransactionNonExclusive()
+        return try { load(db).merged } finally {db.endTransaction()}
+    }
+    /** Startup mode/boot flags do not need a complete AppData snapshot. Call off the main thread. */
+    @Synchronized fun readSetting(key:String,default:String=""):String = readableDatabase.rawQuery("SELECT value FROM kv WHERE key=?",arrayOf(key)).use { if(it.moveToFirst() && !it.isNull(0))it.getString(0) else default }
     fun reload():AppData = snapshot().also { state.value=it }
     @Synchronized fun update(transform:(AppData)->AppData):AppData {
         val db=writableDatabase;db.beginTransaction()
         val next:Cache
         try {
             val current=load(db)
-            val result=transform(current.merged).validate()
+            val result=transform(current.merged).validate(current.merged)
             val (base,status,kv)=split(result)
-            val baseJson=base.toJson()
+            val baseJson=if(base==current.base)current.baseJson else base.toJson()
             var revision=current.revision;var statusRevision=current.statusRevision;var kvRevision=current.kvRevision
             if(baseJson!=current.baseJson) { db.execSQL("UPDATE state SET payload=?,revision=revision+1 WHERE id=1",arrayOf(baseJson));revision++ }
             if(status!=current.status) {
@@ -125,7 +138,6 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db") : SQLiteOpenHe
     }
     /** Cold settings (counters, rule lists, legacy blobs) are written without re-serializing the main payload. */
     @Synchronized fun putSetting(key:String,value:String) {
-        if(!cold(key)) { update { it.copy(settings=it.settings+(key to value)) };return }
         val db=writableDatabase;db.beginTransaction()
         var next:Cache?=null
         try {
@@ -150,13 +162,10 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db") : SQLiteOpenHe
     }
     private companion object {
         val DEFAULT=NodeState()
-        fun cold(key:String)=key=="trafficData" || key.startsWith("smartRules.") || key.startsWith("legacy.")
         fun split(data:AppData):Triple<AppData,Map<Long,NodeState>,Map<String,String>> {
             val status=HashMap<Long,NodeState>()
             val nodes=data.nodes.map { n -> val value=NodeState(n.ping,n.status,n.tx,n.rx);if(value==DEFAULT) n else { status[n.id]=value;n.copy(ping=-1,status=0,tx=0,rx=0) } }
-            val kv=HashMap<String,String>();val settings=LinkedHashMap<String,String>()
-            data.settings.forEach { (key,value) -> if(cold(key)) kv[key]=value else settings[key]=value }
-            return Triple(data.copy(nodes=nodes,settings=settings),status,kv)
+            return Triple(data.copy(nodes=nodes,settings=emptyMap()),status,data.settings)
         }
         fun merge(base:AppData,status:Map<Long,NodeState>,kv:Map<String,String>):AppData = base.copy(
             nodes=if(status.isEmpty()) base.nodes else base.nodes.map { n -> status[n.id]?.let { n.copy(ping=it.ping,status=it.status,tx=it.tx,rx=it.rx) } ?: n },

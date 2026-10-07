@@ -22,6 +22,8 @@ class MainActivity : ComponentActivity() {
             if(!preferences.getBoolean("notificationAsked",false)) { preferences.edit().putBoolean("notificationAsked",true).apply();notifications.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
         }
     }
+    override fun onStart() {super.onStart();model.service.setUiVisible(true)}
+    override fun onStop() {model.service.setUiVisible(false);super.onStop()}
     override fun onNewIntent(intent:Intent) { super.onNewIntent(intent);setIntent(intent);importIntent(intent) }
     // Any app can fire VIEW/SEND at us; nothing is written until the user confirms in ZaneApp.
     private fun importIntent(source:Intent?) {

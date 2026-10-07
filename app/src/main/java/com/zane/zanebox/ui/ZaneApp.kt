@@ -123,7 +123,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         if(runtime.state==2 || runtime.state==1)vm.service.stop()
         else if(runtime.state!=3) {
             if(data.nodes.none{n->data.groups.any{it.id==n.groupId && it.enabled}}) {vm.message.value="请先在列表中选择节点";return}
-            val permission=if(data.setting("serviceMode","vpn")=="vpn")android.net.VpnService.prepare(context) else null
+            val permission=if(data.setting("serviceMode")=="vpn")android.net.VpnService.prepare(context) else null
             if(permission==null)vm.service.start() else vpn.launch(permission)
         }
     }
@@ -148,7 +148,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         "全部测速（全部分组）" to {vm.service.testNodes(data.nodes.filter{n->data.groups.any{it.id==n.groupId && it.enabled}}.map{it.id})},"取消测速" to {vm.service.cancelTests()},
         "默认顺序" to {data.groups.filter{currentGroup==null || it.id==currentGroup.id}.forEach{vm.setting("sort_group_${it.id}","false")}},
         "延迟升序" to {data.groups.filter{currentGroup==null || it.id==currentGroup.id}.forEach{vm.setting("sort_group_${it.id}","true")}},
-        "添加订阅" to {groupForm()},"订阅管理" to {subpage="groups"},"跳转分组…" to {selector=true},"导出节点" to {exportNodes(null)})+if(data.bool("showBottomBar",true))emptyList() else listOf("设置" to {page=2},"智能分流" to {page=1},"连接 / 断开" to {toggle()})
+        "添加订阅" to {groupForm()},"订阅管理" to {subpage="groups"},"跳转分组…" to {selector=true},"导出节点" to {exportNodes(null)})+if(data.bool("showBottomBar"))emptyList() else listOf("设置" to {page=2},"智能分流" to {page=1},"连接 / 断开" to {toggle()})
     val orderedGroups=remember(data.groups){data.groups.sortedBy{it.order}}
     val homeGroupIds=remember(orderedGroups){listOf(0L)+orderedGroups.map{it.id}}
     val pagerGroups=rememberUpdatedState(homeGroupIds)
@@ -176,7 +176,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         if(ids.isEmpty())return
         val chains=com.zane.zanebox.subscription.nodeRemovalIds(data.nodes,ids).size-ids.size
         val action={vm.deleteNodes(ids);selectedNodes=emptySet();selectingNodes=false}
-        if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete",true))action()
+        if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete"))action()
         else confirm=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to action
     }
     BackHandler(selectingNodes) { selectingNodes=false;selectedNodes=emptySet() }
@@ -186,7 +186,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         Box(Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}) {
             UiBackdrop(Modifier.fillMaxSize(),home=page==0)
             NativeHomeAppearance(page==0) {
-            val floatingHomeBar=page==0 && data.bool("showBottomBar",true)
+            val floatingHomeBar=page==0 && data.bool("showBottomBar")
             var homeBarHeight by remember {mutableStateOf(0.dp)}
             val density=androidx.compose.ui.platform.LocalDensity.current
             val homeBarOverlap=(homeBarHeight-WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()).coerceAtLeast(0.dp)
@@ -287,7 +287,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                 val actions=listOf((if(group.enabled)"停用分组" else "启用分组") to {vm.edit{d->d.copy(groups=d.groups.map{if(it.id==group.id)it.copy(enabled=!it.enabled)else it})}})+
                     (if(group.subscriptionUrl.isNotBlank())listOf("更新订阅" to {vm.updateGroup(group)})else emptyList())+
                     listOf("编辑" to {groupForm(group)},"订阅选项" to {subscriptionOptions=group})+proxyActions(group)+
-                    listOf("分享分组" to {share(shareText(data.nodes.filter{it.groupId==group.id}))},"删除" to {if(data.bool("confirmProfileDelete",true))confirm="删除分组及其全部节点、依赖代理链？" to {vm.deleteGroup(group.id)}else vm.deleteGroup(group.id)})
+                    listOf("分享分组" to {share(shareText(data.nodes.filter{it.groupId==group.id}))},"删除" to {if(data.bool("confirmProfileDelete"))confirm="删除分组及其全部节点、依赖代理链？" to {vm.deleteGroup(group.id)}else vm.deleteGroup(group.id)})
                 UiAlertDialog(onDismissRequest={menuGroupId=null},title={Text(group.name)},text={LazyColumn(Modifier.heightIn(max=440.dp).testTag("home_group_menu")) {
                     items(actions,key={it.first}){(label,action)->TextButton(onClick={menuGroupId=null;action()},modifier=Modifier.fillMaxWidth()){Text(uiText(label))}}
                 }},confirmButton={TextButton(onClick={menuGroupId=null}){Text(uiText("取消"))}})
@@ -300,7 +300,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     if(nodeEdit)NodeEditor(editNode,data,initialProtocol=initialProtocol,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@NodeEditor;editorSaving=true;
                 vm.saveNode(value,onSaved={editorSaving=false;nodeEdit=false},onError={editorSaving=false;editorSaveError=it})
             }
-            if(groupEdit)GroupEditor(editGroup,data,{groupEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@GroupEditor;editorSaving=true;val g=value.copy(id=editGroup?.id ?: vm.store.nextId(),order=editGroup?.order ?: data.groups.size);vm.saveGroup(g,g.subscriptionUrl.isNotBlank() && (editGroup==null || editGroup?.subscriptionUrl!=g.subscriptionUrl),onSaved={editorSaving=false;groupEdit=false},onError={editorSaving=false;editorSaveError=it})}
+            if(groupEdit)GroupEditor(editGroup,data,{groupEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@GroupEditor;editorSaving=true;val g=value.copy(id=editGroup?.id ?: 0,order=editGroup?.order ?: data.groups.size);vm.saveGroup(g,g.subscriptionUrl.isNotBlank() && (editGroup==null || editGroup?.subscriptionUrl!=g.subscriptionUrl),onSaved={editorSaving=false;groupEdit=false},onError={editorSaving=false;editorSaveError=it})}
             if(ruleEdit)RuleEditor(editRule,data,{ruleEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@RuleEditor;editorSaving=true;vm.edit(onSaved={editorSaving=false;ruleEdit=false},onError={editorSaving=false;editorSaveError=it}){d->val r=value.copy(id=editRule?.id ?: vm.store.nextId(),order=editRule?.order ?: d.rules.size);d.copy(rules=d.rules.filter{it.id!=r.id}+r)}}
             if(mergeEdit)MergeEditor(editMerge,data,{mergeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@MergeEditor;editorSaving=true;vm.edit(onSaved={editorSaving=false;mergeEdit=false},onError={editorSaving=false;editorSaveError=it}){d->val m=value.copy(id=editMerge?.id ?: vm.store.nextId());d.copy(merges=d.merges.filter{it.id!=m.id}+m)}}
             editor?.let{TextEditPage(it,{editor=null})}

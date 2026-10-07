@@ -180,7 +180,7 @@ private val ZaneTypography = Typography().run {
 
 @Composable
 fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
-    val theme = data.setting("theme", "system").lowercase()
+    val theme = data.setting("theme").lowercase()
     val dark = when (theme) {
         "dark" -> true
         "light" -> false
@@ -189,7 +189,7 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
     val view=LocalView.current
     val context=LocalContext.current
     SideEffect { (context as? android.app.Activity)?.window?.let{configureSystemBars(it,view,dark)} }
-    val baseSkin = when (data.setting("uiSkin", "prism").lowercase()) {
+    val baseSkin = when (data.setting("uiSkin").lowercase()) {
         "azure" -> if (dark) AzureDark else AzureLight
         "spectrum" -> if (dark) SpectrumDark else SpectrumLight
         else -> if (dark) PrismDark else PrismLight
@@ -211,7 +211,7 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalZaneSkin provides skin,
     ) {
-        MaterialTheme(colorScheme = colors, typography = ZaneTypography, shapes = ZaneShapes.copy(large = androidx.compose.foundation.shape.RoundedCornerShape(when(data.setting("uiSkin","prism")){"azure"->16.dp;"spectrum"->22.dp;else->14.dp}))){
+        MaterialTheme(colorScheme = colors, typography = ZaneTypography, shapes = ZaneShapes.copy(large = androidx.compose.foundation.shape.RoundedCornerShape(when(data.setting("uiSkin")){"azure"->16.dp;"spectrum"->22.dp;else->14.dp}))){
             UiLanguageProvider(data, content)
         }
     }

@@ -64,7 +64,7 @@ import org.json.JSONObject
         if(ids.isEmpty())return
         val chains=com.zane.zanebox.subscription.nodeRemovalIds(data.nodes,ids).size-ids.size
         val action={vm.deleteNodes(ids);selectedNodes=emptySet();selectingGroup=null}
-        if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete",true))action()
+        if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete"))action()
         else confirmation=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to action
     }
     when(page) {
@@ -93,7 +93,7 @@ import org.json.JSONObject
                     TextButton(onClick={expandedGroups=if(g.id in expandedGroups)expandedGroups-g.id else expandedGroups+g.id;selectingGroup=null;selectedNodes=emptySet()},modifier=Modifier.testTag("manage_group_nodes_${g.id}")){Text(uiText(if(g.id in expandedGroups)"收起节点" else "节点"))}
                     TextButton(onClick={subscriptionEdit(g)},modifier=Modifier.testTag("subscription_options_${g.id}")){Text(uiText("订阅选项"))}
                     TextButton(onClick={vm.updateGroup(g)},enabled=g.subscriptionUrl.isNotBlank()){Text(uiText("更新"))}
-                    UiMenu(listOf("分享订阅" to {share(subscriptionShareLink(g).ifBlank{shareText(data.nodes.filter{it.groupId==g.id})})},"复制订阅链接" to {copy(subscriptionShareLink(g))},"订阅二维码" to {qr(subscriptionShareLink(g))},"复制节点配置" to {copy(shareText(data.nodes.filter{it.groupId==g.id}))},"导出节点" to {exportNodes(g.id)},"清空节点" to {confirmation="清空分组 ${g.name} 中的全部节点、依赖代理链？" to {vm.clearGroup(g.id)}},"删除分组" to {if(data.bool("confirmProfileDelete",true))confirmation="删除分组 ${g.name} 及其全部节点、依赖代理链？" to {vm.deleteGroup(g.id)}else vm.deleteGroup(g.id)}),"manage_group_menu_${g.id}")
+                    UiMenu(listOf("分享订阅" to {share(subscriptionShareLink(g).ifBlank{shareText(data.nodes.filter{it.groupId==g.id})})},"复制订阅链接" to {copy(subscriptionShareLink(g))},"订阅二维码" to {qr(subscriptionShareLink(g))},"复制节点配置" to {copy(shareText(data.nodes.filter{it.groupId==g.id}))},"导出节点" to {exportNodes(g.id)},"清空节点" to {confirmation="清空分组 ${g.name} 中的全部节点、依赖代理链？" to {vm.clearGroup(g.id)}},"删除分组" to {if(data.bool("confirmProfileDelete"))confirmation="删除分组 ${g.name} 及其全部节点、依赖代理链？" to {vm.deleteGroup(g.id)}else vm.deleteGroup(g.id)}),"manage_group_menu_${g.id}")
                 }
                 }}
                 if(g.id in expanded) {
@@ -208,7 +208,7 @@ import org.json.JSONObject
                     if(index<prefs.lastIndex)HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),thickness=.5.dp,color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))
                 }}
             }}
-            if(title=="代理共享")item{UiCard{UiRow("局域网地址",lanAddresses());UiRow("共享代理端口",if(data.bool("shareEnabled"))data.setting("sharePort","2081")else data.setting("mixedPort","2080"))}}
+            if(title=="代理共享")item{UiCard{UiRow("局域网地址",lanAddresses());UiRow("共享代理端口",if(data.bool("shareEnabled"))data.setting("sharePort")else data.setting("mixedPort"))}}
         }
         item{UiSection("数据管理")}
         item{UiCard{UiRow("重置设置","保留节点、分组和路由规则",onClick={confirmation="将应用设置恢复默认值？" to {vm.resetSettings()}},modifier=Modifier.testTag("reset_settings"));UiRow("清除缓存",onClick={confirmation="清除应用缓存？" to {vm.clearCache()}},modifier=Modifier.testTag("clear_cache"));UiRow("恢复出厂设置","清除节点、分组、规则和设置",onClick={confirmation="清除全部应用配置？此操作会断开代理。" to {vm.factoryReset()}},modifier=Modifier.testTag("factory_reset"))}}
@@ -264,7 +264,7 @@ internal fun validatePreference(key:String,value:String) {
     val importer=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{vm.importAsset(importKind,it)}}
     val providerPreference=preferenceSections(data).flatMap{it.second}.first{it.key=="rulesProvider"}
     UiPageList("路由资产",onDismiss) {
-        item{UiCard{UiRow("路由资源更新源",providerPreference.choices.firstOrNull{it.first==data.setting("rulesProvider","0")}?.second.orEmpty(),onClick={providers=true},modifier=Modifier.testTag("asset_provider"))}}
+        item{UiCard{UiRow("路由资源更新源",providerPreference.choices.firstOrNull{it.first==data.setting("rulesProvider")}?.second.orEmpty(),onClick={providers=true},modifier=Modifier.testTag("asset_provider"))}}
         items(listOf("geoip" to "GeoIP","geosite" to "Geosite")){(kind,title)->
             UiCard {
                 UiRow(title,if((files[kind] ?:0)>0)"本地资产 · ${bytes(files[kind]!!)}" else "连接时解压内置资产",Icons.Outlined.Storage)
@@ -277,7 +277,7 @@ internal fun validatePreference(key:String,value:String) {
         }
         item{Text(uiText("可保持连接下载；下载后自动断开、校验并应用资源，再重启代理。失败恢复原文件；未连接时更新不会启动代理。"),style=MaterialTheme.typography.bodySmall)}
     }
-    if(providers)ChoiceDialog("路由资源更新源",data.setting("rulesProvider","0"),providerPreference.choices,{providers=false}){vm.setting("rulesProvider",it)}
+    if(providers)ChoiceDialog("路由资源更新源",data.setting("rulesProvider"),providerPreference.choices,{providers=false}){vm.setting("rulesProvider",it)}
 }
 
 private fun lanAddresses():String=runCatching {

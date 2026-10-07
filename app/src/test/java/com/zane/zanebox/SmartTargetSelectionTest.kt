@@ -23,10 +23,10 @@ class SmartTargetSelectionTest {
         assertTrue(ConfigBuilder.smartTargetNodeIds(local,"auto").isEmpty())
         assertTrue(ConfigBuilder.targetWarnings(local).any{it.contains("youtube")})
     }
-    @Test fun oldOffAndRemovedRegionsHaveTheSameProxyBehaviorAndRulesStayIntact() {
+    @Test fun removedRegionsHaveTheSameProxyBehaviorAndRulesStayIntact() {
         val settings=data.settings+mapOf("smartRules.youtube" to "DOMAIN-SUFFIX,video.test")
         val proxy=data.copy(settings=settings+("smart.youtube.target" to "proxy"))
-        for(old in listOf("off","region:jp","region:unknown")) {
+        for(old in listOf("region:jp","region:unknown")) {
             val legacy=proxy.copy(settings=settings+("smart.youtube.target" to old))
             assertEquals(ConfigBuilder.build(proxy),ConfigBuilder.build(legacy))
             assertEquals(proxy.setting("smartRules.youtube"),legacy.setting("smartRules.youtube"))

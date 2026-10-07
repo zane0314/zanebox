@@ -32,7 +32,7 @@ class ZaneStoreV2Test {
             ZaneStore(context,name).use { store -> assertEquals(original,store.snapshot());assertEquals(3L,store.nextId()) }
             val payload=raw(name,"SELECT payload FROM state")
             assertFalse(payload.contains("legacy.logical"));assertFalse(payload.contains("trafficData"));assertFalse(payload.contains("\"ping\":88"))
-            assertEquals("1",raw(name,"SELECT COUNT(*) FROM node_status"));assertEquals("3",raw(name,"SELECT COUNT(*) FROM kv"))
+            assertEquals("1",raw(name,"SELECT COUNT(*) FROM node_status"));assertEquals("6",raw(name,"SELECT COUNT(*) FROM kv"))
             ZaneStore(context,name).use { store -> assertEquals(original,store.snapshot()) }
         } finally { context.deleteDatabase(name) }
     }

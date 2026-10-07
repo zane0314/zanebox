@@ -105,8 +105,8 @@ private fun RoutingProbePage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
         result=null;captured=""
         running=true
         vm.service.refreshConnections()
-        val mode=data.setting("serviceMode","vpn")
-        val port=data.setting("mixedPort","2080").toIntOrNull() ?: 0
+        val mode=data.setting("serviceMode")
+        val port=data.setting("mixedPort").toIntOrNull() ?: 0
         val uid=runCatching { context.packageManager.getApplicationInfo(context.packageName,0).uid }.getOrDefault(Process.myUid())
         scope.launch {
             val poll=launch { while(isActive) { vm.service.refreshConnections();delay(250) } }
@@ -139,8 +139,8 @@ private fun RoutingProbePage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
                 Text(uiText("运行时链路"),style=MaterialTheme.typography.titleMedium)
                 Text("${uiText("服务状态")}: ${runtimeStateText(runtime.state)}")
                 if(runtime.error.isNotBlank())Text("${uiText("运行时错误")}: ${runtime.error}",color=MaterialTheme.colorScheme.error)
-                Text("${uiText("服务模式")}: ${if(data.setting("serviceMode","vpn")=="proxy")uiText("本地代理") else uiText("VPN")}")
-                if(data.setting("serviceMode","vpn")=="proxy")Text("${uiText("HEAD 代理")}: 127.0.0.1:${data.setting("mixedPort","2080")}",style=MaterialTheme.typography.bodySmall)
+                Text("${uiText("服务模式")}: ${if(data.setting("serviceMode")=="proxy")uiText("本地代理") else uiText("VPN")}")
+                if(data.setting("serviceMode")=="proxy")Text("${uiText("HEAD 代理")}: 127.0.0.1:${data.setting("mixedPort")}",style=MaterialTheme.typography.bodySmall)
                 else Text(uiText(if(runtime.state==2)"HEAD 通过当前 VPN 承载；未使用本地 HTTP 代理。" else "代理未连接，尚未执行 VPN 链路检测。"),style=MaterialTheme.typography.bodySmall)
                 Text("${uiText("实际出口 IP")}: ${exitIp.ifBlank{uiText("尚未查询")}}",style=MaterialTheme.typography.bodySmall)
                 if(result!=null)ProbeResultCard(result!!)
@@ -283,7 +283,7 @@ private fun GeoStatusPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
         item { UiCard { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
             Text(uiText("core-assets 实际文件"),style=MaterialTheme.typography.titleMedium)
             Text("${uiText("服务状态")}: ${runtimeStateText(runtime.state)}")
-            Text("${uiText("更新源配置")}: ${data.setting("rulesProvider","0")}",style=MaterialTheme.typography.bodySmall)
+            Text("${uiText("更新源配置")}: ${data.setting("rulesProvider")}",style=MaterialTheme.typography.bodySmall)
             Text("${uiText("GeoIP URL")}: ${data.setting("rulesGeoipUrl").ifBlank{uiText("未配置")}}",style=MaterialTheme.typography.bodySmall,maxLines=1,overflow=TextOverflow.Ellipsis)
             Text("${uiText("Geosite URL")}: ${data.setting("rulesGeositeUrl").ifBlank{uiText("未配置")}}",style=MaterialTheme.typography.bodySmall,maxLines=1,overflow=TextOverflow.Ellipsis)
         } } }

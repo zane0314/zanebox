@@ -9,9 +9,10 @@ import java.io.File
 
 class LinkRoutingTest {
     private val data=AppData(nodes=listOf(Node(1,1,"Australia","""{"type":"socks","server":"a.test","server_port":1080}"""),Node(2,1,"JP 东京","""{"type":"socks","server":"b.test","server_port":1080}""")),groups=listOf(Group(1,"g")))
+    private fun suffix(rule:JSONObject,value:String):Boolean {val a=rule.optJSONArray("domain_suffix") ?: return false;return (0 until a.length()).any {a.optString(it)==value}}
     @Test fun allBundledPoliciesProduceDirectDomainAndPackageRoutes() {
         builtinSmartRuleFiles.keys.forEach { service ->
-            val enabled=data.copy(settings=mapOf("smart.$service.target" to "direct","smartCustom.$service.packages" to "com.example.video","statsEnabled" to "false"))
+            val enabled=data.copy(settings=mapOf("fakeDns" to "false","smart.$service.target" to "direct","smartCustom.$service.packages" to "com.example.video","statsEnabled" to "false"))
             val loaded=withBuiltinSmartRules(enabled) { File("src/main/assets/$it").readText() }
             val root=JSONObject(ConfigBuilder.build(loaded));val route=root.getJSONObject("route");val rules=route.getJSONArray("rules")
             assertTrue(service,(0 until rules.length()).map{rules.getJSONObject(it)}.any{it.has("domain_suffix") && it.optString("outbound")=="direct"})
@@ -23,7 +24,7 @@ class LinkRoutingTest {
         }
     }
     @Test fun removedRegionTargetsFollowTheMainProxyAndKeepManualMetadata() {
-        val legacy=data.copy(settings=mapOf("selectedNodeId" to "1","nodeRegion.1" to "us","smart.youtube.target" to "region:jp","smartRules.youtube" to "DOMAIN-SUFFIX,video.test"))
+        val legacy=data.copy(settings=mapOf("fakeDns" to "false","selectedNodeId" to "1","nodeRegion.1" to "us","smart.youtube.target" to "region:jp","smartRules.youtube" to "DOMAIN-SUFFIX,video.test"))
         assertEquals(listOf(1L),ConfigBuilder.smartTargetNodeIds(legacy,"region:jp"))
         val root=JSONObject(ConfigBuilder.build(legacy));val raw=root.getJSONObject("route").getJSONArray("rules")
         assertEquals("proxy",(0 until raw.length()).map{raw.getJSONObject(it)}.single{it.has("domain_suffix")}.getString("outbound"))
@@ -33,7 +34,7 @@ class LinkRoutingTest {
         val main=Node(1,1,"主节点","""{"type":"socks","server":"middle.test","server_port":1080}""")
         val front=main.copy(id=2,name="前置")
         val landing=main.copy(id=3,name="落地")
-        val root=JSONObject(ConfigBuilder.build(AppData(nodes=listOf(main,front,landing),groups=listOf(Group(1,"g",frontProxy=2,landingProxy=3)),settings=mapOf("selectedNodeId" to "1"))))
+        val root=JSONObject(ConfigBuilder.build(AppData(nodes=listOf(main,front,landing),groups=listOf(Group(1,"g",frontProxy=2,landingProxy=3)),settings=mapOf("fakeDns" to "false","selectedNodeId" to "1"))))
         val array=root.getJSONArray("outbounds");val outs=(0 until array.length()).map{array.getJSONObject(it)}.associateBy{it.getString("tag")}
         assertFalse(outs.getValue("node-2").has("detour"));assertFalse(outs.getValue("node-3").has("detour"))
         assertEquals("node-2",outs.getValue("node-1-hop").getString("detour"))
@@ -41,37 +42,37 @@ class LinkRoutingTest {
     }
 
     @Test fun speedPolicyRunsBeforeOtherBuiltinPolicies() {
-        val enabled=data.copy(settings=mapOf("smart.speed.target" to "node:2","smart.youtube.target" to "direct","smartRules.youtube" to "DOMAIN-SUFFIX,speedtest.net"))
+        val enabled=data.copy(settings=mapOf("fakeDns" to "false","smart.speed.target" to "node:2","smart.youtube.target" to "direct","smartRules.youtube" to "DOMAIN-SUFFIX,speedtest.net"))
         val root=JSONObject(ConfigBuilder.build(withBuiltinSmartRules(enabled){File("src/main/assets/$it").readText()}))
         val raw=root.getJSONObject("route").getJSONArray("rules");val rules=(0 until raw.length()).map{raw.getJSONObject(it)}
-        val matched=rules.filter{it.optJSONArray("domain_suffix")?.optString(0)=="speedtest.net"}
+        val matched=rules.filter{suffix(it,"speedtest.net")}
         assertEquals(listOf("node-2","direct"),matched.map{it.getString("outbound")})
-        assertTrue(rules.any{it.optJSONArray("domain_suffix")?.optString(0)=="dnsleaktest.com" && it.optString("outbound")=="node-2"})
+        assertTrue(rules.any{suffix(it,"dnsleaktest.com") && it.optString("outbound")=="node-2"})
     }
 
     @Test fun dnsOrderingFollowsSpeedThenOtherPolicies() {
-        val enabled=data.copy(settings=mapOf("smart.speed.target" to "node:2","smart.netflix.target" to "direct"))
+        val enabled=data.copy(settings=mapOf("fakeDns" to "false","smart.speed.target" to "node:2","smart.netflix.target" to "direct"))
         val root=JSONObject(ConfigBuilder.build(withBuiltinSmartRules(enabled){File("src/main/assets/$it").readText()}))
         val array=root.getJSONObject("dns").getJSONArray("rules");val rules=(0 until array.length()).map{array.getJSONObject(it)}
-        val matched=rules.filter{it.optJSONArray("domain_suffix")?.optString(0)=="fast.com" && it.optString("action")=="route"}
+        val matched=rules.filter{suffix(it,"fast.com") && it.optString("action")=="route"}
         assertEquals(listOf("dns-route-node-2","dns-direct"),matched.map{it.getString("server")})
         val servers=root.getJSONObject("dns").getJSONArray("servers")
         assertEquals("node-2",(0 until servers.length()).map{servers.getJSONObject(it)}.single{it.getString("tag")=="dns-route-node-2"}.getString("detour"))
     }
 
     @Test fun persistedPolicyOrderControlsBothRouteAndDns() {
-        val enabled=data.copy(settings=mapOf("smart.speed.target" to "node:2","smart.netflix.target" to "direct","smartPolicyOrder" to "netflix\nspeed\nnetflix\nmissing"))
+        val enabled=data.copy(settings=mapOf("fakeDns" to "false","smart.speed.target" to "node:2","smart.netflix.target" to "direct","smartPolicyOrder" to "netflix\nspeed\nnetflix\nmissing"))
         assertEquals(listOf("netflix","speed"),smartPolicyKeys(enabled).take(2))
         val root=JSONObject(ConfigBuilder.build(withBuiltinSmartRules(enabled){File("src/main/assets/$it").readText()}))
-        fun matches(array:org.json.JSONArray)= (0 until array.length()).map{array.getJSONObject(it)}.filter{it.optJSONArray("domain_suffix")?.optString(0)=="fast.com" && it.optString("action")=="route"}
+        fun matches(array:org.json.JSONArray)= (0 until array.length()).map{array.getJSONObject(it)}.filter{suffix(it,"fast.com") && it.optString("action")=="route"}
         assertEquals(listOf("direct","node-2"),matches(root.getJSONObject("route").getJSONArray("rules")).map{it.getString("outbound")})
         assertEquals(listOf("dns-direct","dns-route-node-2"),matches(root.getJSONObject("dns").getJSONArray("rules")).map{it.getString("server")})
     }
 
     @Test fun frontAndRearRouteRulesSurroundTheOrderedPolicies() {
-        val enabled=data.copy(rules=listOf(RouteRule(1,"前置",domains="fast.com",outbound="direct",prioritize=true),RouteRule(2,"后置",domains="fast.com",outbound="node:1")),settings=mapOf("smart.speed.target" to "node:2"))
+        val enabled=data.copy(rules=listOf(RouteRule(1,"前置",domains="fast.com",outbound="direct",prioritize=true),RouteRule(2,"后置",domains="fast.com",outbound="node:1")),settings=mapOf("fakeDns" to "false","smart.speed.target" to "node:2"))
         val root=JSONObject(ConfigBuilder.build(withBuiltinSmartRules(enabled){File("src/main/assets/$it").readText()}))
-        fun matching(array:org.json.JSONArray)=(0 until array.length()).map{array.getJSONObject(it)}.filter{it.optJSONArray("domain_suffix")?.optString(0)=="fast.com" && it.optString("action")=="route"}
+        fun matching(array:org.json.JSONArray)=(0 until array.length()).map{array.getJSONObject(it)}.filter{suffix(it,"fast.com") && it.optString("action")=="route"}
         assertEquals(listOf("direct","node-2","proxy","node-1"),matching(root.getJSONObject("route").getJSONArray("rules")).map{it.getString("outbound")})
         assertEquals(listOf("dns-direct","dns-route-node-2","dns-route-proxy","dns-route-node-1"),matching(root.getJSONObject("dns").getJSONArray("rules")).map{it.getString("server")})
     }
@@ -95,18 +96,18 @@ class LinkRoutingTest {
         val blockedDns=JSONObject(ConfigBuilder.build(blocked)).getJSONObject("dns").getJSONArray("rules")
         assertTrue((0 until blockedDns.length()).none{blockedDns.getJSONObject(it).optString("action")=="reject"})
         listOf("ipv4_only" to "AAAA","ipv6_only" to "A").forEach { (strategy,family)->
-            val enabled=data.copy(settings=mapOf("smart.speed.target" to "node:2","dnsStrategyRemote" to strategy,"ipv6" to "true"))
+            val enabled=data.copy(settings=mapOf("fakeDns" to "false","smart.speed.target" to "node:2","dnsStrategyRemote" to strategy,"ipv6" to "true"))
             val root=JSONObject(ConfigBuilder.build(withBuiltinSmartRules(enabled){File("src/main/assets/$it").readText()}))
             assertTrue(root.getJSONObject("dns").getBoolean("reverse_mapping"))
             val rules=root.getJSONObject("dns").getJSONArray("rules")
-            val matches=(0 until rules.length()).map{rules.getJSONObject(it)}.filter{it.optJSONArray("domain_suffix")?.optString(0)=="fast.com"}
+            val matches=(0 until rules.length()).map{rules.getJSONObject(it)}.filter{suffix(it,"fast.com")}
             assertEquals("predefined",matches.first().getString("action"));assertEquals(family,matches.first().getJSONArray("query_type").getString(0))
             assertEquals("dns-route-node-2",matches[1].getString("server"))
         }
     }
 
     @Test fun directDnsUsesTheNativeDefaultDialerRatherThanAnEmptyDetour() {
-        val root=JSONObject(ConfigBuilder.build(data.copy(settings=mapOf("dnsDirect" to "tcp://127.0.0.1:19087"))))
+        val root=JSONObject(ConfigBuilder.build(data.copy(settings=mapOf("fakeDns" to "false","dnsDirect" to "tcp://127.0.0.1:19087"))))
         val array=root.getJSONObject("dns").getJSONArray("servers")
         val direct=(0 until array.length()).map{array.getJSONObject(it)}.single{it.getString("tag")=="dns-direct"}
         assertFalse(direct.has("detour"));assertEquals(19087,direct.getInt("server_port"))

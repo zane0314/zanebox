@@ -51,7 +51,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         UiCard{UiRow("路由规则","前置 ${data.rules.count{it.prioritize}} · 后置 ${data.rules.count{!it.prioritize}}",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}
         UiSection("分流节点组")
         UiCard{UiRow("自动选择范围","全部启用订阅组 · ${com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,"auto").size} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,chevron=false,modifier=Modifier.testTag("smart_source"))}
-        UiCard{UiRow("引用规则更新", "自动：${data.setting("rulesUpdateInterval","24h")} · 连接后：${data.setting("rulesUpdateDelay","30s")}",Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
+        UiCard{UiRow("引用规则更新", "自动：${data.setting("rulesUpdateInterval")} · 连接后：${data.setting("rulesUpdateDelay","30s")}",Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
             Row{IconButton(onClick={vm.updateAllSmartRules()},modifier=Modifier.testTag("smart_update")){Icon(Icons.Outlined.Download,"立即更新规则")};IconButton(onClick={updateChoice="rulesUpdateDelay"}){Icon(Icons.Outlined.Settings,"规则更新设置")}}
         })}
         UiCard{UiRow("管理节点汇总组","合并多个分组或指定节点为分流目标",Icons.Outlined.Hub,iconRes=R.drawable.zb_ref_ic_mingcute_group_24,onClick=onMerges,modifier=Modifier.testTag("smart_merges"))}
@@ -74,8 +74,8 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
                 }
             }
         }
-        OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};val key="custom_${vm.store.nextId()}";vm.setting("smartCustom.$key.name",v[0])}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text("添加自定义应用组")}
-        if(data.setting("serviceMode","vpn")!="vpn")Text("智能应用路由依赖 VPN 模式。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
+        OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};vm.task {val key="custom_${vm.store.nextId()}";vm.store.putSetting("smartCustom.$key.name",v[0]);vm.message.value="已保存"}}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text("添加自定义应用组")}
+        if(data.setting("serviceMode")!="vpn")Text("智能应用路由依赖 VPN 模式。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
     }
     if(moving.isNotBlank())UiAlertDialog(onDismissRequest={moving=""},title={Text("移动策略")},text={Column {
         val index=policyOrder.indexOf(moving)
@@ -92,7 +92,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
 
 @Composable internal fun SmartMenu(data:AppData,vm:AppViewModel,onOpen:(String)->Unit) {
     UiMenu(listOf(
-        (if(data.setting("routeMode","rule")=="global")"退出全局模式" else "全局模式") to {vm.setting("routeMode",if(data.setting("routeMode","rule")=="global")"rule" else "global")},
+        (if(data.setting("routeMode")=="global")"退出全局模式" else "全局模式") to {vm.setting("routeMode",if(data.setting("routeMode")=="global")"rule" else "global")},
         "路由规则" to {onOpen("rules")},
         "分流检测" to {onOpen("routing-probe")},
         "站点分流卡片" to {onOpen("site-cards")},

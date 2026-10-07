@@ -29,7 +29,7 @@ class ConfigSubscriptionTest {
     }
     @Test fun ruleTargetsAndDnsSets() {
         val data=AppData(nodes=listOf(node),groups=listOf(Group(1,"组")),merges=listOf(MergeGroup(2,"合并",groupIds=listOf(1))),rules=listOf(RouteRule(1,"国内",domains="geosite:cn,geoip:cn",outbound="direct"),RouteRule(2,"拒绝",domains="ads.example",outbound="block"),RouteRule(3,"合并",domains="site.example",outbound="merge:2")))
-        val root=JSONObject(ConfigBuilder.build(data)); assertEquals("reject",root.getJSONObject("route").getJSONArray("rules").getJSONObject(3).getString("action"))
+        val root=JSONObject(ConfigBuilder.build(data.copy(settings=data.settings+("fakeDns" to "false")))); assertEquals("reject",root.getJSONObject("route").getJSONArray("rules").getJSONObject(3).getString("action"))
         val dns=root.getJSONObject("dns").getJSONArray("rules").getJSONObject(0).getJSONArray("rule_set")
         assertEquals(1,dns.length());assertEquals("geosite:cn",dns.getString(0))
     }
@@ -106,7 +106,7 @@ class ConfigSubscriptionTest {
         assertEquals("first.example",root.getJSONObject("route").getJSONArray("rules").getJSONObject(0).getJSONArray("domain").getString(0));assertEquals(3,root.getJSONArray("inbounds").length())
         assertFalse(root.toString().contains("customRule"));assertEquals("new",root.getJSONObject("experimental").getJSONObject("clash_api").getString("secret"))
         val dnsRules=root.getJSONObject("dns").getJSONArray("rules")
-        val customDns=(0 until dnsRules.length()).map{dnsRules.getJSONObject(it)}.first{it.optString("action")=="route" && it.optJSONArray("domain_suffix")?.optString(0)=="only.example"}
+        val customDns=(0 until dnsRules.length()).map{dnsRules.getJSONObject(it)}.first{it.optString("action")=="route" && it.optString("server")!="dns-fake" && it.optJSONArray("domain_suffix")?.optString(0)=="only.example"}
         assertEquals("dns-direct",customDns.getString("server"))
         assertEquals(0,JSONObject(ConfigBuilder.build(data,Purpose.TEST,1)).getJSONArray("inbounds").length())
         assertFalse(ConfigBuilder.build(data,Purpose.EXPORT).contains("secret"))

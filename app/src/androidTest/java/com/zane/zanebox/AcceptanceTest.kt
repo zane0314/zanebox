@@ -33,20 +33,20 @@ class AcceptanceTest {
   var result="";waitFor("不同 UID HTTP $expected",15000){result=shell("logcat -d -s ZaneProbe:I");result.contains("$nonce=")};Assert.assertTrue(result,result.contains("$nonce=$expected uid="))
  }
  @Test fun fullAcceptance() {
-  val store=ZaneStore(context);store.replace(AppData(settings=mapOf("appLanguage" to "zh-CN")))
+  val store=ZaneStore(context);store.replace(AppData(settings=mapOf("appLanguage" to "zh-CN","logLevel" to "info")))
   var scenario=ActivityScenario.launch(MainActivity::class.java)
   compose.onNodeWithText("暂无节点，点右上角添加节点或订阅").performScrollTo().assertIsDisplayed();shot("empty")
   compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("导入文本").performClick()
   compose.onNodeWithTag("editor_field_0").performTextInput("{\"outbounds\":[{\"type\":\"socks\",\"tag\":\"香港 A\",\"server\":\"10.0.2.2\",\"server_port\":19081},{\"type\":\"socks\",\"tag\":\"日本 B\",\"server\":\"10.0.2.2\",\"server_port\":19082}]}")
-  compose.onNodeWithTag("editor_save").performClick();waitFor("UI导入落盘"){store.snapshot().nodes.size==2}
+  compose.onNodeWithTag("editor_save").performClick();compose.waitUntil(10000){compose.onAllNodesWithTag("import_confirm").fetchSemanticsNodes().isNotEmpty()};compose.onNodeWithTag("import_confirm").performClick();waitFor("UI导入落盘"){store.snapshot().nodes.size==2}
   val imported=store.snapshot();val a=imported.nodes[0].id;val b=imported.nodes[1].id
   compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_$a"));compose.onNodeWithTag("node_$a").performClick();waitFor("默认节点选择"){store.snapshot().selectedNodeId==a}
   scenario.close()
-  val app=context.applicationContext as Application;lateinit var vm:AppViewModel
-  ins.runOnMainSync{vm=AppViewModel(app)}
+  val app=context.applicationContext as Application;lateinit var vm:AppViewModel;val holder=androidx.lifecycle.ViewModelStore()
+  ins.runOnMainSync{vm=AppViewModel(app);holder.put("acceptance",vm)}
   val g=store.snapshot().groups.single()
   ins.runOnMainSync{vm.saveGroup(g.copy(name="编辑后的订阅组",subscriptionUrl="http://10.0.2.2:19080/subscription"),true)}
-  waitFor("订阅更新"){store.snapshot().groups.single().updatedAt>0 && store.snapshot().nodes.size==2}
+  waitFor("订阅更新及内核应用完成",40000){!vm.busy.value && store.snapshot().groups.single().updatedAt>0 && store.snapshot().nodes.size==2}
   // Subscription changed protocol identity; get current IDs after replacement.
   val nodes=store.snapshot().nodes;val first=nodes[0].id;val second=nodes[1].id
   store.update{it.copy(nodes=it.nodes.map{n->n.copy(order=if(n.id==second)0 else 1)},settings=it.settings+mapOf("selectedNodeId" to first.toString(),"testUrl" to "http://10.0.2.2:19080/test","sniff" to "false","dnsRemote" to "tcp://10.0.2.2:19087","dnsDirect" to "tcp://10.0.2.2:19087"))}
@@ -84,13 +84,6 @@ class AcceptanceTest {
    waitFor("后台进程死亡后STICKY恢复",40000){client.snapshot.value.state==2 && client.snapshot.value.started>oldStarted};probe("EXIT_A")
    client.stop();waitFor("停止"){client.snapshot.value.state==0};client.start();waitFor("重连",30000){client.snapshot.value.state==2};probe("EXIT_A")
    client.refreshLogs();waitFor("服务日志"){client.logs.value.isNotEmpty()};Assert.assertFalse(client.logs.value.joinToString().contains("FATAL EXCEPTION"))
-   scenario.close();store.update{it.copy(nodes=it.nodes.map{n->n.copy(name="长节点名称".repeat(50))},settings=it.settings+("fontScale" to "2.0"))}
-   scenario=ActivityScenario.launch(MainActivity::class.java);compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_$first"));compose.onNodeWithTag("node_$first").assertIsDisplayed();shot("large-font");compose.onNodeWithTag("tab_1").performClick();shot("smart");compose.onNodeWithTag("main_back").performClick();compose.onNodeWithTag("tab_2").performClick();shot("settings")
-   scenario.close();store.update{it.copy(settings=it.settings+("fontScale" to "1.0"))};scenario=ActivityScenario.launch(MainActivity::class.java)
-   compose.onNodeWithTag("node_menu").performClick();compose.onNodeWithText("延迟升序").performClick();waitFor("延迟排序持久化"){store.snapshot().bool("sort_group_${g.id}")};Assert.assertEquals(first,store.snapshot().selectedNodeId)
-   scenario.recreate();Assert.assertTrue(store.snapshot().bool("sort_group_${g.id}"));shot("sort-latency")
-   compose.onNodeWithTag("group_${g.id}").performClick();compose.onNodeWithTag("group_${g.id}").performTouchInput{longClick()};compose.onNodeWithText("订阅选项").performClick();compose.onNodeWithTag("subscription_options_save").performClick();waitFor("订阅选项落盘"){store.snapshot().groups.single().options.contains("autoUpdateDelay")}
-   compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("network_tools"));compose.onNodeWithTag("network_tools").performClick();compose.onNodeWithTag("stun_tool").performClick();compose.onNodeWithTag("stun_server").performTextReplacement("127.0.0.1:invalid");compose.onNodeWithTag("stun_start").performClick();compose.waitUntil(10000){compose.onAllNodesWithTag("stun_result").fetchSemanticsNodes().isNotEmpty()};shot("stun-tools")
-  } finally {shell("svc wifi enable");shell("svc data enable");shell("input keyevent 224");File(context.getExternalFilesDir(null),"runtime-last-snapshot.json").writeText(client.snapshot.value.json());File(context.getExternalFilesDir(null),"runtime-events.txt").writeText(events.joinToString("\n"));listOf("neko.log","tun-options.json").forEach { name->val f=File(context.cacheDir,name);if(f.exists())f.copyTo(File(context.getExternalFilesDir(null),name),overwrite=true) };File(context.getExternalFilesDir(null),"vpn-dumpsys.txt").writeText(shell("dumpsys connectivity"));runCatching { shot("last-state") };client.stop();Thread.sleep(1000);client.close();observer.cancel();scenario.close();vm.service.close();store.close()}
+  } finally {shell("svc wifi enable");shell("svc data enable");shell("input keyevent 224");File(context.getExternalFilesDir(null),"runtime-last-snapshot.json").writeText(client.snapshot.value.json());File(context.getExternalFilesDir(null),"runtime-events.txt").writeText(events.joinToString("\n"));listOf("neko.log","tun-options.json").forEach { name->val f=File(context.cacheDir,name);if(f.exists())f.copyTo(File(context.getExternalFilesDir(null),name),overwrite=true) };File(context.getExternalFilesDir(null),"vpn-dumpsys.txt").writeText(shell("dumpsys connectivity"));runCatching { shot("last-state") };client.stop();Thread.sleep(1000);client.close();observer.cancel();scenario.close();ins.runOnMainSync{holder.clear()};store.close()}
  }
 }

@@ -44,11 +44,11 @@ internal fun AdvancedSettings(
             Text("全局 Mux 作用于 SS、VMess、VLESS、Trojan；节点已有的 multiplex 配置优先。", style = MaterialTheme.typography.bodySmall)
             SettingChoices("Mux 协议", "muxProtocol", data, vm, "h2mux", listOf("h2mux", "smux", "yamux").map { it to it })
             TextButton(onClick = {
-                form("Mux 并发", listOf("最大流数（正整数）" to data.setting("muxMaxStreams", "8"))) { values ->
+                form("Mux 并发", listOf("最大流数（正整数）" to data.setting("muxMaxStreams"))) { values ->
                     val value = values[0].toIntOrNull()
                     if (value == null || value !in 1..1024) vm.message.value = "最大流数须为 1–1024" else vm.setting("muxMaxStreams", value.toString())
                 }
-            }, modifier = Modifier.testTag("setting_muxMaxStreams")) { Text("Mux 最大流数：${data.setting("muxMaxStreams", "8")}") }
+            }, modifier = Modifier.testTag("setting_muxMaxStreams")) { Text("Mux 最大流数：${data.setting("muxMaxStreams")}") }
             val strategies = listOf("prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only").map { it to it }
             SettingChoices("DNS 默认策略", "dnsStrategy", data, vm, if (data.bool("ipv6")) "prefer_ipv4" else "ipv4_only", strategies + ("" to "自动"))
             SettingChoices("域名解析策略", "domainStrategy", data, vm, "", strategies + ("" to "自动"))

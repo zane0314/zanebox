@@ -27,6 +27,10 @@ class McpClient:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         self.log: TextIO = log_path.open("a", encoding="utf-8")
         env = os.environ.copy()
+        # Kotlin/Android acceptance does not need Flutter's unrelated startup probe.
+        sdk=(ROOT / "local.properties").read_text().strip().split("=",1)[1]
+        env["ANDROID_HOME"] = sdk
+        env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:" + sdk + "/platform-tools"
         env["MAESTRO_CLI_NO_ANALYTICS"] = "1"
         env["MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED"] = "true"
         self.process = subprocess.Popen(

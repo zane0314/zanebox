@@ -14,7 +14,7 @@ class SingBoxEngine(private val platform:NativePlatform) {
         val next=Libcore.newSingBoxInstance(config,platform)
         try {
             val root=org.json.JSONObject(config)
-            trackedTags=listOf("outbounds","endpoints").flatMap { key->val a=root.optJSONArray(key) ?: org.json.JSONArray();(0 until a.length()).map { a.getJSONObject(it).optString("tag") } }.distinct()
+            trackedTags=com.zane.zanebox.runtime.SamplingPolicy.trackedTags(root)
             val outbounds=root.optJSONArray("outbounds") ?: org.json.JSONArray()
             configuredProxyDefault=(0 until outbounds.length()).map { outbounds.getJSONObject(it) }.firstOrNull { it.optString("tag")=="proxy" && it.optString("type")=="selector" }?.optString("default").orEmpty()
             next.setV2rayStats(trackedTags.joinToString("\n"));next.setAsMain();next.start()

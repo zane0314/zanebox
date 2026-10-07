@@ -30,6 +30,11 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
     private val monitors=ConcurrentHashMap<Long,InterfaceUpdateListener>()
     private val tokens=AtomicLong()
     private var registered=false
+    private var lastNetwork=""
+    private val uidPackages=android.util.LruCache<Int,String>(256)
+    private val packageReceiver=object:android.content.BroadcastReceiver() {
+        override fun onReceive(context:Context,intent:android.content.Intent) {synchronized(uidPackages){uidPackages.evictAll()}}
+    }
     private val callback=object:ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network:Network) { cm.getLinkProperties(network)?.let { available[network]=it };underlying=network;selectNetwork() }
         override fun onLost(network:Network) { available.remove(network);if(underlying==network)underlying=null;selectNetwork() }
@@ -46,14 +51,22 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
         if(Build.VERSION.SDK_INT>=31)cm.registerBestMatchingNetworkCallback(request,callback,android.os.Handler(android.os.Looper.getMainLooper()))
         else cm.requestNetwork(request,callback)
         registered=true
+        androidx.core.content.ContextCompat.registerReceiver(context,packageReceiver,android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_PACKAGE_ADDED);addAction(android.content.Intent.ACTION_PACKAGE_REMOVED);addAction(android.content.Intent.ACTION_PACKAGE_REPLACED);addDataScheme("package")
+        },androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         val assets=java.io.File(context.filesDir,"core-assets").also { it.mkdirs() }
         Libcore.initCore(context.packageName+":bg",context.cacheDir.absolutePath,assets.absolutePath+"/",assets.absolutePath+"/",2048,true,this,this,this)
         Libcore.setNetworkPlatformInterface(this)
     }
-    private fun selectNetwork() {
-        vpn?.setUnderlyingNetworks(underlying?.let { arrayOf(it) })
+    @Synchronized private fun selectNetwork() {
         val name=underlying?.let { available[it]?.interfaceName }.orEmpty()
         val index=if(name.isBlank()) -1 else runCatching { JavaNetworkInterface.getByName(name)?.index ?: -1 }.getOrDefault(-1)
+        val caps=underlying?.let {cm.getNetworkCapabilities(it)}
+        val key="$underlying|$name|$index|${underlying?.let{available[it]}}|${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)}|${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)}|${caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)}"
+        if(key==lastNetwork)return
+        lastNetwork=key
+        vpn?.setUnderlyingNetworks(underlying?.let { arrayOf(it) })
+        android.util.Log.d("LinksNetwork","default interface updated: $name/$index")
         monitors.values.forEach { listener -> runCatching { listener.updateDefaultInterface(name,index) } }
     }
     override fun autoDetectInterfaceControl(fd:Int) {
@@ -65,7 +78,7 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
         if(Build.VERSION.SDK_INT<29) return -1
         return cm.getConnectionOwnerUid(ipProtocol,InetSocketAddress(InetAddress.getByName(sourceAddress),sourcePort),InetSocketAddress(InetAddress.getByName(destinationAddress),destinationPort))
     }
-    override fun packageNameByUid(uid:Int):String = context.packageManager.getPackagesForUid(uid)?.firstOrNull().orEmpty()
+    override fun packageNameByUid(uid:Int):String = synchronized(uidPackages) {uidPackages.get(uid) ?: context.packageManager.getPackagesForUid(uid)?.firstOrNull().orEmpty().also {uidPackages.put(uid,it)}}
     override fun uidByPackageName(packageName:String):Int = if(Build.VERSION.SDK_INT>=24) context.packageManager.getPackageUid(packageName,0) else context.packageManager.getApplicationInfo(packageName,0).uid
     override fun wifiState():String = runCatching {
         @Suppress("DEPRECATION") val info=(context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager).connectionInfo
@@ -107,8 +120,12 @@ class NativePlatform(private val context:Context,private val vpn:VpnService?,pri
         return next.fd.toLong()
     }
     fun closeTun() { tun?.close();tun=null }
-    fun close() { closeTun();monitors.clear();if(registered) { cm.unregisterNetworkCallback(callback);registered=false } }
-    override fun startDefaultInterfaceMonitor(listener:InterfaceUpdateListener):Long { val token=tokens.incrementAndGet();monitors[token]=listener;selectNetwork();return token }
+    fun close() { closeTun();monitors.clear();if(registered) { cm.unregisterNetworkCallback(callback);runCatching {context.unregisterReceiver(packageReceiver)};synchronized(uidPackages){uidPackages.evictAll()};registered=false } }
+    override fun startDefaultInterfaceMonitor(listener:InterfaceUpdateListener):Long { val token=tokens.incrementAndGet();monitors[token]=listener
+        val name=underlying?.let {available[it]?.interfaceName}.orEmpty()
+        val index=if(name.isBlank())-1 else runCatching {JavaNetworkInterface.getByName(name)?.index ?: -1}.getOrDefault(-1)
+        listener.updateDefaultInterface(name,index)
+        return token }
     override fun closeDefaultInterfaceMonitor(token:Long) { monitors.remove(token) }
     override fun getInterfaces():NetworkInterfaceIterator {
         val list=JavaNetworkInterface.getNetworkInterfaces()?.toList().orEmpty().map { j ->

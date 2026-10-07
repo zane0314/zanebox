@@ -8,7 +8,7 @@ mkdir -p "$out"
 python3 "$root/tests/network_fixture.py" --delay-b-ms 250 --log "$out/fixture.jsonl" >"$out/fixture.stderr" 2>&1 &
 fixture=$!
 trap 'kill "$fixture" 2>/dev/null || true' EXIT
-"${adb[@]}" install "$root/reports/subscription-1.0.14/Links-1.0.14.apk" >"$out/install.txt"
+"${adb[@]}" install "${ZANE_SUB_PREVIOUS_APK:-$root/reports/subscription-1.0.14/Links-1.0.14.apk}" >"$out/install.txt"
 "${adb[@]}" root >>"$out/install.txt"
 "${adb[@]}" wait-for-device
 "${adb[@]}" reverse tcp:19082 tcp:19082
@@ -48,7 +48,7 @@ def snapshot(name):
     p=out/(name+'.db');p.write_bytes(subprocess.check_output(adb+['exec-out','cat','/data/user/0/com.zane.zanebox/databases/zanebox.db']))
     if subprocess.run(adb+['shell','test','-f','/data/user/0/com.zane.zanebox/databases/zanebox.db-wal']).returncode==0:
         pathlib.Path(str(p)+'-wal').write_bytes(subprocess.check_output(adb+['exec-out','cat','/data/user/0/com.zane.zanebox/databases/zanebox.db-wal']))
-    c=sqlite3.connect(p);d=json.loads(c.execute('select payload from state where id=1').fetchone()[0]);status=c.execute('select ping,status from node_status').fetchall();c.close();return d,status
+    c=sqlite3.connect(p);d=json.loads(c.execute('select payload from state where id=1').fetchone()[0]);d['settings'].update(dict(c.execute('select key,value from kv where value is not null').fetchall()));status=c.execute('select ping,status from node_status').fetchall();c.close();return d,status
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({'http':'http://127.0.0.1:12080'}))
 def exit():
     with opener.open('http://203.0.113.9:19080/probe',timeout=5) as r:return r.read().decode().strip()

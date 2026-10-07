@@ -15,7 +15,7 @@ class TrafficSamplesTest {
         val samples=TrafficSamples.parse("{\"connections\":[$row,$row]}")
         assertEquals(1,samples.size);assertEquals(5L,samples.single().tx);assertEquals("example.com",samples.single().domain)
     }
-    @Test(expected=IllegalArgumentException::class) fun rejectsOversizedConnectionPayload() { TrafficSamples.parse(" ".repeat(256*1024+1)) }
+    @Test(expected=IllegalArgumentException::class) fun rejectsOversizedConnectionPayload() { TrafficSamples.parse(" ".repeat(TrafficSamples.MAX_BYTES+1)) }
     @Test fun excludesMissingIdsAndNegativeCounters() {
         val samples=TrafficSamples.parse("{\"connections\":[{\"id\":\"\"},{\"id\":\"a\",\"upload\":-5,\"download\":-8}]}")
         assertEquals(1,samples.size);assertEquals(0L,samples.single().tx);assertEquals(0L,samples.single().rx)

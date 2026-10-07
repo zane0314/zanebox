@@ -4,6 +4,7 @@ build/
 app/build/
 tests/probe/build/
 .gradle/
+tests/__pycache__/
 
 # Local SDK paths
 local.properties

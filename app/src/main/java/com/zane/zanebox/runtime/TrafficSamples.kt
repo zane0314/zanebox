@@ -5,6 +5,7 @@ import java.util.Locale
 
 internal data class TrafficSample(val id:String,val app:String,val domain:String,val tx:Long,val rx:Long)
 internal object TrafficSamples {
+    const val MAX_BYTES=4*1024*1024
     fun domain(value:String):String {
         var host=value.trim().substringAfter("://")
         host=host.substringBefore('/').substringBefore('?').substringBefore('#').substringAfterLast('@')
@@ -12,10 +13,10 @@ internal object TrafficSamples {
         return host.trim().lowercase(Locale.ROOT).take(253)
     }
     fun parse(text:String):List<TrafficSample> {
-        require(text.toByteArray(Charsets.UTF_8).size<=256*1024) { "连接统计超过256KiB" }
+        require(text.toByteArray(Charsets.UTF_8).size<=MAX_BYTES) { "连接统计超过4MiB" }
         val rows=JSONObject(text).optJSONArray("connections") ?: return emptyList()
         val seen=HashSet<String>()
-        return (0 until minOf(rows.length(),512)).mapNotNull { i ->
+        return (0 until rows.length()).mapNotNull { i ->
             val row=rows.getJSONObject(i);val id=row.optString("id")
             if(id.isBlank() || !seen.add(id))return@mapNotNull null
             val meta=row.optJSONObject("metadata") ?: JSONObject()

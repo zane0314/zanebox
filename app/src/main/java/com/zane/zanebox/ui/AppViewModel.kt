@@ -26,27 +26,35 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    val store = ZaneStore(app).apply {
-        if(snapshot().setting("factoryRouteDefaultsVersion")!="1")update{com.zane.zanebox.config.withFactoryRouteDefaults(it,java.util.Locale.getDefault().country)}
-    }
+    val store = ZaneStore(app,autoLoad=false)
+    private val initialized=kotlinx.coroutines.CompletableDeferred<Unit>()
     val service = ServiceClient(app)
     val data = store.data
     val message = MutableStateFlow("")
-    val busy = MutableStateFlow(false)
+    val busy = MutableStateFlow(true)
     private var taskCount=0
     private var applyJob:kotlinx.coroutines.Job?=null
     val ip get() = service.exitIp
     val webdavEntries=MutableStateFlow<List<WebDavEntry>>(emptyList())
     init {
-        service.connect()
-        viewModelScope.launch { SubscriptionScheduler.updates.collect { withContext(Dispatchers.IO) { store.reload() } } }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    store.reload()
+                    if(store.snapshot().setting("factoryRouteDefaultsVersion")!="1")store.update{com.zane.zanebox.config.withFactoryRouteDefaults(it,java.util.Locale.getDefault().country)}
+                }
+                initialized.complete(Unit);service.connect()
+            } catch(e:Exception) {initialized.completeExceptionally(e);message.value=e.message ?: "数据库加载失败"}
+            finally {busy.value=false}
+        }
+        viewModelScope.launch { SubscriptionScheduler.updates.collect { withContext(Dispatchers.IO) { initialized.await();store.reload() } } }
         viewModelScope.launch { data.map { value -> value.groups.map { group -> listOf(group.id,group.enabled,group.subscriptionUrl,group.updatedAt,SubscriptionOptions.signature(group.options)) } }.distinctUntilChanged().drop(1).collect { withContext(Dispatchers.IO) { SubscriptionScheduler.reconcile(getApplication(),store.snapshot()) } } }
-        viewModelScope.launch { service.events.collect { message.value = it; withContext(Dispatchers.IO) { store.reload() } } }
-        viewModelScope.launch { service.testResults.collect { withContext(Dispatchers.IO) { store.reload() } } }
+        viewModelScope.launch { service.events.collect { message.value = it; withContext(Dispatchers.IO) { initialized.await();store.reload() } } }
+        viewModelScope.launch { service.testResults.collect { withContext(Dispatchers.IO) { initialized.await();store.reload() } } }
     }
     fun task(onError:(String)->Unit={},block: suspend () -> Unit) { viewModelScope.launch {
         taskCount++; busy.value = true
-        try { withContext(Dispatchers.IO) { block() } } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(e: Exception) { val error=e.message ?: "操作失败";message.value=error;onError(error) }
+        try { initialized.await();withContext(Dispatchers.IO) { block() } } catch(e: kotlinx.coroutines.CancellationException) { throw e } catch(e: Exception) { val error=e.message ?: "操作失败";message.value=error;onError(error) }
         finally { taskCount--; busy.value = taskCount>0 }
     } }
     private suspend fun saved(prefix:String="已保存",autoApply:Boolean=true) {
@@ -70,8 +78,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if(settingsApply(key)==SettingsApply.LIVE)task {
             store.update {it.copy(settings=it.settings+(key to value))}
             if(key!="browseGroupId")message.value="已保存"
-            if(key in setOf("networkReset","acquireWakeLock"))withContext(Dispatchers.Main){service.refreshSettings()}
-        } else edit(autoApply=settingsApply(key)==SettingsApply.AUTO) { it.copy(settings = it.settings + (key to value)) }
+            if(key in setOf("networkReset","acquireWakeLock","rulesUpdateInterval","rulesUpdateDelay"))withContext(Dispatchers.Main){service.refreshSettings()}
+        } else edit(onSaved={if(key.startsWith("smartUrl."))service.refreshSettings()},autoApply=settingsApply(key)==SettingsApply.AUTO) { it.copy(settings = it.settings + (key to value)) }
     }
     fun resetSettings()=edit { it.copy(settings=emptyMap()) }
     fun reorderNodes(ids:List<Long>)=task {store.update{it.reorderNodes(ids)};message.value="节点顺序已保存"}
@@ -181,7 +189,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         SubscriptionScheduler.apply(context,store,updated,automatic=false)
         message.value="订阅已更新并完成延迟测试"
     }
-    fun saveGroup(group:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { SubscriptionOptions.parse(group.options);store.update { d->
+    fun saveGroup(inputGroup:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { val group=inputGroup.copy(id=inputGroup.id.takeIf {it>0} ?: store.nextId());SubscriptionOptions.parse(group.options);store.update { d->
         val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}") else emptySet()
         d.copy(groups=if(d.groups.any{it.id==group.id})d.groups.map{if(it.id==group.id)group else it}else d.groups+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
     }; saved("组已保存"); withContext(Dispatchers.Main){onSaved()}; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }

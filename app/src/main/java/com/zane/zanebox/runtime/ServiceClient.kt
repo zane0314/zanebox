@@ -28,6 +28,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 data class RuntimeSnapshot(val state:Int=0,val started:Long=0,val generation:Long=0,val txRate:Long=0,val rxRate:Long=0,val txTotal:Long=0,val rxTotal:Long=0,val error:String="",val mixedHost:String="127.0.0.1",val mixedPort:Int=0,val pendingManual:Boolean=false) {
+    val connectionState:RuntimeState get()=RuntimeState.fromCode(state)
     fun json():String = JSONObject().put("state",state).put("started",started).put("generation",generation).put("txRate",txRate).put("rxRate",rxRate).put("txTotal",txTotal).put("rxTotal",rxTotal).put("error",error).put("mixedHost",mixedHost).put("mixedPort",mixedPort).put("pendingManual",pendingManual).toString()
     companion object { fun parse(s:String):RuntimeSnapshot { val o=JSONObject(s);return RuntimeSnapshot(o.optInt("state"),o.optLong("started"),o.optLong("generation"),o.optLong("txRate"),o.optLong("rxRate"),o.optLong("txTotal"),o.optLong("rxTotal"),o.optString("error"),o.optString("mixedHost","127.0.0.1"),o.optInt("mixedPort"),o.optBoolean("pendingManual")) } }
 }
@@ -62,9 +63,13 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private var boundClass:Class<*>?=null
     private fun serviceClass():Class<*> = targetClass ?: RuntimeServiceTarget.serviceClass(context)
     private var wasConnected=false
+    private val visibilityToken=java.util.UUID.randomUUID().toString()
+    @Volatile private var uiVisible=false
+    fun setUiVisible(visible:Boolean) {uiVisible=visible;submit {remote?.command("uiVisible","$visibilityToken|$visible")}}
     private val callback=object:IRuntimeCallback.Stub() {
         override fun onSnapshot(json:String) { runCatching {
             val next=RuntimeSnapshot.parse(json);state.value=next
+            if(uiVisible)remote?.command("uiVisible","$visibilityToken|true")
             if(next.state==2 && !wasConnected && targetClass==null && com.zane.zanebox.ZaneApplication.mainProcess)com.zane.zanebox.subscription.SubscriptionScheduler.onConnectionChanged(context,true)
             wasConnected=next.state==2
         } }
@@ -87,7 +92,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
     }
     private val connection=object:ServiceConnection {
-        override fun onServiceConnected(name:ComponentName,service:IBinder) { scope.launch { runCatching { val runtime=IRuntime.Stub.asInterface(service);runtime.registerCallback(callback);state.value=RuntimeSnapshot.parse(runtime.getSnapshot());remote=runtime }.onFailure { event.emit("服务连接失败") } } }
+        override fun onServiceConnected(name:ComponentName,service:IBinder) { scope.launch { runCatching { val runtime=IRuntime.Stub.asInterface(service);runtime.registerCallback(callback);state.value=RuntimeSnapshot.parse(runtime.getSnapshot());remote=runtime;runtime.command("uiVisible","$visibilityToken|$uiVisible") }.onFailure { event.emit("服务连接失败") } } }
         override fun onServiceDisconnected(name:ComponentName) { remote=null;clearPendingTests();state.value=RuntimeSnapshot(error="后台服务已断开") }
         // A dead binding never reconnects by itself (e.g. after the APK is updated); rebind so later commands work.
         override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
@@ -97,8 +102,9 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         if(speedState.value.isNotBlank() && !runCatching { JSONObject(speedState.value).optBoolean("done") }.getOrDefault(true))speedState.value=JSONObject().put("stage","error").put("done",true).put("error","后台服务已断开，请重新测速").toString()
     }
     private fun bind(target:Class<*>) { if(!bound) {boundClass=target;bound=context.bindService(Intent(context,boundClass),connection,Context.BIND_AUTO_CREATE)} }
-    fun connect() {bind(targetClass ?: runningServiceClass(context) ?: serviceClass())}
-    private suspend fun ensureBinding() {connect();withTimeout(20000){while(remote==null)delay(50)}}
+    private fun connectNow() {bind(targetClass ?: runningServiceClass(context) ?: serviceClass())}
+    fun connect() {submit {connectNow()}}
+    private suspend fun ensureBinding() {connectNow();withTimeout(20000){while(remote==null)delay(50)}}
     private suspend fun ensureMode() {
         val next=serviceClass()
         if(bound && boundClass!=next) {
@@ -171,7 +177,9 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
             ensureBinding();(remote ?: error("后台服务尚未就绪")).command("restore",name)
         } catch(e:Exception) { stage.delete();event.emit(e.message ?: "恢复失败") }
     } }
-    fun close() { commands.close();runCatching { remote?.unregisterCallback(callback) };if(bound) { context.unbindService(connection);bound=false };remote=null;scope.cancel() }
+    fun close() {
+        runCatching {remote?.command("uiVisible","$visibilityToken|false")}
+        commands.close();runCatching { remote?.unregisterCallback(callback) };if(bound) { context.unbindService(connection);bound=false };remote=null;scope.cancel() }
     companion object {
         // ponytail: serialize group application/tests; foreground work is needed if queues exceed WorkManager's window.
         private val subscriptionApply=Mutex()

@@ -28,7 +28,6 @@ object SubscriptionScheduler {
         if(!initialized.compareAndSet(false,true)) return
         val app=context.applicationContext
         scope.launch {
-            WorkManager.getInstance(app).enqueueUniquePeriodicWork(RECONCILE,ExistingPeriodicWorkPolicy.KEEP,PeriodicWorkRequestBuilder<SubscriptionReconcileWorker>(15,TimeUnit.MINUTES).addTag(GROUP_TAG).build())
             reconcile(app)
         }
     }
@@ -44,6 +43,8 @@ object SubscriptionScheduler {
             } catch(_:Exception) { work.cancelUniqueWork(name(group.id)) }
         }
         (previous-active).forEach { id -> work.cancelUniqueWork(name(id.toLong()));prefs.edit().remove("signature.$id").apply() }
+        if(active.isEmpty())work.cancelUniqueWork(RECONCILE)
+        else work.enqueueUniquePeriodicWork(RECONCILE,ExistingPeriodicWorkPolicy.KEEP,PeriodicWorkRequestBuilder<SubscriptionReconcileWorker>(15,TimeUnit.MINUTES).addTag(GROUP_TAG).build())
         prefs.edit().putStringSet("ids",active).apply()
     }
     // Runtime progress must not REPLACE/cancel the Worker that is still applying it.

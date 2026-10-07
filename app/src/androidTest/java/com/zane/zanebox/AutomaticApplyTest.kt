@@ -100,8 +100,9 @@ class AutomaticApplyTest {
             val generation=vm.service.snapshot.value.generation
             compose.runOnIdle{vm.service.selectAuto()}
             compose.waitUntil(15000){vm.service.snapshot.value.state==2 && vm.service.snapshot.value.generation>generation && vm.store.snapshot().bool("homeAutoSelect")}
+            val autoGeneration=vm.service.snapshot.value.generation
             compose.runOnIdle{vm.service.selectNode(2)}
-            compose.waitUntil(15000){vm.service.snapshot.value.state==2 && vm.store.snapshot().selectedNodeId==2L && !vm.store.snapshot().bool("homeAutoSelect")}
+            compose.waitUntil(15000){vm.service.snapshot.value.state==2 && vm.service.snapshot.value.generation>autoGeneration && vm.store.snapshot().selectedNodeId==2L && !vm.store.snapshot().bool("homeAutoSelect")}
             assertExit("EXIT_B");assertEquals("vpn",vm.store.snapshot().setting("serviceMode"));assertTrue(vm.service.snapshot.value.pendingManual)
         } finally {stop()}
     }

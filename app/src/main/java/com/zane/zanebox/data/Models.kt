@@ -10,8 +10,8 @@ data class MergeGroup(val id:Long, val name:String, val nodeIds:List<Long> = emp
 data class AppData(val nodes:List<Node> = emptyList(), val groups:List<Group> = emptyList(), val rules:List<RouteRule> = emptyList(), val merges:List<MergeGroup> = emptyList(), val settings:Map<String,String> = emptyMap()) {
     val selectedNodeId:Long get() = setting("selectedNodeId","0").toLongOrNull() ?: 0L
     val selectedGroupId:Long get() = setting("selectedGroupId","0").toLongOrNull() ?: 0L
-    fun setting(key:String, default:String=""):String = settings[key] ?: default
-    fun bool(key:String, default:Boolean=false):Boolean = settings[key]?.toBooleanStrictOrNull() ?: default
+    fun setting(key:String, default:String=SettingDefaults.value(key)):String = settings[key] ?: default
+    fun bool(key:String, default:Boolean=SettingDefaults.value(key,"false").toBoolean()):Boolean = settings[key]?.toBooleanStrictOrNull() ?: default
     fun toJson():String = JSONObject().apply {
         put("format",1)
         put("nodes",JSONArray().apply { nodes.forEach { n -> put(JSONObject().apply { put("id",n.id);put("groupId",n.groupId);put("name",n.name);put("outbound",JSONObject(n.outbound));put("shareLink",n.shareLink);put("ping",n.ping);put("tx",n.tx);put("rx",n.rx);put("order",n.order);put("status",n.status);put("metadata",JSONObject(n.metadata)) }) } })
@@ -20,14 +20,15 @@ data class AppData(val nodes:List<Node> = emptyList(), val groups:List<Group> = 
         put("merges",JSONArray().apply { merges.forEach { m -> put(JSONObject().apply { put("id",m.id);put("name",m.name);put("nodeIds",JSONArray(m.nodeIds));put("groupIds",JSONArray(m.groupIds));put("mode",m.mode);put("selectedId",m.selectedId) }) } })
         put("settings",JSONObject(settings))
     }.toString()
-    fun validate():AppData {
+    internal fun validate(previous:AppData?=null):AppData {
+        val oldOutbounds=previous?.nodes?.associate { it.id to it.outbound }.orEmpty()
         require(nodes.size<=10000 && groups.size<=10000 && rules.size<=100000 && merges.size<=10000) { "数据超出记录数量限制" }
         fun ids(values:List<Long>) { require(values.all { it>0 } && values.toSet().size==values.size) { "无效或重复记录ID" } }
         ids(nodes.map { it.id });ids(groups.map { it.id });ids(rules.map { it.id });ids(merges.map { it.id })
         val groupIds=groups.map { it.id }.toSet()
         val nodeIds=nodes.map { it.id }.toSet()
         val mergeIds=merges.map { it.id }.toSet()
-        nodes.forEach { require(it.groupId in groupIds) { "节点分组不存在" }; val value=JSONObject(it.outbound);require(value.optString("type").isNotBlank()) { "节点缺少协议类型" } }
+        nodes.forEach { require(it.groupId in groupIds) { "节点分组不存在" }; if(oldOutbounds[it.id]!=it.outbound) { val value=JSONObject(it.outbound);require(value.optString("type").isNotBlank()) { "节点缺少协议类型" } } }
         groups.forEach { require((it.frontProxy==0L || it.frontProxy in nodeIds)&&(it.landingProxy==0L || it.landingProxy in nodeIds)) { "前置或落地节点不存在" } }
         merges.forEach { require(it.nodeIds.all { id->id in nodeIds }&&it.groupIds.all { id->id in groupIds }) { "合并组成员不存在" };require(it.selectedId==0L || it.selectedId in nodeIds) { "合并组默认节点不存在" } }
         rules.forEach { rule ->

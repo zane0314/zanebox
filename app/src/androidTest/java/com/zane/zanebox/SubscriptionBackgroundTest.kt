@@ -32,8 +32,9 @@ class SubscriptionBackgroundTest {
         store.replace(AppData(groups=groups,settings=mapOf("serviceMode" to "proxy","testUrl" to "http://203.0.113.9:19080/test","dnsRemote" to "local","rulesUpdateInterval" to "off")))
         try {
             store.update{it.copy(groups=it.groups.map{g->g.copy(options=JSONObject(g.options).put("autoUpdate",true).toString())})}
+            SubscriptionScheduler.reconcile(context,store.snapshot())
             val requests=groups.map {g->OneTimeWorkRequestBuilder<SubscriptionUpdateWorker>().setInputData(workDataOf("groupId" to g.id)).build().also{work.enqueueUniqueWork("zanebox-subscription-${g.id}",ExistingWorkPolicy.REPLACE,it).result.get(5,TimeUnit.SECONDS)}}
-            waitFor("并行订阅完整完成"){requests.all{work.getWorkInfoById(it.id).get(5,TimeUnit.SECONDS).state.isFinished}}
+            waitFor("并行订阅完整完成"){requests.all{work.getWorkInfoById(it.id).get(5,TimeUnit.SECONDS)?.state?.isFinished==true}}
             val data=store.snapshot();assertEquals(2,data.nodes.size);assertTrue(data.nodes.all{it.ping>0 && it.status==3});assertTrue(data.groups.all{JSONObject(it.options).getJSONObject("subscriptionRuntime").getString("state")=="success"});assertFalse(ServiceClient.isConnected(context))
             File(context.getExternalFilesDir(null),"subscription-parallel-result.json").writeText(JSONObject().put("bothWorkersSucceeded",true).put("bothGroupsTested",true).toString(2))
         } finally {store.update{it.copy(groups=it.groups.map{g->g.copy(options=JSONObject(g.options).put("autoUpdate",false).toString())})};SubscriptionScheduler.reconcile(context,store.snapshot());store.close()}
@@ -51,7 +52,7 @@ class SubscriptionBackgroundTest {
             client.close()
             val request=OneTimeWorkRequestBuilder<SubscriptionUpdateWorker>().setInputData(workDataOf("groupId" to 1L)).build()
             work.enqueueUniqueWork("zanebox-subscription-1",ExistingWorkPolicy.REPLACE,request).result.get(5,TimeUnit.SECONDS)
-            waitFor("后台更新完成"){work.getWorkInfoById(request.id).get(5,TimeUnit.SECONDS).state.isFinished}
+            waitFor("后台更新完成"){work.getWorkInfoById(request.id).get(5,TimeUnit.SECONDS)?.state?.isFinished==true}
             assertEquals(WorkInfo.State.SUCCEEDED,work.getWorkInfoById(request.id).get().state)
             waitFor("新地址实际出口"){exit()=="EXIT_A"}
             val observer=ServiceClient(context)
@@ -62,7 +63,7 @@ class SubscriptionBackgroundTest {
                 store.update { it.copy(groups=it.groups.map{g->g.copy(updatedAt=0,options=JSONObject(g.options).apply{remove("subscriptionLastUpdated")}.toString())},settings=if(invalid)it.settings+("dnsRemote" to "https://") else it.settings) }
                 val again=OneTimeWorkRequestBuilder<SubscriptionUpdateWorker>().setInputData(workDataOf("groupId" to 1L)).build()
                 work.enqueueUniqueWork("zanebox-subscription-1",ExistingWorkPolicy.REPLACE,again).result.get(5,TimeUnit.SECONDS)
-                waitFor("重复后台任务完成"){work.getWorkInfoById(again.id).get(5,TimeUnit.SECONDS).state.isFinished}
+                waitFor("重复后台任务完成"){work.getWorkInfoById(again.id).get(5,TimeUnit.SECONDS)?.state?.isFinished==true}
                 return JSONObject(store.snapshot().groups.single().options).getJSONObject("subscriptionRuntime").getString("state")
             }
             val active=ServiceClient(context)
@@ -75,7 +76,7 @@ class SubscriptionBackgroundTest {
                     store.putSetting("dnsRemote","local")
                     val retry=OneTimeWorkRequestBuilder<SubscriptionUpdateWorker>().setInputData(workDataOf("groupId" to 1L)).build()
                     work.enqueueUniqueWork("zanebox-subscription-1",ExistingWorkPolicy.REPLACE,retry).result.get(5,TimeUnit.SECONDS)
-                    waitFor("无需重抓订阅的后台应用重试"){work.getWorkInfoById(retry.id).get(5,TimeUnit.SECONDS).state.isFinished}
+                    waitFor("无需重抓订阅的后台应用重试"){work.getWorkInfoById(retry.id).get(5,TimeUnit.SECONDS)?.state?.isFinished==true}
                     assertEquals("success",JSONObject(store.snapshot().groups.single().options).getJSONObject("subscriptionRuntime").getString("state"));assertEquals(savedAt,store.snapshot().groups.single().updatedAt);assertEquals("EXIT_A",exit())
                 }
                 File(context.getExternalFilesDir(null),"subscription-repeat-${auto}-result.json").writeText(JSONObject().put("unchangedNoRestart",true).put("invalidKeepsConnection",!auto).toString(2))
