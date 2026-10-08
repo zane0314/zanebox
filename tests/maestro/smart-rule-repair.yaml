@@ -1,0 +1,39 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_ai
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: smart_ai
+- scrollUntilVisible:
+    element:
+      text: 规则来源
+    direction: DOWN
+    timeout: 30000
+- tapOn: 规则来源
+- tapOn:
+    id: rule_source_url
+- inputText: http://10.0.2.2:19100/rules.txt
+- hideKeyboard
+- tapOn:
+    id: rule_source_replace
+- extendedWaitUntil:
+    visible: fixture.invalid
+    timeout: 30000
+- assertVisible: http://10.0.2.2:19100/rules.txt
+- takeScreenshot: reports/ui-1.0.2/current/rule-source-fetched
+- tapOn:
+    id: page_back
+- tapOn: 规则来源
+- assertVisible: http://10.0.2.2:19100/rules.txt
+- assertVisible: fixture.invalid
+- takeScreenshot: reports/ui-1.0.2/current/rule-source-persisted
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

@@ -158,13 +158,15 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
         if(url.trim().isBlank()){error="请先填写规则源 URL";return}
         if(!validateUrl())return
         val requestUrl=url.trim()
+        val requestRules=rules
+        val baseline=data
         fetching=true
         scope.launch {
             try {
                 val fetchedRules=SubscriptionClient.fetchSmartRules(requestUrl,data.settings)
-                rules=fetchedRules
-                vm.edit(onSaved={},onError={error=it}) {d->
-                    d.copy(settings=d.settings+mapOf("smartUrl.$serviceKey" to requestUrl,"smartRules.$serviceKey" to fetchedRules,"smartUpdated.$serviceKey" to System.currentTimeMillis().toString()))
+                require(url.trim()==requestUrl && rules==requestRules) { "规则来源或编辑内容已变更，已保留当前规则，请重新获取" }
+                vm.edit(onSaved={rules=fetchedRules},onError={error=it}) {d->
+                    com.zane.zanebox.config.applySmartRuleUpdate(d,serviceKey,baseline,fetchedRules,sourceUrl=requestUrl)
                 }
             } catch(e:Exception) {
                 error=e.message ?: "规则源获取失败"

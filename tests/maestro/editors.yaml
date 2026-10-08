@@ -109,6 +109,7 @@ appId: com.zane.zanebox
     timeout: 60000
 - tapOn:
     id: smart_target_ai
+- tapOn: 分组 · 手动节点
 - scrollUntilVisible:
     element:
       text: UI-fixture

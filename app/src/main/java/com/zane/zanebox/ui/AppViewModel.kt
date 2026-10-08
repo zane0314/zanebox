@@ -220,7 +220,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
         stageAsset(kind,bytes);message.value="资源已导入，正在校验并应用"
     }
-    fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { it.copy(settings=it.settings+("smartRules.$key" to content)+("smartUpdated.$key" to System.currentTimeMillis().toString())) };message.value="分流列表已更新，请点击应用修改" }
+    fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { com.zane.zanebox.config.applySmartRuleUpdate(it,key,d,content) };message.value="分流列表已更新，请点击应用修改" }
     fun moveSmartPolicy(key:String,step:Int)=edit { data->
         require(step==1 || step==-1)
         val order=com.zane.zanebox.config.smartPolicyKeys(data).toMutableList()

@@ -621,7 +621,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                     if(now-previous>=interval) runCatching {
                         val content=com.zane.zanebox.subscription.SubscriptionClient.fetchSmartRules(url,data.settings)
                         require(content.toByteArray().size<=4*1024*1024)
-                        store.update { d->d.copy(settings=d.settings+("smartRules.$service" to content)+("smartUpdated.$service" to now.toString())) }
+                        store.update { d->com.zane.zanebox.config.applySmartRuleUpdate(d,service,data,content,now=now) }
                         event("message","${service} 规则已更新，应用修改后生效")
                     }.onFailure { event("message","规则更新失败：$service") }
                 }

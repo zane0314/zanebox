@@ -4,6 +4,13 @@ import com.zane.zanebox.data.AppData
 import com.zane.zanebox.subscription.SubscriptionClient
 import org.json.JSONObject
 
+/** Commit only while the source and cached rules still belong to this request. */
+internal fun applySmartRuleUpdate(current:AppData,key:String,baseline:AppData,content:String,sourceUrl:String=baseline.setting("smartUrl.$key"),now:Long=System.currentTimeMillis()):AppData {
+    val fields=listOf("smartUrl.$key","smartRules.$key","smartUpdated.$key","smartCustom.$key.name")
+    require(fields.all { current.settings[it]==baseline.settings[it] }) { "规则来源或内容已变更，已保留当前规则，请重新更新" }
+    return current.copy(settings=current.settings+mapOf("smartUrl.$key" to sourceUrl,"smartRules.$key" to content,"smartUpdated.$key" to now.toString()))
+}
+
 internal suspend fun routeAssetUrl(kind:String,data:AppData,proxy:java.net.Proxy?=null):String {
     require(kind in listOf("geoip","geosite"))
     val provider=data.setting("rulesProvider")
