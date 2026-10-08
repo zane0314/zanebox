@@ -38,6 +38,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
 
 @Composable internal fun SmartPanel(data:AppData,vm:AppViewModel,form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit,
     onRules:()->Unit,onMerges:()->Unit,onOpen:(String)->Unit) {
+    val installedPackages=rememberInstalledPackageNames()
     var target by remember{mutableStateOf("")}
     var ruleSource by remember{mutableStateOf("")};var updateChoice by remember{mutableStateOf("")}
     var apps by remember{mutableStateOf("")};var expanded by remember{mutableStateOf("")}
@@ -66,7 +67,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
                     val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))
                     UiRow("分流目标",targetName(value,data),onClick={target=key})
                     UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(usesBuiltin)"内置兼容规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
-                    UiRow("选择应用","${data.setting("smartCustom.$key.packages").lines().count{it.isNotBlank()}} 个应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
+                    UiRow("选择应用",if(installedPackages==null)"正在读取应用" else "${com.zane.zanebox.config.effectiveSmartPackages(data,key,installedPackages).size} 个有效应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
                     if(custom.any{it.first==key}) {
                         UiRow("重命名",onClick={form("重命名",listOf("名称" to title)){values->require(values[0].isNotBlank());require((builtIn+custom).none{it.first!=key && it.second==values[0]}){"名称已存在"};vm.setting("smartCustom.$key.name",values[0])}})
                         UiRow("删除应用组",onClick={confirmDelete=key})
@@ -86,7 +87,12 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
     if(ruleSource.isNotBlank())RuleSourcePage(ruleSource,data,vm){ruleSource=""}
     if(updateChoice.isNotBlank())ChoiceDialog(if(updateChoice=="rulesUpdateInterval")"自动更新间隔" else "连接后检查",data.setting(updateChoice,if(updateChoice=="rulesUpdateInterval")"24h" else "30s"),
         if(updateChoice=="rulesUpdateInterval")listOf("off" to "关闭","6h" to "6 小时","12h" to "12 小时","24h" to "24 小时","3d" to "3 天","7d" to "7 天")else listOf("0s" to "立即","15s" to "15 秒","30s" to "30 秒","1m" to "1 分钟","5m" to "5 分钟"),{updateChoice=""}){vm.setting(updateChoice,it)}
-    if(apps.isNotBlank())AppsEditor(data.setting("smartCustom.$apps.packages").lines().filter{it.isNotBlank()}.toSet(),{apps=""}){vm.setting("smartCustom.$apps.packages",it.joinToString("\n"));apps=""}
+    if(apps.isNotBlank()) {
+        val appKey=apps
+        AppsEditor(com.zane.zanebox.config.appPackages(data.setting("smartCustom.$appKey.packages")),{apps=""},scopeData=data,title="选择应用 · ${data.setting("smartCustom.$appKey.name").ifBlank{appKey}}") { packages->
+            vm.edit(onSaved={apps=""},autoApply=false){it.copy(settings=it.settings+("smartCustom.$appKey.packages" to packages.sorted().joinToString("\n")))}
+        }
+    }
     if(confirmDelete.isNotBlank())UiAlertDialog(onDismissRequest={confirmDelete=""},title={Text("删除自定义应用组？")},confirmButton={TextButton(onClick={val key=confirmDelete;vm.edit{d->d.copy(settings=d.settings.filterKeys{!it.startsWith("smartCustom.$key.") && it!="smart.$key.target" && it!="smartUrl.$key" && it!="smartRules.$key"})};confirmDelete=""}){Text("删除")}},dismissButton={TextButton(onClick={confirmDelete=""}){Text("取消")}})
 }
 

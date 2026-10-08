@@ -33,10 +33,10 @@ class UiAlignmentTest {
         val upgrade=JSONObject(com.zane.zanebox.subscription.SubscriptionParser.parse("vless://11111111-1111-4111-8111-111111111111@example.test:443?type=httpupgrade&host=cdn.example&path=%2Fws").single().outbound).getJSONObject("transport")
         assertEquals("cdn.example",upgrade.getString("host"));assertFalse(upgrade.has("headers"))
     }
-    @Test fun automaticProxySelectionComplementsTheListInBypassMode() {
-        val installed=mapOf("listed" to 10001,"system" to 1000,"local" to 10002)
-        assertEquals(setOf("listed","system"),com.zane.zanebox.ui.autoProxyPackages(installed,setOf("listed"),false))
-        assertEquals(setOf("local"),com.zane.zanebox.ui.autoProxyPackages(installed,setOf("listed"),true))
+    @Test fun automaticProxySelectionComplementsCommonAppsInBypassMode() {
+        val apps=listOf(com.zane.zanebox.config.InstalledApp("Gmail","com.google.android.gm"),com.zane.zanebox.config.InstalledApp("Play","com.android.vending"),com.zane.zanebox.config.InstalledApp("Local","com.example.local"))
+        assertEquals(setOf("com.google.android.gm","com.android.vending"),com.zane.zanebox.config.commonAppPackages(apps,"com.zane.zanebox"))
+        assertEquals(setOf("com.example.local"),com.zane.zanebox.config.commonAppPackages(apps,"com.zane.zanebox",true))
     }
     @Test fun subscriptionSharingPreservesNamesAndUrlsAndLatencyUsesTheStoredResult() {
         val group=Group(1,"分组 空格+ &","https://example.test/sub?token=a+b&name=中文")

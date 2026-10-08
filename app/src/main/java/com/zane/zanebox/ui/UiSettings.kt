@@ -69,7 +69,12 @@ import org.json.JSONObject
     }
     when(page) {
         "general"->PreferencesPage(data,vm,onDismiss,open,form)
-        "apps"->AppsEditor(data.setting("perAppPackages").lines().filter{it.isNotBlank()}.toSet(),onDismiss,modeValue=if(!data.bool("perAppEnabled"))"off" else data.setting("perAppMode","exclude"),onMode={mode->vm.edit{it.copy(settings=it.settings+("perAppEnabled" to (mode!="off").toString())+("perAppMode" to if(mode=="include")"include" else "exclude"))}}){vm.setting("perAppPackages",it.joinToString("\n"));onDismiss()}
+        "apps"->AppsEditor(com.zane.zanebox.config.appPackages(data.setting("perAppPackages")),onDismiss,
+            modeValue=data.setting("perAppMode","exclude"),enabledValue=data.bool("perAppEnabled"),
+            onMode={mode->vm.edit(autoApply=false){it.copy(settings=it.settings+("perAppMode" to mode))}},
+            onEnabled={enabled->vm.edit(autoApply=false){it.copy(settings=it.settings+("perAppEnabled" to enabled.toString()))}}) {
+                packages->vm.edit(onSaved=onDismiss,autoApply=false){it.copy(settings=it.settings+("perAppPackages" to packages.sorted().joinToString("\n")))}
+            }
         "groups"->{
             val listState=LocalUiListState.current ?: androidx.compose.foundation.lazy.rememberLazyListState()
             val groups=data.groups.sortedBy{it.order}
@@ -179,7 +184,9 @@ import org.json.JSONObject
             item{UiCard{UiRow("Links",BuildConfig.VERSION_NAME+" / "+BuildConfig.VERSION_CODE,Icons.Outlined.Info);UiRow("内核","AnyBox libcore / sing-box",Icons.Outlined.Memory);UiRow("UI 基线","AnyBox 2.1.9",Icons.Outlined.Palette)}}
             item{UiCard{UiRow("开源许可与致谢","sing-box、SagerNet、AndroidX 与 Kotlin",Icons.Outlined.Description,onClick={open("licenses")})}}
         }
-        "licenses"->UiPageList("开源许可",onDismiss) {item{Text(uiText("Links 使用 AnyBox libcore / sing-box（GPL-3.0），AndroidX（Apache-2.0）、Kotlin（Apache-2.0）、OkHttp（Apache-2.0）、SnakeYAML（Apache-2.0）和 ZXing（Apache-2.0）。完整上游源码与许可证保存在本工程 native 目录。"));}}
+        "licenses"->UiPageList("开源许可",onDismiss) {item{Text(uiText("Links 使用 AnyBox libcore / sing-box（GPL-3.0），AndroidX（Apache-2.0）、Kotlin（Apache-2.0）、OkHttp（Apache-2.0）、SnakeYAML（Apache-2.0）和 ZXing（Apache-2.0）。完整上游源码与许可证保存在本工程 native 目录。应用选择界面与自动选择参考 satelite-one（MIT）。"));}
+            item { Text(context.assets.open("licenses/satelite-one.txt").bufferedReader().use{it.readText()},style=MaterialTheme.typography.bodySmall) }
+        }
     }
     confirmation?.let{(title,action)->UiAlertDialog(onDismissRequest={confirmation=null},title={Text(uiText("确认操作"))},text={Text(title)},confirmButton={TextButton(onClick={action();confirmation=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirmation=null}){Text(uiText("取消"))}})}
 }
@@ -210,6 +217,8 @@ import org.json.JSONObject
             }}
             if(title=="代理共享")item{UiCard{UiRow("局域网地址",lanAddresses());UiRow("共享代理端口",if(data.bool("shareEnabled"))data.setting("sharePort")else data.setting("mixedPort"))}}
         }
+        item{UiSection("后台运行")}
+        item{BatteryOptimizationRow()}
         item{UiSection("数据管理")}
         item{UiCard{UiRow("重置设置","保留节点、分组和路由规则",onClick={confirmation="将应用设置恢复默认值？" to {vm.resetSettings()}},modifier=Modifier.testTag("reset_settings"));UiRow("清除缓存",onClick={confirmation="清除应用缓存？" to {vm.clearCache()}},modifier=Modifier.testTag("clear_cache"));UiRow("恢复出厂设置","清除节点、分组、规则和设置",onClick={confirmation="清除全部应用配置？此操作会断开代理。" to {vm.factoryReset()}},modifier=Modifier.testTag("factory_reset"))}}
     }

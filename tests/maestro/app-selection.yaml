@@ -1,0 +1,100 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_perAppEnabled
+    direction: DOWN
+- tapOn:
+    id: setting_perAppEnabled
+- tapOn:
+    id: apps_mode_include
+- scrollUntilVisible:
+    element:
+      id: apps_clear
+    direction: DOWN
+- tapOn:
+    id: apps_clear
+- scrollUntilVisible:
+    element:
+      id: apps_search
+    direction: UP
+- tapOn:
+    id: apps_search
+- inputText: com.google.android.linksfixture
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: apps_select_visible
+    direction: DOWN
+- tapOn:
+    id: apps_select_visible
+- scrollUntilVisible:
+    element:
+      id: apps_selection_count
+    direction: UP
+- assertVisible: 已选择 10 个应用
+- takeScreenshot: reports/ui-1.0.2/current/per-app-whitelist-ten
+- tapOn:
+    id: apps_save
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_ai
+    direction: DOWN
+- tapOn:
+    id: smart_ai
+- scrollUntilVisible:
+    element:
+      id: smart_apps_ai
+    direction: DOWN
+- tapOn:
+    id: smart_apps_ai
+- scrollUntilVisible:
+    element:
+      id: apps_auto
+    direction: DOWN
+- tapOn:
+    id: apps_auto
+- scrollUntilVisible:
+    element:
+      id: apps_selection_count
+    direction: UP
+- assertVisible: "已选择 [1-9][0-9]* 个应用"
+- scrollUntilVisible:
+    element:
+      id: apps_copy
+    direction: DOWN
+- tapOn:
+    id: apps_copy
+- tapOn:
+    id: apps_clear
+- tapOn:
+    id: apps_import
+- scrollUntilVisible:
+    element:
+      id: apps_note
+    direction: UP
+- assertVisible: "已粘贴选择.*"
+- takeScreenshot: reports/ui-1.0.2/current/smart-auto-paste
+- tapOn:
+    id: apps_save
+- tapOn:
+    id: smart_menu
+- tapOn: 规则集预览
+- assertNotVisible: Global.list
+- assertNotVisible: Domestic.list
+- takeScreenshot: reports/ui-1.0.2/current/ruleset-preview-actual
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

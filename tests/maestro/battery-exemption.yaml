@@ -1,0 +1,32 @@
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: battery_optimization
+    direction: DOWN
+    timeout: 60000
+- assertVisible: 未豁免 · 点击请求系统授权
+- tapOn:
+    id: battery_optimization
+- assertVisible: Allow
+- tapOn: Deny
+- assertVisible: 未豁免 · 点击请求系统授权
+- tapOn:
+    id: battery_optimization
+- tapOn: Allow
+- assertVisible: 已豁免 · 点击打开应用设置
+- takeScreenshot: reports/ui-1.0.2/current/battery-exempted
+- tapOn:
+    id: battery_optimization
+- assertVisible: App info
+- pressKey: BACK
+- assertVisible: 已豁免 · 点击打开应用设置
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back

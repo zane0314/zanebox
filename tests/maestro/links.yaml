@@ -32,7 +32,9 @@ appId: com.zane.zanebox
 - tapOn:
     id: per_app_indicator
 - assertVisible:
-    id: apps_mode_off
+    id: apps_enabled
+- tapOn:
+    id: apps_enabled
 - tapOn:
     id: apps_mode_include
 - tapOn:
@@ -49,7 +51,7 @@ appId: com.zane.zanebox
 - tapOn:
     id: setting_perAppEnabled
 - tapOn:
-    id: apps_mode_off
+    id: apps_enabled
 - tapOn:
     id: page_back
 - tapOn:

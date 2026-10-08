@@ -28,7 +28,7 @@ import androidx.compose.ui.viewinterop.AndroidView
         AndroidView(factory={ZaneHomeToolbar(it).apply{importantForAccessibility=android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO}},modifier=Modifier.fillMaxSize())
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val sideWidth=maxOf(96f,48f*androidx.compose.ui.platform.LocalDensity.current.fontScale+16f).dp.coerceAtMost((maxWidth-120.dp)/2)
-            listOf(2 to .2f,1 to .8f).forEach { (page,fraction)->
+            listOf(1 to .2f,2 to .8f).forEach { (page,fraction)->
                 Column(Modifier.offset(x=24.dp+(maxWidth-48.dp)*fraction-sideWidth/2,y=52.dp).size(width=sideWidth,height=58.dp)
                     .clickable{onPage(page)}.testTag("tab_$page").padding(top=4.dp),
                     horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center) {

@@ -3,6 +3,8 @@
 package com.zane.zanebox.ui
 
 import com.zane.zanebox.config.smartTarget
+import com.zane.zanebox.config.buildRulePreviews
+import com.zane.zanebox.config.builtinSmartRuleText
 
 import android.content.Context
 import android.os.Process
@@ -205,15 +207,19 @@ private fun SiteCardsPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
 
 @Composable
 private fun RuleSetPreviewPage(data:AppData,onDismiss:()->Unit) {
-    val previews=remember(data.settings,data.rules){buildRulePreviews(data)}
+    val context=LocalContext.current
+    val installedPackages=rememberInstalledPackageNames()
+    val previews=remember(data.settings,data.rules,installedPackages){buildRulePreviews(data,
+        geoPresent={kind->java.io.File(context.filesDir,"core-assets/$kind.db").let{it.isFile && it.length()>0}},
+        builtinText={key->runCatching{builtinSmartRuleText(key){path->context.assets.open(path).bufferedReader().use{it.readText()}}}.getOrDefault("")},installed=installedPackages ?: emptySet())}
     UiPageList(uiText("规则集预览"),onDismiss) {
-        item { UiCard { Text(uiText("仅展示当前配置与已加载正文；此页面不会把 URL 或规则条数当作远程检测成功。"),Modifier.padding(16.dp),style=MaterialTheme.typography.bodySmall) } }
+        item { UiCard { Text(uiText("展示实际规则引用、启用状态和可预览正文；文件存在或规则条数不代表内核已加载或流量已命中。"),Modifier.padding(16.dp),style=MaterialTheme.typography.bodySmall) } }
         items(previews) { preview ->
             UiCard {
                 Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     Text(preview.title,style=MaterialTheme.typography.titleSmall)
                     Text(preview.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${uiText("状态")}: ${preview.status} · ${uiText("规则")}: ${preview.count}")
+                    Text("${uiText("状态")}: ${preview.status} · ${uiText("规则")}: ${preview.count?.toString() ?: "数量未知"}")
                     preview.sample.forEach { line -> Text(line,style=MaterialTheme.typography.bodySmall,maxLines=1,overflow=TextOverflow.Ellipsis) }
                 }
             }
@@ -351,28 +357,6 @@ private fun connectionSearchText(row:JSONObject):String = buildString {
 private fun matchingConnections(text:String,host:String):List<JSONObject> {
     if(host.isBlank())return emptyList()
     return parseConnections(text).filter{displayHost(connectionHost(it))==host.lowercase(Locale.ROOT)}
-}
-
-private data class RulePreview(val title:String,val subtitle:String,val count:Int,val status:String,val sample:List<String>)
-
-private fun buildRulePreviews(data:AppData):List<RulePreview> {
-    val result=mutableListOf<RulePreview>()
-    val presets=listOf("geosite:cn","geoip:cn","Global.list","Domestic.list")
-    presets.forEach { key ->
-        val text=data.setting("smartRules.$key")
-        result += RulePreview(key,"基线规则集",ruleLineCount(text),if(text.isBlank())"当前未加载正文" else "已加载当前正文",ruleSamples(text))
-    }
-    data.settings.filterKeys{it.startsWith("smartRules.")}.toSortedMap().forEach { (key,text) ->
-        val service=key.removePrefix("smartRules.")
-        if(presets.contains(service))return@forEach
-        val url=data.setting("smartUrl.$service")
-        result += RulePreview(service,"智能应用规则${if(url.isBlank())"" else " · $url"}",ruleLineCount(text),when { text.isNotBlank() && url.isNotBlank()->"已加载远程正文";text.isNotBlank()->"已加载自定义正文";url.isNotBlank()->"仅配置 URL，尚未加载正文";else->"未配置" },ruleSamples(text))
-    }
-    data.rules.sortedBy{it.order}.forEach { rule ->
-        val sets=runCatching { JSONObject(rule.advanced).opt("rule_set") }.getOrNull()?.let{value->when(value){is JSONArray->(0 until value.length()).map{value.optString(it)};null,JSONObject.NULL->emptyList();else->listOf(value.toString())}}.orEmpty().filter{it.isNotBlank()}
-        if(sets.isNotEmpty())result += RulePreview(rule.name,"路由规则: ${rule.outbound}",sets.size,if(rule.enabled)"已启用" else "已停用",sets.take(5))
-    }
-    return result
 }
 
 private fun ruleLineCount(text:String):Int = text.lineSequence().count{val line=it.trim();line.isNotEmpty()&&!line.startsWith('#')&&!line.startsWith("//")}

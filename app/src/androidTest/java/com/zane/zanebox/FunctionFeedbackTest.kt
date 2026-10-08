@@ -137,20 +137,21 @@ class FunctionFeedbackTest {
         compose.onNodeWithTag("page_back").performClick();compose.onNodeWithTag("main_back").performClick()
         compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("settings_general").performClick()
         compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("setting_perAppEnabled"));compose.onNodeWithTag("setting_perAppEnabled").performClick()
-        compose.waitUntil(10000) { compose.onNodeWithTag("apps_auto").fetchSemanticsNode().config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick) }
+        compose.waitUntil(10000) { !compose.onNodeWithTag("apps_auto").fetchSemanticsNode().config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled) }
         compose.onNodeWithTag("apps_mode_include").performClick()
-        compose.onNodeWithTag("apps_auto").performClick();compose.onNodeWithTag("apps_auto_confirm").performClick()
-        val presets=compose.activity.assets.open("proxy_packagename.txt").bufferedReader().use { it.readLines() }.map { it.trim() }.toSet()
+        compose.onNodeWithTag("apps_auto").performClick()
         val installed=compose.activity.packageManager.getInstalledApplications(0)
-        val expected=installed.filter { it.packageName in presets || it.uid==1000 }.map { it.packageName }.toSet()
+        val entries=installed.map { info->com.zane.zanebox.config.InstalledApp(compose.activity.packageManager.getApplicationLabel(info).toString(),info.packageName) }
+        val expected=com.zane.zanebox.config.commonAppPackages(entries,compose.activity.packageName)
         assertTrue("模拟器必须有内置名单中的合成验收应用",expected.isNotEmpty())
         compose.onNodeWithTag("apps_save").performClick()
         compose.waitUntil(10000) { vm.data.value.setting("perAppPackages").lines().filter { it.isNotBlank() }.toSet()==expected }
         assertEquals(expected,vm.store.snapshot().setting("perAppPackages").lines().toSet())
         compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("setting_perAppEnabled"))
         compose.onNodeWithTag("setting_perAppEnabled").performClick();compose.onNodeWithTag("apps_mode_exclude").performClick()
-        compose.onNodeWithTag("apps_auto").performClick();compose.onNodeWithTag("apps_auto_confirm").performClick();compose.onNodeWithTag("apps_save").performClick()
-        val bypass=installed.filter { it.packageName !in presets && it.uid!=1000 }.map { it.packageName }.toSet()
+        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("apps_clear"));compose.onNodeWithTag("apps_clear").performClick()
+        compose.onNodeWithTag("apps_auto").performClick();compose.onNodeWithTag("apps_save").performClick()
+        val bypass=com.zane.zanebox.config.commonAppPackages(entries,compose.activity.packageName,true)
         compose.waitUntil(10000) { vm.data.value.setting("perAppPackages").lines().filter { it.isNotBlank() }.toSet()==bypass }
         assertEquals("exclude",vm.data.value.setting("perAppMode"))
     }

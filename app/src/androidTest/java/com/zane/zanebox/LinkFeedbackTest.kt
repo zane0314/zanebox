@@ -104,19 +104,19 @@ class LinkFeedbackTest {
         compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("network_tools").performClick();compose.onNodeWithTag("tools_backup_tab").performClick()
         compose.onNodeWithText("本地备份").assertIsDisplayed()
     }
-    @Test fun outerAppSwitchOnlyReflectsTheInnerThreeModes() {
+    @Test fun outerAppSwitchReflectsTheInnerEnableSwitchAndModes() {
         val vm=seed();compose.onNodeWithTag("tab_2").performClick();compose.onNodeWithTag("settings_general").performClick()
         compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("setting_perAppEnabled"))
         compose.onNodeWithTag("setting_perAppMode").assertDoesNotExist()
         compose.onNodeWithTag("per_app_indicator",useUnmergedTree=true).assertHasNoClickAction().assertIsOff()
         compose.onNodeWithTag("per_app_indicator",useUnmergedTree=true).performTouchInput {click()}
-        compose.onNodeWithTag("apps_mode_include").performClick();compose.onNodeWithTag("page_back").performClick()
+        compose.onNodeWithTag("apps_enabled").performClick();compose.onNodeWithTag("apps_mode_include").performClick();compose.onNodeWithTag("page_back").performClick()
         compose.waitUntil(10000){vm.data.value.bool("perAppEnabled") && vm.data.value.setting("perAppMode")=="include"}
         compose.onNodeWithTag("per_app_indicator",useUnmergedTree=true).assertIsOn()
         compose.onNodeWithTag("setting_perAppEnabled").performClick();compose.onNodeWithTag("apps_mode_exclude").performClick();compose.onNodeWithTag("page_back").performClick()
         compose.waitUntil(10000){vm.data.value.bool("perAppEnabled") && vm.data.value.setting("perAppMode")=="exclude"}
         compose.onNodeWithTag("per_app_indicator",useUnmergedTree=true).assertIsOn()
-        compose.onNodeWithTag("setting_perAppEnabled").performClick();compose.onNodeWithTag("apps_mode_off").performClick();compose.onNodeWithTag("page_back").performClick()
+        compose.onNodeWithTag("setting_perAppEnabled").performClick();compose.onNodeWithTag("apps_enabled").performClick();compose.onNodeWithTag("page_back").performClick()
         compose.waitUntil(10000){!vm.data.value.bool("perAppEnabled")}
         compose.onNodeWithTag("per_app_indicator",useUnmergedTree=true).assertIsOff()
     }

@@ -46,7 +46,7 @@ object ConfigBuilder {
         }.map { it.id }
     }
 
-    fun build(data: AppData, purpose: Purpose = Purpose.MAIN, testNodeId: Long = 0, runtimeSecret: String = ""): String {
+    fun build(data: AppData, purpose: Purpose = Purpose.MAIN, testNodeId: Long = 0, runtimeSecret: String = "", installedPackages:Set<String>?=null): String {
         val testing = purpose == Purpose.TEST
         val nodesById=data.nodes.associateBy { it.id }
         val groupsById=data.groups.associateBy { it.id }
@@ -241,7 +241,7 @@ object ConfigBuilder {
                     }
                     else -> { if(choice.startsWith("node:") && candidateNodes.none { it.id.toString()==choice.substringAfter(':') }) return@serviceLoop;runCatching { target(choice) }.getOrElse { return@serviceLoop } }
                 }
-                val packages=data.setting("smartCustom.$service.packages").lines().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                val packages=effectiveSmartPackages(data,service,installedPackages).toList()
                 if(packages.isNotEmpty()) {
                     require(packages.all { it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")) }) { "自定义应用包名无效" }
                     val appRule=JSONObject().put("package_name",JSONArray(packages))

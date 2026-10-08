@@ -3,7 +3,7 @@ appId: com.zane.zanebox
 # 前置：smoke/editors 已创建 UI-fixture、UI-group、UI-rule、UI-merge；代理保持断开。
 - launchApp
 
-# 设置 → 应用选择：取消自动选择后再确认，确认后必须有非零选中数并保存。
+# 设置 → 应用选择：自动匹配保留手选，选择结果保存。
 - tapOn:
     id: tab_2
 - tapOn:
@@ -20,14 +20,18 @@ appId: com.zane.zanebox
       id: apps_auto
     timeout: 30000
 - tapOn:
-    id: apps_auto
-- tapOn: 取消
+    id: apps_mode_include
+- scrollUntilVisible:
+    element:
+      id: apps_auto
+    direction: DOWN
 - tapOn:
     id: apps_auto
-- tapOn: 选择
+- scrollUntilVisible:
+    element:
+      id: apps_selection_count
+    direction: UP
 - assertVisible: "已选择 [1-9][0-9]* 个应用"
-- assertVisible:
-    id: apps_selection_count
 - tapOn:
     id: apps_save
 

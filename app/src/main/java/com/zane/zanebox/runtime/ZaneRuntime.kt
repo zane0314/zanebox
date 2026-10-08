@@ -221,7 +221,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         return file.openRead().use { it.readBytes().toString(Charsets.US_ASCII) }.also { require(it.matches(Regex("[0-9a-f]{64}"))) { "控制凭证损坏" };cachedSecret=it }
     }
     private fun runtimeConfig(data:AppData):String {
-        val root=JSONObject(ConfigBuilder.build(com.zane.zanebox.config.withBuiltinSmartRules(data) { assets.open(it).bufferedReader().use { reader->reader.readText() } },Purpose.MAIN,runtimeSecret=ownerSecret()))
+        val root=JSONObject(ConfigBuilder.build(com.zane.zanebox.config.withBuiltinSmartRules(data) { assets.open(it).bufferedReader().use { reader->reader.readText() } },Purpose.MAIN,runtimeSecret=ownerSecret(),installedPackages=packageManager.getInstalledApplications(0).map{it.packageName}.toSet()))
         root.optJSONObject("experimental")?.optJSONObject("clash_api")?.apply {
             put("external_ui",File(filesDir,"core-assets/yacd").absolutePath)
             put("access_control_allow_origin",JSONArray().put("http://127.0.0.1:${data.setting("apiPort")}"))
