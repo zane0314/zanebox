@@ -263,7 +263,6 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                             if(nodes.isEmpty())item {Box(Modifier.fillMaxWidth().height(220.dp),contentAlignment=Alignment.Center){Text(if(data.nodes.isEmpty())"暂无节点，点右上角添加节点或订阅" else "未找到匹配节点",fontSize=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
                             if(runtime.error.isNotBlank())item{Text(runtime.error,color=MaterialTheme.colorScheme.error)}
                         }
-                        1->{item{SmartPanel(data,vm,{title,fields,save->form(title,fields,save)},onRules={subpage="rules"},onMerges={subpage="merges"},onOpen={subpage=it})}}
                         2->{item{SettingsHub(onOpen={subpage=it},clashApi=data.bool("clashApi"))}}
                     }
                 }
@@ -271,7 +270,8 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                 if(page==0)Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
                     HomeHeader(pagerGroups.value.getOrNull(pager.currentPage) ?: data.browseGroupId)
                     HorizontalPager(pager,beyondViewportPageCount=2,key={pagerGroups.value.getOrNull(it) ?: -(it+1L)},userScrollEnabled=!selectingNodes,modifier=Modifier.weight(1f).fillMaxWidth().testTag("home_pager")){index->Box(Modifier.fillMaxSize().then(if(index==pager.currentPage)Modifier else Modifier.clearAndSetSemantics{})){pagerGroups.value.getOrNull(index)?.let{PageContent(it)}}}
-                } else PageContent(data.browseGroupId)
+                } else if(page==1)SmartPanel(data,vm,{title,fields,save->form(title,fields,save)},onRules={subpage="rules"},onMerges={subpage="merges"},onOpen={subpage=it},modifier=Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding))
+                else PageContent(data.browseGroupId)
             }
             if(floatingHomeBar)Column(Modifier.align(Alignment.BottomCenter).onSizeChanged{homeBarHeight=with(density){it.height.toDp()}}) {
                 if(dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()})

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zane.zanebox.data.*
+import com.zane.zanebox.config.reorderSmartPolicies
 import com.zane.zanebox.runtime.ServiceClient
 import com.zane.zanebox.subscription.SubscriptionParser
 import com.zane.zanebox.subscription.ParseReport
@@ -221,13 +222,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stageAsset(kind,bytes);message.value="资源已导入，正在校验并应用"
     }
     fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { com.zane.zanebox.config.applySmartRuleUpdate(it,key,d,content) };message.value="分流列表已更新，请点击应用修改" }
-    fun moveSmartPolicy(key:String,step:Int)=edit { data->
-        require(step==1 || step==-1)
-        val order=com.zane.zanebox.config.smartPolicyKeys(data).toMutableList()
-        val from=order.indexOf(key);val to=from+step
-        if(from>=0 && to in order.indices)java.util.Collections.swap(order,from,to)
-        data.copy(settings=data.settings+("smartPolicyOrder" to order.joinToString("\n")))
-    }
+    fun reorderSmartPolicies(keys:List<String>)=edit { it.reorderSmartPolicies(keys) }
     fun selectSmartTarget(key:String,value:String)=edit { d ->
         com.zane.zanebox.config.withBuiltinSmartRules(d.copy(settings=d.settings+("smart.$key.target" to value))) { path ->
             getApplication<Application>().assets.open(path).bufferedReader().use { it.readText() }

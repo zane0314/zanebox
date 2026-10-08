@@ -136,15 +136,16 @@ class LinkFeedbackTest {
         compose.onNodeWithTag("rule_position").performClick();compose.onNode(hasText("前置 · 在应用策略之前") and !hasTestTag("rule_position")).assertIsDisplayed();compose.onNodeWithText("后置 · 在应用策略之后").performClick()
         compose.onNodeWithTag("rule_save").performClick();compose.waitUntil(10000){!vm.data.value.rules.first{it.id==firstRule}.prioritize}
     }
-    @Test fun longPressMovesPolicyAndPersistsTheActualOrder() {
+    @Test fun accessiblePolicyMovesPersistTheActualOrder() {
         val vm=seed();compose.onNodeWithTag("tab_1").performClick()
-        compose.onNodeWithTag("smart_speed").performTouchInput{longClick()}
-        compose.onNodeWithTag("smart_move_down").performClick()
+        compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("smart_card_speed"))
+        val moveDown=compose.onNodeWithTag("smart_card_speed").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].single{it.label=="向后移动"}
+        compose.runOnIdle{assertTrue(moveDown.action())}
         compose.waitUntil(10000){com.zane.zanebox.config.smartPolicyKeys(vm.data.value).take(2)==listOf("youtube","speed")}
         assertTrue(compose.onNodeWithTag("smart_youtube").fetchSemanticsNode().boundsInRoot.top<compose.onNodeWithTag("smart_speed").fetchSemanticsNode().boundsInRoot.top)
         assertEquals("youtube",vm.store.snapshot().setting("smartPolicyOrder").lineSequence().first())
-        compose.onNodeWithTag("smart_speed").performTouchInput{longClick()}
-        compose.onNodeWithTag("smart_move_up").performClick()
+        val moveUp=compose.onNodeWithTag("smart_card_speed").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].single{it.label=="向前移动"}
+        compose.runOnIdle{assertTrue(moveUp.action())}
         compose.waitUntil(10000){com.zane.zanebox.config.smartPolicyKeys(vm.data.value).first()=="speed"}
     }
     @Test fun clipboardUrlsReachSubscriptionImportAndDownloadActualNodes() {

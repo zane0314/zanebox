@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.spring
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -37,52 +39,53 @@ private const val KaringRuleCatalogUrl =
 private data class RuleCatalogEntry(val name:String,val url:String,val page:String)
 
 @Composable internal fun SmartPanel(data:AppData,vm:AppViewModel,form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit,
-    onRules:()->Unit,onMerges:()->Unit,onOpen:(String)->Unit) {
+    onRules:()->Unit,onMerges:()->Unit,onOpen:(String)->Unit,modifier:Modifier=Modifier) {
     val installedPackages=rememberInstalledPackageNames()
     var target by remember{mutableStateOf("")}
     var ruleSource by remember{mutableStateOf("")};var updateChoice by remember{mutableStateOf("")}
     var apps by remember{mutableStateOf("")};var expanded by remember{mutableStateOf("")}
     var confirmDelete by remember{mutableStateOf("")}
-    var moving by remember{mutableStateOf("")}
     val builtIn=listOf("speed" to "Speed · IP / DNS / 测速","youtube" to "YouTube","telegram" to "Telegram","netflix" to "Netflix","disney" to "Disney+","tiktok" to "TikTok","x" to "X","meta" to "Instagram / Facebook","spotify" to "Spotify","google" to "Google","ai" to "AI 应用")
     val policyOrder=com.zane.zanebox.config.smartPolicyKeys(data)
     val custom=data.settings.filterKeys{it.startsWith("smartCustom.") && it.endsWith(".name")}.map{it.key.removePrefix("smartCustom.").removeSuffix(".name") to it.value}
-    Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        UiSection("路由规则")
-        UiCard{UiRow("路由规则","前置 ${data.rules.count{it.prioritize}} · 后置 ${data.rules.count{!it.prioritize}}",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}
-        UiSection("分流节点组")
-        UiCard{UiRow("自动选择范围","全部启用订阅组 · ${com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,"auto").size} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,chevron=false,modifier=Modifier.testTag("smart_source"))}
-        UiCard{UiRow("引用规则更新", "自动：${data.setting("rulesUpdateInterval")} · 连接后：${data.setting("rulesUpdateDelay","30s")}",Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
+    val policies=(builtIn+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom" to "自定义规则")else emptyList())+custom).toMap()
+    val listState=rememberLazyListState()
+    val drag=rememberDragSort(policyOrder.map{"smart-policy-$it"},listState){keys->vm.reorderSmartPolicies(keys.map{it.toString().removePrefix("smart-policy-")})}
+    LazyColumn(modifier.fillMaxSize().testTag("page_list"),state=listState,contentPadding=PaddingValues(horizontal=16.dp,vertical=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        item(key="smart-rules-section"){UiSection("路由规则")}
+        item(key="smart-rules"){UiCard{UiRow("路由规则","前置 ${data.rules.count{it.prioritize}} · 后置 ${data.rules.count{!it.prioritize}}",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}}
+        item(key="smart-groups-section"){UiSection("分流节点组")}
+        item(key="smart-source"){UiCard{UiRow("自动选择范围","全部启用订阅组 · ${com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,"auto").size} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,chevron=false,modifier=Modifier.testTag("smart_source"))}}
+        item(key="smart-update"){UiCard{UiRow("引用规则更新", "自动：${data.setting("rulesUpdateInterval")} · 连接后：${data.setting("rulesUpdateDelay","30s")}",Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
             Row{IconButton(onClick={vm.updateAllSmartRules()},modifier=Modifier.testTag("smart_update")){Icon(Icons.Outlined.Download,"立即更新规则")};IconButton(onClick={updateChoice="rulesUpdateDelay"}){Icon(Icons.Outlined.Settings,"规则更新设置")}}
-        })}
-        UiCard{UiRow("管理节点汇总组","合并多个分组或指定节点为分流目标",Icons.Outlined.Hub,iconRes=R.drawable.zb_ref_ic_mingcute_group_24,onClick=onMerges,modifier=Modifier.testTag("smart_merges"))}
-        UiSection("应用策略")
-        val policies=(builtIn+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom" to "自定义规则")else emptyList())+custom).toMap()
-        policyOrder.mapNotNull{key->policies[key]?.let{key to it}}.forEach{(key,title)->
-            val value=smartTarget(data,key)
-            UiCard{UiRow(title,targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
-                onClick={expanded=if(expanded==key)"" else key},onLongClick={moving=key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
-                if(expanded==key) {
-                    val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
-                    val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))
-                    UiRow("分流目标",targetName(value,data),onClick={target=key})
-                    UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(usesBuiltin)"内置兼容规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
-                    UiRow("选择应用",if(installedPackages==null)"正在读取应用" else "${com.zane.zanebox.config.effectiveSmartPackages(data,key,installedPackages).size} 个有效应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
-                    if(custom.any{it.first==key}) {
-                        UiRow("重命名",onClick={form("重命名",listOf("名称" to title)){values->require(values[0].isNotBlank());require((builtIn+custom).none{it.first!=key && it.second==values[0]}){"名称已存在"};vm.setting("smartCustom.$key.name",values[0])}})
-                        UiRow("删除应用组",onClick={confirmDelete=key})
+        })}}
+        item(key="smart-merges"){UiCard{UiRow("管理节点汇总组","合并多个分组或指定节点为分流目标",Icons.Outlined.Hub,iconRes=R.drawable.zb_ref_ic_mingcute_group_24,onClick=onMerges,modifier=Modifier.testTag("smart_merges"))}}
+        item(key="smart-policies-section"){UiSection("应用策略")}
+        drag.order.forEach { itemKey->
+            val key=itemKey.toString().removePrefix("smart-policy-")
+            val title=policies[key] ?: return@forEach
+            item(key=itemKey) {
+                val value=smartTarget(data,key)
+                UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==itemKey)null else spring()).then(drag.modifier(itemKey)).testTag("smart_card_$key")) {
+                    UiRow(title,targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
+                    onClick={expanded=if(expanded==key)"" else key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
+                    if(expanded==key) {
+                        val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
+                        val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))
+                        UiRow("分流目标",targetName(value,data),onClick={target=key})
+                        UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(usesBuiltin)"内置兼容规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
+                        UiRow("选择应用",if(installedPackages==null)"正在读取应用" else "${com.zane.zanebox.config.effectiveSmartPackages(data,key,installedPackages).size} 个有效应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
+                        if(custom.any{it.first==key}) {
+                            UiRow("重命名",onClick={form("重命名",listOf("名称" to title)){values->require(values[0].isNotBlank());require((builtIn+custom).none{it.first!=key && it.second==values[0]}){"名称已存在"};vm.setting("smartCustom.$key.name",values[0])}})
+                            UiRow("删除应用组",onClick={confirmDelete=key})
+                        }
                     }
                 }
             }
         }
-        OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};vm.task {val key="custom_${vm.store.nextId()}";vm.store.putSetting("smartCustom.$key.name",v[0]);vm.message.value="已保存"}}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text("添加自定义应用组")}
-        if(data.setting("serviceMode")!="vpn")Text("智能应用路由依赖 VPN 模式。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
+        item(key="smart-add-custom"){OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};vm.task {val key="custom_${vm.store.nextId()}";vm.store.putSetting("smartCustom.$key.name",v[0]);vm.message.value="已保存"}}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text("添加自定义应用组")}}
+        if(data.setting("serviceMode")!="vpn")item(key="smart-vpn-hint"){Text("智能应用路由依赖 VPN 模式。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)}
     }
-    if(moving.isNotBlank())UiAlertDialog(onDismissRequest={moving=""},title={Text("移动策略")},text={Column {
-        val index=policyOrder.indexOf(moving)
-        TextButton(onClick={vm.moveSmartPolicy(moving,-1);moving=""},enabled=index>0,modifier=Modifier.testTag("smart_move_up")){Text(uiText("上移"))}
-        TextButton(onClick={vm.moveSmartPolicy(moving,1);moving=""},enabled=index>=0 && index<policyOrder.lastIndex,modifier=Modifier.testTag("smart_move_down")){Text(uiText("下移"))}
-    }},confirmButton={TextButton(onClick={moving=""}){Text(uiText("取消"))}})
     if(target.isNotBlank())TargetPicker("分流目标",smartTarget(data,target),data,{target=""},{vm.selectSmartTarget(target,it)},smart=true)
     if(ruleSource.isNotBlank())RuleSourcePage(ruleSource,data,vm){ruleSource=""}
     if(updateChoice.isNotBlank())ChoiceDialog(if(updateChoice=="rulesUpdateInterval")"自动更新间隔" else "连接后检查",data.setting(updateChoice,if(updateChoice=="rulesUpdateInterval")"24h" else "30s"),

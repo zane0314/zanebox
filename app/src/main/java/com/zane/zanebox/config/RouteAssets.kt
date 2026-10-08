@@ -81,3 +81,9 @@ internal fun smartPolicyKeys(data:AppData):List<String> {
     val available=builtinSmartRuleFiles.keys.toList()+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom")else emptyList())+data.settings.keys.filter{it.startsWith("smartCustom.") && it.endsWith(".name")}.map{it.removePrefix("smartCustom.").removeSuffix(".name")}.sorted()
     return (data.setting("smartPolicyOrder").lines().filter{it in available}+available).distinct()
 }
+
+internal fun AppData.reorderSmartPolicies(requested:List<String>):AppData {
+    val current=smartPolicyKeys(this)
+    require(requested.distinct().size==requested.size && requested.toSet()==current.toSet()) { "分流组已变化，请重试排序" }
+    return copy(settings=settings+("smartPolicyOrder" to requested.joinToString("\n")))
+}

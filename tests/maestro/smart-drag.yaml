@@ -1,0 +1,31 @@
+# Run with tests/run_smart_drag_maestro.py; live hierarchy bounds become literal swipe coordinates.
+appId: com.zane.zanebox
+---
+- launchApp
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_speed
+    direction: DOWN
+    timeout: 60000
+- swipe:
+    start: "${DRAG_START}"
+    end: "${DRAG_END}"
+    duration: 8000
+- assertNotVisible: 移动策略
+- takeScreenshot: reports/ui-1.0.2/current/smart-drag-order
+- tapOn:
+    id: smart_speed
+- scrollUntilVisible:
+    element:
+      id: smart_apps_speed
+    direction: DOWN
+- tapOn:
+    id: smart_apps_speed
+- assertVisible:
+    id: apps_save
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
