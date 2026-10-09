@@ -99,7 +99,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
             vm.message.compareAndSet(message,"")
             if(message.contains("应用修改"))dirty=true
             val accessibility=context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
-            val timeout=if(android.os.Build.VERSION.SDK_INT>=29)accessibility.getRecommendedTimeoutMillis(2000,android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT).toLong() else 2000L
+            val timeout=if(android.os.Build.VERSION.SDK_INT>=29)accessibility.getRecommendedTimeoutMillis(1000,android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT).toLong() else 1000L
             kotlinx.coroutines.withTimeoutOrNull(timeout) { snackbar.showSnackbar(message,duration=SnackbarDuration.Indefinite) }
         }
     }
