@@ -14,6 +14,8 @@ internal data class Preference(
 )
 internal fun boolean(key:String,title:String,default:Boolean=SettingDefaults.value(key,"false").toBoolean())=Preference(key,title,default.toString(),boolean=true)
 internal fun choice(key:String,title:String,default:String,vararg values:Pair<String,String>)=Preference(key,title,default,values.toList())
+// Removed skins render as the retained original UI without rewriting imported settings.
+internal fun resolvedUiSkin(value:String)=if(value.equals("linear",ignoreCase=true))"linear" else "prism"
 internal val strategies=listOf("" to "自动","prefer_ipv4" to "优先 IPv4","prefer_ipv6" to "优先 IPv6","ipv4_only" to "仅 IPv4","ipv6_only" to "仅 IPv6")
 private val ipv6Modes=listOf("ipv4_only" to "仅 IPv4","prefer_ipv4" to "优先 IPv4","prefer_ipv6" to "优先 IPv6","ipv6_only" to "仅 IPv6")
 private val languages=uiLanguageChoices
@@ -24,9 +26,8 @@ private val urlTestTolerances=listOf("5" to "5 ms","10" to "10 ms","30" to "30 m
 internal fun preferenceSections(data:AppData)=listOf(
     "软件设置" to listOf(
         boolean("autoStart","开机自动连接"),
-        choice("uiSkin","界面皮肤",SettingDefaults.value("uiSkin"),"prism" to "棱镜流光","azure" to "天青留白","spectrum" to "光谱水晶"),
+        choice("uiSkin","界面皮肤",SettingDefaults.value("uiSkin"),"prism" to "棱镜流光","linear" to "简洁留白"),
         choice("launcherIcon","桌面图标",SettingDefaults.value("launcherIcon"),"default" to "Link","prism" to "Links · 毛玻璃","pixel" to "Pixel","node_n" to "Node N","channel_gate" to "Channel Gate","confluence" to "Confluence","launch_path" to "Launch Path"),
-        choice("theme","夜间模式",SettingDefaults.value("theme"),"system" to "跟随系统","light" to "浅色","dark" to "深色"),
         choice("appLanguage","应用语言",SettingDefaults.value("appLanguage"),*languages.toTypedArray()),
         choice("serviceMode","服务模式",SettingDefaults.value("serviceMode"),"vpn" to "VPN","proxy" to "本地代理"),
         choice("tunStack","TUN 实现",SettingDefaults.value("tunStack"),"mixed" to "混合","system" to "系统","gvisor" to "gVisor"),

@@ -25,6 +25,7 @@ appId: com.zane.zanebox
 - scrollUntilVisible:
     element:
       id: setting_showBottomBar
+    centerElement: true
     direction: DOWN
     timeout: 60000
 - tapOn:

@@ -49,11 +49,11 @@ appId: com.zane.zanebox
 - tapOn:
     id: node_menu
 - tapOn: 延迟升序
-- assertVisible: 已保存，请应用修改使配置生效
+- assertVisible: "^已保存$"
 - tapOn:
     id: node_menu
 - tapOn: 默认顺序
-- assertVisible: 已保存，请应用修改使配置生效
+- assertVisible: "^已保存$"
 - tapOn:
     id: node_menu
 - tapOn: 全部测速（全部分组）

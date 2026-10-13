@@ -37,7 +37,8 @@ class FloatingToolbarTest {
             java.io.File(ins.targetContext.getExternalFilesDir(null),"floating-toolbar-$scale.png").outputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
             compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_40"))
             repeat(2){compose.onNodeWithTag("page_list").performTouchInput{swipeUp()}}
-            assertTrue("最后一个节点应能滚到胶囊上方",compose.onNodeWithTag("node_40").fetchSemanticsNode().boundsInRoot.bottom<=toolbar.top)
+            val last=compose.onNodeWithTag("node_40").fetchSemanticsNode().boundsInRoot
+            assertTrue("最后一个节点应能滚到胶囊上方：$last / $toolbar",last.bottom<=toolbar.top)
             compose.onNodeWithTag("tab_1").performTouchInput{click()}
             compose.onNodeWithTag("smart_speed").assertIsDisplayed();compose.onNodeWithTag("main_back").performClick()
         }

@@ -48,17 +48,21 @@ class FunctionFeedbackTest {
         val vm=seed(AppData())
         val clipboard=compose.activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         compose.runOnIdle { clipboard.setPrimaryClip(android.content.ClipData.newPlainText("empty-fixture","")) }
-        compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("从剪贴板导入").performClick()
-        compose.onNodeWithText("没有可导入的内容").assertIsDisplayed()
-        compose.onNodeWithTag("node_menu").performClick()
-        compose.onNodeWithText("更新当前订阅").performClick()
-        compose.onNodeWithText("请先选择订阅分组").assertIsDisplayed()
-        compose.onNodeWithTag("node_menu").performClick()
-        compose.onNodeWithText("全部更新（全部订阅）").performClick()
-        compose.onNodeWithText("没有可更新的订阅").assertIsDisplayed()
-        compose.onNodeWithTag("tab_1").performClick()
-        compose.onNodeWithTag("smart_update").performClick()
-        compose.onNodeWithText("没有配置远程规则源").assertIsDisplayed()
+        fun feedback(text:String) {
+            compose.waitUntil(5000){compose.mainClock.advanceTimeByFrame();compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()}
+            compose.mainClock.advanceTimeBy(250);compose.onNodeWithText(text).assertIsDisplayed()
+        }
+        compose.mainClock.autoAdvance=false
+        try {
+            compose.onNodeWithTag("add_nodes").performClick();compose.mainClock.advanceTimeBy(250)
+            compose.onNodeWithText("从剪贴板导入").performClick();feedback("没有可导入的内容")
+            compose.onNodeWithTag("node_menu").performClick();compose.mainClock.advanceTimeBy(250)
+            compose.onNodeWithText("更新当前订阅").performClick();feedback("请先选择订阅分组")
+            compose.onNodeWithTag("node_menu").performClick();compose.mainClock.advanceTimeBy(250)
+            compose.onNodeWithText("全部更新（全部订阅）").performClick();feedback("没有可更新的订阅")
+            compose.onNodeWithTag("tab_1").performClick();compose.mainClock.advanceTimeBy(250)
+            compose.onNodeWithTag("smart_update").performClick();feedback("没有配置远程规则源")
+        } finally {compose.mainClock.autoAdvance=true}
         assertTrue(vm.data.value.nodes.isEmpty())
     }
     @Test fun failedLatencyTestUpdatesTheOpenNodeDetailsAndHomeRow() {
@@ -172,7 +176,7 @@ class FunctionFeedbackTest {
         val result=org.json.JSONArray()
         try {
             nodes.forEachIndexed { index,node->
-                compose.onNodeWithTag("page_list").performScrollToIndex(index+3)
+                compose.onNodeWithTag("page_list").performScrollToNode(hasTestTag("node_${node.id}"))
                 compose.onNodeWithTag("node_menu_${node.id}").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() };compose.onNodeWithText("编辑").performClick()
                 val name=node.name+" · 已验证"
                 compose.onNodeWithTag("node_name").performTextReplacement(name)
@@ -204,22 +208,23 @@ class FunctionFeedbackTest {
         val vm=seed(AppData(settings=mapOf("serviceMode" to "proxy","autoStart" to "true")))
         val activity=compose.activity
         val prefs=activity.getSharedPreferences("runtime",android.content.Context.MODE_PRIVATE)
-        var started:android.content.Intent?=null
+        val started=java.util.concurrent.atomic.AtomicReference<android.content.Intent?>()
         val recorder=object:android.content.ContextWrapper(activity) {
-            override fun startForegroundService(intent:android.content.Intent):android.content.ComponentName? { started=intent;return intent.component }
+            override fun startForegroundService(intent:android.content.Intent):android.content.ComponentName? { started.set(intent);return intent.component }
         }
         val receiver=com.zane.zanebox.runtime.StartReceiver()
         try {
             prefs.edit().putBoolean("connected",false).commit()
-            receiver.onReceive(recorder,android.content.Intent(android.content.Intent.ACTION_MY_PACKAGE_REPLACED));assertNull(started)
+            receiver.onReceive(recorder,android.content.Intent(android.content.Intent.ACTION_MY_PACKAGE_REPLACED));assertNull(started.get())
             prefs.edit().putBoolean("connected",true).commit()
-            receiver.onReceive(recorder,android.content.Intent("invalid"));assertNull(started)
+            receiver.onReceive(recorder,android.content.Intent("invalid"));assertNull(started.get())
             receiver.onReceive(recorder,android.content.Intent(android.content.Intent.ACTION_MY_PACKAGE_REPLACED))
-            assertEquals(com.zane.zanebox.runtime.ZaneProxyService::class.java.name,started?.component?.className)
-            assertEquals("start",started?.action)
+            compose.waitUntil(10000){started.get()!=null}
+            assertEquals(com.zane.zanebox.runtime.ZaneProxyService::class.java.name,started.get()?.component?.className)
+            assertEquals("start",started.get()?.action)
             compose.runOnIdle { vm.setting("autoStart","false") }
-            compose.waitUntil(10000) { vm.data.value.setting("autoStart")=="false" };started=null
-            receiver.onReceive(recorder,android.content.Intent(android.content.Intent.ACTION_BOOT_COMPLETED));assertNull(started)
+            compose.waitUntil(10000) { vm.data.value.setting("autoStart")=="false" };started.set(null)
+            receiver.onReceive(recorder,android.content.Intent(android.content.Intent.ACTION_BOOT_COMPLETED));assertNull(started.get())
         } finally { prefs.edit().putBoolean("connected",false).commit() }
     }
     @Test fun backgroundProcessLossFinishesPendingLatencyAndSpeedStates() {

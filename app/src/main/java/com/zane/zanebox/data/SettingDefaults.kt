@@ -35,7 +35,7 @@ internal object SettingDefaults {
         "showBottomBar" to "true",
         "uiSkin" to "prism",
         "launcherIcon" to "default",
-        "theme" to "system",
+        "theme" to "light",
         "appLanguage" to "",
         "serviceMode" to "vpn",
         "tunStack" to "mixed",

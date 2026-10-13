@@ -4,14 +4,14 @@ appId: com.zane.zanebox
 - assertVisible:
     id: connect_toggle
 - extendedWaitUntil:
-    visible: .*(代理未连接|代理已连接|连接中|断开中).*
+    visible: .*(代理未连接|代理已连接|代理开关：连接|代理开关：断开|连接中|断开中).*
     timeout: 30000
 - runFlow:
     when:
       visible: .*(连接中).*
     commands:
     - extendedWaitUntil:
-        visible: 代理未连接|代理已连接
+        visible: .*(代理未连接|代理已连接|代理开关：连接|代理开关：断开).*
         timeout: 30000
 - runFlow:
     when:
@@ -20,7 +20,7 @@ appId: com.zane.zanebox
     - tapOn:
         id: connect_toggle
     - extendedWaitUntil:
-        visible: 代理未连接
+        visible: .*(代理未连接|代理开关：连接).*
         timeout: 30000
 - tapOn:
     id: tab_2
@@ -47,7 +47,12 @@ appId: com.zane.zanebox
     timeout: 60000
 - tapOn:
     id: setting_uiSkin
-- tapOn: 天青留白
+- assertVisible: 棱镜流光
+- assertVisible: 简洁留白
+- assertNotVisible: 天青留白
+- assertNotVisible: 光谱水晶
+- tapOn: 简洁留白
+- assertNotVisible: 夜间模式
 - scrollUntilVisible:
     element:
       id: setting_launcherIcon
@@ -56,14 +61,6 @@ appId: com.zane.zanebox
 - tapOn:
     id: setting_launcherIcon
 - tapOn: Pixel
-- scrollUntilVisible:
-    element:
-      id: setting_theme
-    direction: DOWN
-    timeout: 60000
-- tapOn:
-    id: setting_theme
-- tapOn: 深色
 - scrollUntilVisible:
     element:
       id: setting_autoStart
@@ -250,14 +247,24 @@ appId: com.zane.zanebox
 - scrollUntilVisible:
     element:
       id: setting_perAppEnabled
+    centerElement: true
     direction: DOWN
     timeout: 60000
 - tapOn:
     id: setting_perAppEnabled
 - tapOn:
     id: apps_mode_include
-- tapOn:
-    id: apps_mode_off
+- runFlow:
+    when:
+      visible:
+        id: apps_enabled
+        checked: true
+    commands:
+    - tapOn:
+        id: apps_enabled
+- assertVisible:
+    id: apps_enabled
+    checked: false
 - tapOn:
     id: page_back
 - scrollUntilVisible:

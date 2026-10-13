@@ -8,6 +8,7 @@ appId: com.zane.zanebox
 - scrollUntilVisible:
     element:
       id: setting_perAppEnabled
+    centerElement: true
     direction: DOWN
     timeout: 60000
 - tapOn:
@@ -25,7 +26,7 @@ appId: com.zane.zanebox
 - assertVisible:
     id: apps_import
 - assertVisible:
-    id: apps_mode_off
+    id: apps_enabled
 - assertVisible:
     id: apps_mode_include
 - assertVisible:

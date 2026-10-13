@@ -27,8 +27,8 @@ appId: com.zane.zanebox
 - assertVisible: Launch Path
 - tapOn:
     id: setting_launcherIcon
-- tapOn: zanebox
-- assertVisible: zanebox
+- tapOn: "^Link$"
+- assertVisible: "^Link$"
 - tapOn:
     id: page_back
 - tapOn:

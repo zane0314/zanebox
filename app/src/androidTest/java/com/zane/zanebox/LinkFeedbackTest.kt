@@ -55,7 +55,6 @@ class LinkFeedbackTest {
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("rule_source_compatibility"))
         compose.onNodeWithTag("rule_source_compatibility").assertIsDisplayed().assertTextContains("USER-AGENT",substring=true)
-        compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("rule_source_save"))
         compose.onNodeWithTag("rule_source_save").performClick()
         compose.waitUntil(10000){!vm.busy.value && vm.data.value.setting("smartRules.youtube")==custom}
         assertEquals(custom,vm.store.snapshot().setting("smartRules.youtube"))

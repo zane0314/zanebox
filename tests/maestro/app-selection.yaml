@@ -8,6 +8,7 @@ appId: com.zane.zanebox
 - scrollUntilVisible:
     element:
       id: setting_perAppEnabled
+    centerElement: true
     direction: DOWN
 - tapOn:
     id: setting_perAppEnabled

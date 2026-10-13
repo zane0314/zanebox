@@ -58,7 +58,11 @@ class DocumentQrTest {
             @Suppress("DEPRECATION") val send=chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
             assertEquals("image/png",send.type);assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0)
             compose.onNodeWithText("关闭").performClick()
-            compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("扫码导入").performClick();waitFor("扫码结果导入") { store.snapshot().nodes.any { it.name=="scan-fixture" } }
+            compose.onNodeWithTag("add_nodes").performClick();compose.onNodeWithText("扫码导入").performClick()
+            compose.waitUntil(10000){compose.onAllNodesWithTag("import_confirm").fetchSemanticsNodes().isNotEmpty()}
+            assertFalse("扫码结果确认前不得写入",store.snapshot().nodes.any{it.name=="scan-fixture"})
+            compose.onNodeWithTag("import_confirm").performClick()
+            waitFor("扫码结果导入") { store.snapshot().nodes.any { it.name=="scan-fixture" } }
             intending(allOf(hasAction(Intent.ACTION_CREATE_DOCUMENT),hasType("application/zip"))).respondWith(ActivityResult(Activity.RESULT_OK,Intent().setData(uri(zip))))
             compose.onNodeWithTag("tab_2").performClick()
             compose.onNodeWithTag("network_tools").performClick();compose.onNodeWithTag("tools_backup_tab").performClick();compose.onNodeWithTag("subpage_list").performScrollToNode(hasTestTag("backup_export"));compose.onNodeWithTag("backup_export").performScrollTo().performClick();waitFor("ZIP写入") { zip.length()>100 }

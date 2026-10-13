@@ -182,11 +182,12 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     BackHandler(selectingNodes) { selectingNodes=false;selectedNodes=emptySet() }
     BackHandler(page!=0 && subpage.isBlank()) {page=0}
     ZaneTheme(data) {
+        val linearUi=skinPalette.name=="linear"
         CompositionLocalProvider(LocalUiSnackbar provides snackbar,LocalUiBusy provides busy,LocalUiReload provides (if(dirty && runtime.state==2)({vm.service.reload()})else null)) {
         Box(Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}) {
             UiBackdrop(Modifier.fillMaxSize(),home=page==0)
-            NativeHomeAppearance(page==0) {
-            val floatingHomeBar=page==0 && data.bool("showBottomBar")
+            NativeHomeAppearance(page==0 && !linearUi) {
+            val floatingHomeBar=page==0 && !linearUi && data.bool("showBottomBar")
             var homeBarHeight by remember {mutableStateOf(0.dp)}
             val density=androidx.compose.ui.platform.LocalDensity.current
             val homeBarOverlap=(homeBarHeight-WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()).coerceAtLeast(0.dp)
@@ -195,7 +196,10 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     navigationIcon={IconButton(onClick={page=0},modifier=Modifier.testTag("main_back")){Icon(Icons.AutoMirrored.Outlined.ArrowBack,"返回")}},
                     actions={if(page==1)SmartMenu(data,vm){subpage=it}},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
                 snackbarHost={if(subpage.isBlank() && !nodeEdit && !groupEdit && !ruleEdit && !mergeEdit && editor==null && info==null && subscriptionOptions==null && speedNode==null)SnackbarHost(snackbar,Modifier.padding(bottom=if(floatingHomeBar)homeBarOverlap else 0.dp))},
-                bottomBar={if(!floatingHomeBar && dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},Modifier.navigationBarsPadding())}) {padding->
+                bottomBar={Column {
+                    if(!floatingHomeBar && dirty && runtime.state==2)ApplyChangesRow({vm.service.reload()},if(linearUi && data.bool("showBottomBar"))Modifier else Modifier.navigationBarsPadding())
+                    if(linearUi && data.bool("showBottomBar"))WhiteNavigation(page){page=it}
+                }}) {padding->
                 @Composable fun HomeHeader(homeGroupId:Long) {
                     val chipState=rememberLazyListState()
                     LaunchedEffect(homeGroupId,homeGroupIds) {
@@ -203,7 +207,8 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     }
                     Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=2.dp)) {
                         Row(Modifier.fillMaxWidth().testTag("home_header").padding(top=2.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text(uiText("已选")+"："+(if(data.bool("homeAutoSelect"))uiText("自动选择") else data.nodes.firstOrNull{it.id==data.selectedNodeId}?.name ?: uiText("未选择节点")),
+                            if(linearUi)Text("Links",fontSize=22.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                            else Text(uiText("已选")+"："+(if(data.bool("homeAutoSelect"))uiText("自动选择") else data.nodes.firstOrNull{it.id==data.selectedNodeId}?.name ?: uiText("未选择节点")),
                                 fontSize=13.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f).testTag("home_selected_node"))
                             FilledIconButton(onClick={searching=!searching},modifier=Modifier.size(48.dp).testTag("search_toggle"),colors=IconButtonDefaults.filledIconButtonColors(containerColor=if(MaterialTheme.colorScheme.background.luminance()>.5f)androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.surface.copy(alpha=1f))){Icon(painterResource(R.drawable.zb_ref_abc_ic_search_api_material),"搜索节点")}
                             Spacer(Modifier.width(6.dp))
@@ -212,6 +217,12 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                 DropdownMenu(add,{add=false}){addActions.forEach{(title,action)->DropdownMenuItem(text={Text(uiText(title))},onClick={add=false;action()})}}
                             }
                             Spacer(Modifier.width(6.dp));UiMenu(moreActions,"node_menu",circle=true)
+                        }
+                        if(linearUi) {
+                            val selectedNode=data.nodes.firstOrNull{it.id==if(data.bool("homeAutoSelect"))autoNodeId else data.selectedNodeId}
+                            WhiteConnectionCard(uiText("已选")+"："+(if(data.bool("homeAutoSelect"))uiText("自动选择")+selectedNode?.let{" · "+it.name}.orEmpty() else selectedNode?.name ?: uiText("未选择节点")),
+                                selectedNode?.let{runCatching{JSONObject(it.outbound).optString("type").uppercase()}.getOrDefault("")}.orEmpty(),runtime.state,data.setting("serviceMode"),data.setting("routeMode"),::toggle)
+                            Spacer(Modifier.height(12.dp))
                         }
                         if(searching) {
                             OutlinedTextField(search,{search=it},label={Text(uiText("搜索节点"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_search"),trailingIcon={IconButton(onClick={search="";searching=false}){Icon(Icons.Outlined.Close,"关闭搜索")}})
@@ -235,7 +246,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                 val drag=rememberDragSort(visibleNodes.map{it.id},listState,canMove={from,to->nodesById[from]?.groupId==nodesById[to]?.groupId}){vm.reorderNodes(it.filterIsInstance<Long>())}
                 val nodes=drag.order.mapNotNull{nodesById[it]}
                 LazyColumn(Modifier.fillMaxSize().padding(if(page==0)PaddingValues(0.dp)else padding).consumeWindowInsets(if(page==0)PaddingValues(0.dp)else padding).testTag(if(page!=0 || homeGroupId==pagerGroups.value.getOrNull(pager.currentPage))"page_list" else "home_page_$homeGroupId"),state=listState,
-                    contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=(if(floatingHomeBar)homeBarOverlap else 0.dp)+(if(page==0)8.dp else 16.dp)),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    contentPadding=PaddingValues(start=16.dp,end=16.dp,top=if(page==0)2.dp else 0.dp,bottom=(if(floatingHomeBar)homeBarHeight else 0.dp)+(if(page==0)8.dp else 16.dp)),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     when(page) {
                         0->{
                             if(homeGroupId==0L && search.isBlank())item {
@@ -248,14 +259,14 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                 val enabled=n.groupId in enabledIds
                                 val showAddress=data.bool("alwaysShowAddress")
                                 val subtitle=remember(n.outbound,showAddress){runCatching{val node=JSONObject(n.outbound);node.optString("type").uppercase()+(if(showAddress)" · ${node.optString("server")}:${node.optInt("server_port")}" else "")}.getOrDefault("")}
-                                UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==n.id)null else spring()).then(if(selectingNodes)Modifier else drag.modifier(n.id))) { Row(Modifier.fillMaxWidth().heightIn(min=68.dp).padding(start=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                                UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==n.id)null else spring()).then(if(selectingNodes)Modifier else drag.modifier(n.id)),selected=linearUi && !data.bool("homeAutoSelect") && data.selectedNodeId==n.id) { Row(Modifier.fillMaxWidth().heightIn(min=68.dp).padding(start=12.dp),verticalAlignment=Alignment.CenterVertically) {
                                     if(selectingNodes)Checkbox(n.id in selectedNodes,{checked->selectedNodes=if(checked)selectedNodes+n.id else selectedNodes-n.id},modifier=Modifier.testTag("home_node_check_${n.id}"))
                                     else RadioButton(!data.bool("homeAutoSelect") && data.selectedNodeId==n.id,onClick={if(enabled)vm.service.selectNode(n.id)},enabled=enabled)
                                     Column(Modifier.weight(1f).clickable(enabled=selectingNodes || enabled,onClick={if(selectingNodes)selectedNodes=if(n.id in selectedNodes)selectedNodes-n.id else selectedNodes+n.id else vm.service.selectNode(n.id)}).testTag("node_${n.id}").padding(vertical=12.dp)) {
                                         Text(n.name,fontSize=14.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis)
-                                        Text(subtitle,fontSize=10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(subtitle,fontSize=if(linearUi)12.sp else 10.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Text(uiText(if(n.id in testing)"测试中" else nodeTestLabel(n)),fontSize=11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.testTag("node_latency_${n.id}").clickable(enabled=enabled){vm.service.testNodes(listOf(n.id))})
+                                    Text(uiText(if(n.id in testing)"测试中" else nodeTestLabel(n)),fontSize=if(linearUi)12.sp else 11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.testTag("node_latency_${n.id}").clickable(enabled=enabled){vm.service.testNodes(listOf(n.id))})
                                     IconButton(onClick={info=n},modifier=Modifier.testTag("node_info_${n.id}")){Icon(painterResource(R.drawable.zb_ref_ic_baseline_info_24),"节点详情")}
                                     UiMenu(listOf("编辑" to {nodeForm(n)},"测试延迟" to {vm.service.testNodes(listOf(n.id))},"速度测试" to {speedNode=n.id},"分享" to {share(shareText(listOf(n)))},"二维码" to {qr=shareText(listOf(n))},"复制" to {copy(shareText(listOf(n)))},"节点区域" to {form("节点区域",listOf("hk/us/kr/jp/sg/tw（留空自动）" to data.setting("nodeRegion.${n.id}"))){val key="nodeRegion.${n.id}";val region=it[0].trim().lowercase(java.util.Locale.ROOT);validatePreference(key,region);vm.setting(key,region)}},"多选" to {selectingNodes=true;selectedNodes=selectedNodes+n.id},"删除" to {deleteNodes(setOf(n.id))}).filter{enabled || it.first !in listOf("测试延迟","速度测试")},"node_menu_${n.id}")
                                 } }

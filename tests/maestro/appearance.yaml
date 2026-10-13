@@ -17,103 +17,43 @@ appId: com.zane.zanebox
     id: settings_general
 - tapOn:
     id: setting_uiSkin
+- assertVisible: 棱镜流光
+- assertVisible: 简洁留白
+- assertNotVisible: 天青留白
+- assertNotVisible: 光谱水晶
 - tapOn: 棱镜流光
-- tapOn:
-    id: setting_theme
-- tapOn: 浅色
-- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-浅色-settings
+- assertNotVisible: 夜间模式
+- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-settings
 - tapOn:
     id: page_back
 - tapOn:
     id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-浅色-home
+- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-home
 - tapOn:
     id: tab_2
 - tapOn:
     id: settings_general
 - tapOn:
     id: setting_uiSkin
-- tapOn: 棱镜流光
-- tapOn:
-    id: setting_theme
-- tapOn: 深色
-- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-深色-settings
-- tapOn:
-    id: page_back
-- tapOn:
-    id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/appearance-棱镜流光-深色-home
-- tapOn:
-    id: tab_2
-- tapOn:
-    id: settings_general
-- tapOn:
-    id: setting_uiSkin
-- tapOn: 天青留白
-- tapOn:
-    id: setting_theme
-- tapOn: 浅色
-- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-浅色-settings
+- assertVisible: 棱镜流光
+- assertVisible: 简洁留白
+- assertNotVisible: 天青留白
+- assertNotVisible: 光谱水晶
+- tapOn: 简洁留白
+- assertNotVisible: 夜间模式
+- takeScreenshot: reports/ui-1.0.2/current/appearance-简洁留白-settings
 - tapOn:
     id: page_back
 - tapOn:
     id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-浅色-home
+- takeScreenshot: reports/ui-1.0.2/current/appearance-简洁留白-home
 - tapOn:
     id: tab_2
 - tapOn:
     id: settings_general
-- tapOn:
-    id: setting_uiSkin
-- tapOn: 天青留白
-- tapOn:
-    id: setting_theme
-- tapOn: 深色
-- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-深色-settings
-- tapOn:
-    id: page_back
-- tapOn:
-    id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/appearance-天青留白-深色-home
-- tapOn:
-    id: tab_2
-- tapOn:
-    id: settings_general
-- tapOn:
-    id: setting_uiSkin
-- tapOn: 光谱水晶
-- tapOn:
-    id: setting_theme
-- tapOn: 浅色
-- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-浅色-settings
-- tapOn:
-    id: page_back
-- tapOn:
-    id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-浅色-home
-- tapOn:
-    id: tab_2
-- tapOn:
-    id: settings_general
-- tapOn:
-    id: setting_uiSkin
-- tapOn: 光谱水晶
-- tapOn:
-    id: setting_theme
-- tapOn: 深色
-- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-深色-settings
-- tapOn:
-    id: page_back
-- tapOn:
-    id: main_back
-- takeScreenshot: reports/ui-1.0.2/current/appearance-光谱水晶-深色-home
-- tapOn:
-    id: tab_2
-- tapOn:
-    id: settings_general
-- tapOn:
-    id: setting_theme
-- tapOn: 浅色
+- assertNotVisible: 天青留白
+- assertNotVisible: 光谱水晶
+- assertNotVisible: 夜间模式
 - tapOn:
     id: setting_appLanguage
 - tapOn: English

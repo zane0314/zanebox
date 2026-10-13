@@ -1,8 +1,14 @@
 appId: com.zane.zanebox
 ---
+- launchApp
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
 - scrollUntilVisible:
     element:
       id: reset_settings
+    centerElement: true
     direction: DOWN
     timeout: 60000
 - tapOn:

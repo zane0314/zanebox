@@ -96,9 +96,12 @@ appId: com.zane.zanebox
 - tapOn: 取消
 - tapOn:
     id: manage_[0-9]+_multiselect
-- tapOn:
-    id: manage_node_check_[0-9]+
-    index: 0
+- scrollUntilVisible:
+    element:
+      text: Clipboard-Node
+    direction: DOWN
+    centerElement: true
+- tapOn: Clipboard-Node
 - takeScreenshot: reports/ui-1.0.2/current/settings-selected-node
 - tapOn:
     id: manage_[0-9]+_delete_selected

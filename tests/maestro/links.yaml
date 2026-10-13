@@ -9,7 +9,7 @@ appId: com.zane.zanebox
     id: setting_appLanguage
 - tapOn: 简体中文
 - assertNotVisible:
-    id: setting_appTheme
+    id: setting_theme
 - scrollUntilVisible:
     element:
       id: factory_reset

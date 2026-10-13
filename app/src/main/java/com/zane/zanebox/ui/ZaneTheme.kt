@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.filled.*
@@ -15,7 +14,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -72,51 +70,14 @@ private val PrismLight = ZaneSkinPalette(
     backdropStart = Color(0xFFEEF2FF), backdropCenter = Color(0xFFE9EDFC), backdropEnd = Color(0xFFE4EAFB),
 )
 
-private val PrismDark = PrismLight.copy(
-    primary = Color(0xFF4DB8E8), primaryDark = Color(0xFF229ED9),
-    background = Color(0xFF08090D), surface = Color(0xFF13141A), surfaceElevated = Color(0xFF1C1E26),
-    onSurface = Color(0xFFF1F4F6), secondaryText = Color(0xFF8E9BA8), divider = Color(0xFF26333F),
-    iconTile = Color(0xFF17384A), selectedSurface = Color(0x292AABEE), success = Color(0xFF5BD27B),
-    warning = Color(0xFFFFB340), error = Color(0xFFFF453A),
-    backdropStart = Color(0xFF0A0C12), backdropCenter = Color(0xFF08090D), backdropEnd = Color(0xFF06070A),
-)
-
-private val AzureLight = ZaneSkinPalette(
-    name = "azure",
+private val LinearLight = ZaneSkinPalette(
+    name = "linear",
     primary = Color(0xFF1F5FD0), primaryDark = Color(0xFF1F5FD0),
-    background = Color(0xFFF2F5FA), surface = Color(0xFFFFFFFF), surfaceElevated = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF131A24), secondaryText = Color(0xFF5C6776), divider = Color(0xFFECEFF3),
-    iconTile = Color(0xFFE8F0FE), selectedSurface = Color(0x142F7BF6), success = Color(0xFF22A45D),
-    warning = Color(0xFFF28A00), error = Color(0xFFD70015),
-    backdropStart = Color(0xFFF5F8FC), backdropCenter = Color(0xFFF2F5FA), backdropEnd = Color(0xFFEDF2F8),
-)
-
-private val AzureDark = AzureLight.copy(
-    primary = Color(0xFF5B9BFF), primaryDark = Color(0xFF2F7BF6),
-    background = Color(0xFF0B0F16), surface = Color(0xFF151A22), surfaceElevated = Color(0xFF1D232D),
-    onSurface = Color(0xFFEEF2F7), secondaryText = Color(0xFF95A1AF), divider = Color(0xFF232B36),
-    iconTile = Color(0xFF16304F), selectedSurface = Color(0x295B9BFF), success = Color(0xFF3ECC7F),
-    warning = Color(0xFFFFB340), error = Color(0xFFFF453A),
-    backdropStart = Color(0xFF0C1119), backdropCenter = Color(0xFF0B0F16), backdropEnd = Color(0xFF080B10),
-)
-
-private val SpectrumLight = ZaneSkinPalette(
-    name = "spectrum",
-    primary = Color(0xFF0B73CF), primaryDark = Color(0xFF07579F),
-    background = Color(0xFFDDF6F8), surface = Color(0x1AFFFFFF), surfaceElevated = Color(0x24FFFFFF),
-    onSurface = Color(0xFF111A24), secondaryText = Color(0xFF45606E), divider = Color(0x668ABAC5),
-    iconTile = Color(0x33FFFFFF), selectedSurface = Color(0x180B73CF), success = Color(0xFF1FA34A),
-    warning = Color(0xFFF28A00), error = Color(0xFFD70015),
-    backdropStart = Color(0xFFDDF6F8), backdropCenter = Color(0xFFCBEFF3), backdropEnd = Color(0xFFBFEAF1),
-)
-
-private val SpectrumDark = SpectrumLight.copy(
-    primary = Color(0xFF66B8FF), primaryDark = Color(0xFF3B91D8),
-    background = Color(0xFF10272D), surface = Color(0x33233E45), surfaceElevated = Color(0x4D2D4B53),
-    onSurface = Color(0xFFF2FAFC), secondaryText = Color(0xFFB7CDD3), divider = Color(0x668BC4CE),
-    iconTile = Color(0x263FC0D2), selectedSurface = Color(0x2966B8FF), success = Color(0xFF5BD27B),
-    warning = Color(0xFFFFB340), error = Color(0xFFFF453A),
-    backdropStart = Color(0xFF10272D), backdropCenter = Color(0xFF183A43), backdropEnd = Color(0xFF10272D),
+    background = Color(0xFFF5F6F8), surface = Color.White, surfaceElevated = Color(0xFFEEF0F4),
+    onSurface = Color(0xFF1D2733), secondaryText = Color(0xFF525E6C), divider = Color(0xFFE1E5EB),
+    iconTile = Color(0xFFE8F0FE), selectedSurface = Color(0xFFEEF0F4), success = Color(0xFF187341),
+    warning = Color(0xFF9C5700), error = Color(0xFFB3261E),
+    backdropStart = Color(0xFFF5F6F8), backdropCenter = Color(0xFFF5F6F8), backdropEnd = Color(0xFFF5F6F8),
 )
 
 val LocalZaneSkin = compositionLocalOf { PrismLight }
@@ -180,38 +141,29 @@ private val ZaneTypography = Typography().run {
 
 @Composable
 fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
-    val theme = data.setting("theme").lowercase()
-    val dark = when (theme) {
-        "dark" -> true
-        "light" -> false
-        else -> isSystemInDarkTheme()
-    }
     val view=LocalView.current
     val context=LocalContext.current
-    SideEffect { (context as? android.app.Activity)?.window?.let{configureSystemBars(it,view,dark)} }
-    val baseSkin = when (data.setting("uiSkin").lowercase()) {
-        "azure" -> if (dark) AzureDark else AzureLight
-        "spectrum" -> if (dark) SpectrumDark else SpectrumLight
-        else -> if (dark) PrismDark else PrismLight
-    }
-    val skin = baseSkin
-    val colors = if (dark) darkColorScheme(
-        primary = skin.primary, onPrimary = skin.background, primaryContainer = skin.primaryDark,
-        onPrimaryContainer = skin.onSurface, secondary = skin.secondaryText, onSecondary = skin.background,
-        background = skin.background, onBackground = skin.onSurface, surface = skin.surface,
-        onSurface = skin.onSurface, surfaceVariant = skin.surfaceElevated, onSurfaceVariant = skin.secondaryText,
-        error = skin.error, onError = skin.background, outline = skin.divider, outlineVariant = skin.divider,
-    ) else lightColorScheme(
+    SideEffect { (context as? android.app.Activity)?.window?.let{configureSystemBars(it,view,false)} }
+    val skin=if(resolvedUiSkin(data.setting("uiSkin"))=="linear")LinearLight else PrismLight
+    val colors = lightColorScheme(
         primary = skin.primary, onPrimary = Color.White, primaryContainer = skin.iconTile,
         onPrimaryContainer = skin.onSurface, secondary = skin.secondaryText, onSecondary = Color.White,
         background = skin.background, onBackground = skin.onSurface, surface = skin.surface,
         onSurface = skin.onSurface, surfaceVariant = skin.surfaceElevated, onSurfaceVariant = skin.secondaryText,
         error = skin.error, onError = Color.White, outline = skin.divider, outlineVariant = skin.divider,
-    )
+        surfaceContainer = skin.surfaceElevated,
+    ).let { colors ->
+        if(skin.name=="linear")colors.copy(
+            secondaryContainer=skin.surfaceElevated,onSecondaryContainer=skin.onSurface,
+            tertiary=skin.primary,onTertiary=Color.White,tertiaryContainer=skin.iconTile,onTertiaryContainer=skin.onSurface,
+            surfaceContainerLowest=Color.White,surfaceContainerLow=skin.surface,
+            surfaceContainerHigh=skin.surface,surfaceContainerHighest=skin.surfaceElevated,
+        ) else colors
+    }
     CompositionLocalProvider(
         LocalZaneSkin provides skin,
     ) {
-        MaterialTheme(colorScheme = colors, typography = ZaneTypography, shapes = ZaneShapes.copy(large = androidx.compose.foundation.shape.RoundedCornerShape(when(data.setting("uiSkin")){"azure"->16.dp;"spectrum"->22.dp;else->14.dp}))){
+        MaterialTheme(colorScheme = colors, typography = ZaneTypography, shapes = ZaneShapes.copy(large = androidx.compose.foundation.shape.RoundedCornerShape(if(skin.name=="linear")12.dp else 14.dp))){
             UiLanguageProvider(data, content)
         }
     }
@@ -222,10 +174,10 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
 fun UiBackdrop(modifier: Modifier = Modifier, home:Boolean=true) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val skin=LocalZaneSkin.current
-    val dark=skin.onSurface.red>.7f
-    val name=if(home) "anybox_home_background" else "skin_${skin.name}_window"
-    val drawable=androidx.compose.runtime.remember(name,dark,context) {
-        val id=context.resources.getIdentifier("zb_ref_${name}"+(if(dark)"_dark" else ""),"drawable",context.packageName)
+    if(skin.name=="linear") { Canvas(modifier.fillMaxSize()){drawRect(skin.background)}; return }
+    val name=if(home) "anybox_home_background" else "skin_prism_window"
+    val drawable=androidx.compose.runtime.remember(name,context) {
+        val id=context.resources.getIdentifier("zb_ref_${name}","drawable",context.packageName)
         androidx.core.content.ContextCompat.getDrawable(context,id)!!.mutate()
     }
     Canvas(modifier.fillMaxSize()) {
@@ -233,7 +185,6 @@ fun UiBackdrop(modifier: Modifier = Modifier, home:Boolean=true) {
             drawable.setBounds(0,0,size.width.toInt(),size.height.toInt())
             drawable.draw(canvas.nativeCanvas)
         }
-        if(dark && !home && skin.name!="prism")drawRect(skin.background.copy(alpha=.88f))
     }
 }
 

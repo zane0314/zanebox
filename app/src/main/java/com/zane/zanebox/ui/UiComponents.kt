@@ -78,9 +78,9 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
     }
 }
 
-@Composable internal fun UiCard(modifier:Modifier=Modifier, content:@Composable ColumnScope.()->Unit) {
+@Composable internal fun UiCard(modifier:Modifier=Modifier,selected:Boolean=false, content:@Composable ColumnScope.()->Unit) {
     Surface(modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,
-        color=MaterialTheme.colorScheme.surface,
+        color=if(selected)skinSelectedSurface else MaterialTheme.colorScheme.surface,
         border=BorderStroke(.5.dp,MaterialTheme.colorScheme.outlineVariant.copy(alpha=.5f))) {
         Column(content=content)
     }

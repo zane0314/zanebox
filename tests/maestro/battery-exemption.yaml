@@ -8,6 +8,7 @@ appId: com.zane.zanebox
 - scrollUntilVisible:
     element:
       id: battery_optimization
+    centerElement: true
     direction: DOWN
     timeout: 60000
 - assertVisible: 未豁免 · 点击请求系统授权

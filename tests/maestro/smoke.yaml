@@ -35,24 +35,24 @@ appId: com.zane.zanebox
 - assertVisible: 软件设置
 - tapOn:
     id: setting_uiSkin
-- tapOn: 天青留白
-- assertVisible: 天青留白
-- takeScreenshot: reports/ui-1.0.2/current/azure-settings
-- tapOn:
-    id: setting_uiSkin
-- tapOn: 光谱水晶
-- assertVisible: 光谱水晶
-- takeScreenshot: reports/ui-1.0.2/current/spectrum-settings
-- tapOn:
-    id: setting_uiSkin
+- assertVisible: 棱镜流光
+- assertVisible: 简洁留白
+- assertNotVisible: 天青留白
+- assertNotVisible: 光谱水晶
 - tapOn: 棱镜流光
+- assertVisible: 棱镜流光
+- assertNotVisible: 夜间模式
+- takeScreenshot: reports/ui-1.0.2/current/prism-settings
 - tapOn:
-    id: setting_theme
-- tapOn: 深色
-- takeScreenshot: reports/ui-1.0.2/current/dark-settings
-- tapOn:
-    id: setting_theme
-- tapOn: 浅色
+    id: setting_uiSkin
+- assertVisible: 棱镜流光
+- assertVisible: 简洁留白
+- assertNotVisible: 天青留白
+- assertNotVisible: 光谱水晶
+- tapOn: 简洁留白
+- assertVisible: 简洁留白
+- assertNotVisible: 夜间模式
+- takeScreenshot: reports/ui-1.0.2/current/linear-settings
 - tapOn:
     id: page_back
 - tapOn:

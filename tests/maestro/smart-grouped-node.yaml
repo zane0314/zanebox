@@ -1,10 +1,10 @@
 appId: com.zane.zanebox
 ---
-- assertVisible: .*代理已连接.*
+- assertVisible: .*(代理已连接|代理开关：断开).*
 - tapOn:
     id: connect_toggle
 - extendedWaitUntil:
-    visible: .*代理未连接.*
+    visible: .*(代理未连接|代理开关：连接).*
     timeout: 30000
 - tapOn:
     id: tab_1
@@ -25,5 +25,5 @@ appId: com.zane.zanebox
 - tapOn:
     id: connect_toggle
 - extendedWaitUntil:
-    visible: .*代理已连接.*
+    visible: .*(代理已连接|代理开关：断开).*
     timeout: 30000
