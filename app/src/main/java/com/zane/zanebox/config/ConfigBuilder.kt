@@ -152,7 +152,7 @@ object ConfigBuilder {
                 if (members.isNotEmpty()) {
                     val options=JSONObject(g.options)
                     val selectable=options.optBoolean("groupIsSelector",options.optBoolean("isSelector",true))
-                    val groupDefault="node-${chosen.id}".takeIf { it in members } ?:members.first()
+                    val groupDefault=data.setting("groupSelection.${groupTag(g.id)}","").takeIf { selectable && it in members } ?: "node-${chosen.id}".takeIf { it in members } ?:members.first()
                     out.put(JSONObject().put("type", "selector").put("tag", groupTag(g.id)).put("outbounds", JSONArray(if(selectable)members else listOf(groupDefault))).put("default",groupDefault))
                     tags.add(groupTag(g.id))
                 }

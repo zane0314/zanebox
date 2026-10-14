@@ -34,6 +34,7 @@ internal enum class RuntimeCommand(val wire:String) {
     SPEED("speed"),
     CANCEL_SPEED("cancelSpeed"),
     STUN("stun"),
-    CANCEL_STUN("cancelStun");
+    CANCEL_STUN("cancelStun"),
+    TARGET_TEST("targetTest");
     companion object {fun fromWire(wire:String)=entries.firstOrNull {it.wire==wire}}
 }

@@ -32,6 +32,11 @@ class SingBoxEngine(private val platform:NativePlatform) {
     }
     fun query(tag:String,direction:String):Long = main?.queryStats(tag,direction) ?: 0
     fun select(tag:String):Boolean = main?.selectOutbound(tag) ?: false
+    /** Switches one named selector group; the home "proxy" selector is never touched. */
+    fun selectGroup(groupTag:String,tag:String):Boolean = main?.selectGroupOutbound(groupTag,tag) ?: false
+    /** Applies this round's delays (0 = failed) to a live URLTest group and returns its new strict choice, or "". */
+    fun applyURLTestResults(groupTag:String,results:Map<String,Int>):String =
+        main?.applyURLTestResults(groupTag,results.entries.joinToString("\n") { "${it.key}\t${it.value}" }) ?: ""
     fun resetNetwork()=Libcore.resetAllConnections(true)
     fun sleep() { main?.sleep() }
     fun wake() { main?.wake() }

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.border
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -55,6 +56,7 @@ import org.json.JSONObject
     form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit,backup:(BackupScope)->Unit,restore:()->Unit,
     groupEdit:(Group?)->Unit,ruleEdit:(RouteRule?)->Unit,mergeEdit:(MergeGroup?)->Unit,subscriptionEdit:(Group)->Unit,share:(String)->Unit,copy:(String)->Unit,qr:(String)->Unit,exportNodes:(Long?)->Unit,toggle:()->Unit) {
     val context=LocalContext.current
+    val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     var confirmation by remember{mutableStateOf<Pair<String,()->Unit>?>(null)}
     var expandedGroups by remember { mutableStateOf(emptySet<Long>()) }
     var selectingGroup by remember { mutableStateOf<Long?>(null) }
@@ -148,7 +150,10 @@ import org.json.JSONObject
         }
         "merges"->UiPageList("节点汇总组",onDismiss,action={IconButton(onClick={mergeEdit(null)},modifier=Modifier.testTag("add_merge")){Icon(Icons.Outlined.Add,"添加汇总组")}}) {
             if(data.merges.isEmpty())item{UiRow("暂无汇总组","合并多个分组或指定节点为分流目标")}
-            items(data.merges,key={it.id}){m->UiCard{UiRow(m.name,"${m.nodeIds.size} 个指定节点 · ${m.groupIds.size} 个分组 · "+if(m.mode=="urltest")"自动测速" else "手动选择",Icons.Outlined.Hub,onClick={mergeEdit(m)},modifier=Modifier.testTag("merge_${m.id}"),trailing={UiMenu(listOf("编辑" to {mergeEdit(m)},"删除" to {confirmation="删除汇总组 ${m.name}？" to {vm.deleteMerge(m.id)}}))})}}
+            items(data.merges,key={it.id}){m->UiCard{UiRow(m.name,"${m.nodeIds.size} 个指定节点 · ${m.groupIds.size} 个分组 · "+if(m.mode=="urltest")"自动测速" else "手动选择",Icons.Outlined.Hub,onClick={mergeEdit(m)},modifier=Modifier.testTag("merge_${m.id}"),trailing={Row(verticalAlignment=Alignment.CenterVertically) {
+                targetLatencyLabel(data,"merge:${m.id}",testing)?.let { label->LatencyAction(label,"merge_latency_${m.id}"){vm.service.testTarget("merge:${m.id}")} }
+                UiMenu(listOf("编辑" to {mergeEdit(m)},"删除" to {confirmation="删除汇总组 ${m.name}？" to {vm.deleteMerge(m.id)}}))
+            }})}}
         }
         "backup"->UiPageList("备份与恢复",onDismiss) {item{BackupRows(data,vm,open,backup,restore)}}
         "webdav-settings"->UiPageList("WebDAV 设置",onDismiss) {

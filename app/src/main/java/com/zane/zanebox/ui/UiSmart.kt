@@ -49,6 +49,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
     val policyOrder=com.zane.zanebox.config.smartPolicyKeys(data)
     val custom=data.settings.filterKeys{it.startsWith("smartCustom.") && it.endsWith(".name")}.map{it.key.removePrefix("smartCustom.").removeSuffix(".name") to it.value}
     val policies=(builtIn+(if(data.settings.keys.any{it=="smartRules.custom" || it=="smart.custom.target"})listOf("custom" to "自定义规则")else emptyList())+custom).toMap()
+    val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     val listState=rememberLazyListState()
     val drag=rememberDragSort(policyOrder.map{"smart-policy-$it"},listState){keys->vm.reorderSmartPolicies(keys.map{it.toString().removePrefix("smart-policy-")})}
     LazyColumn(modifier.fillMaxSize().testTag("page_list"),state=listState,contentPadding=PaddingValues(horizontal=16.dp,vertical=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -68,7 +69,10 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
                 val value=smartTarget(data,key)
                 UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==itemKey)null else spring()).then(drag.modifier(itemKey)).testTag("smart_card_$key")) {
                     UiRow(title,targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
-                    onClick={expanded=if(expanded==key)"" else key},modifier=Modifier.testTag("smart_$key"),trailing={TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}})
+                    onClick={expanded=if(expanded==key)"" else key},modifier=Modifier.testTag("smart_$key"),trailing={Column(horizontalAlignment=Alignment.End) {
+                        targetLatencyLabel(data,value,testing)?.let { label->LatencyAction(label,"smart_latency_$key"){vm.service.testTarget(value,key)} }
+                        TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}
+                    }})
                     if(expanded==key) {
                         val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
                         val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))

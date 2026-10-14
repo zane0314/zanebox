@@ -211,6 +211,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 RuntimeCommand.CANCEL_SPEED -> { speed?.cancel();speedJob?.cancel();event("speed",JSONObject().put("stage","cancelled").put("done",true).put("error","速度测试已取消").toString());event("message","速度测试已取消") }
                 RuntimeCommand.STUN -> startStun(payload)
                 RuntimeCommand.CANCEL_STUN -> { stunVersion++;stunJob?.cancel();event("stun",JSONObject().put("running",false).put("error","已取消").toString()) }
+                RuntimeCommand.TARGET_TEST -> { val args=JSONObject(payload);startTests(JSONArray(),args.getString("request"),TargetRequest(args.getString("target"),args.optString("serviceKey"))) }
             } } catch(e:TimeoutCancellationException) { event("message","操作超时，请重试");if(action==RuntimeCommand.START)owner.stopSelf() }
             catch(e:CancellationException) { throw e }
             catch(e:Exception) { event("message",safeError(e));if(action==RuntimeCommand.STUN)event("stun",JSONObject().put("running",false).put("error",safeError(e)).toString());if(action==RuntimeCommand.START) { failed(e);owner.stopSelf() } }
@@ -321,6 +322,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             apiPort=data.setting("apiPort").toIntOrNull() ?: 9090
         Libcore.setNetworkChangeResetConnections(data.bool("networkReset"))
             engine.start(config)
+            val restoreWarnings=restoreTargetChoices(config)
             applyLiveSettings(data,running=true)
             appliedData=data;appliedConfig=config;syncIdle()
             lastProxySelection=engine.configuredProxyDefault;lastAutoNode=0;event("autoSelection","0")
@@ -333,7 +335,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             startSampler(snapshot.generation)
             armSubscriptionAlarm()
             startRuleUpdates()
-            val warnings=ConfigBuilder.targetWarnings(data)
+            val warnings=ConfigBuilder.targetWarnings(data)+restoreWarnings
             if(warnings.isNotEmpty()) event("message",warnings.joinToString("\n")) else event("message","已连接")
         } catch(e:Exception) { failed(e);throw e }
     }
@@ -557,12 +559,78 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private suspend fun cancelTestBatch(owned:Job?=null) = testAccess.withLock {
         if(owned==null || tests===owned)cancelTestsLocked() else owned.cancelAndJoin()
     }
-    private suspend fun startTests(ids:JSONArray,request:String=java.util.UUID.randomUUID().toString()):Job? = testAccess.withLock {
+    private class TargetRequest(val target:String,val serviceKey:String)
+    /**
+     * A routing-target batch commits its winner before the final running=false event. It never blocks on [access]
+     * (a subscription apply holds it while joining this very job); a cancelled batch gives up instead.
+     */
+    private suspend fun commitTargetChoice(batchId:Long,plan:TargetPlan,pings:Map<Long,Int>) {
+        while(true) {
+            if(synchronized(testStateLock) { activeTestBatch!=batchId })return
+            if(access.tryLock()) {
+                try {
+                    synchronized(testStateLock) { if(activeTestBatch==batchId)event("message",applyTargetChoice(plan,pings)) }
+                } catch(e:Exception) { event("message","目标择优未完成：${safeError(e)}") }
+                finally { access.unlock() }
+                return
+            }
+            delay(10)
+        }
+    }
+    /** Called with [access] held, so the main instance cannot be stopped or reloaded underneath the selection. */
+    private fun applyTargetChoice(plan:TargetPlan,pings:Map<Long,Int>):String {
+        var message=""
+        // The SQLite writer lock keeps a concurrent member/target edit out of validation, selection and persistence.
+        store.update { latest ->
+            if(!plan.stillValid(latest)) {message="分流目标已变化，测速结果未应用";return@update latest}
+            val choice=plan.winner(latest,pings)
+            if(choice==null) {message="目标测速：全部节点不可达，保留原选择";return@update latest}
+            val (winner,best)=choice
+            val group=plan.group
+            if(group==null) {message="测速完成，最快 ${best}ms";return@update latest}
+            val tag="node-$winner"
+            if(current.get().connectionState==RuntimeState.CONNECTED) {
+                val applied=if(group.urlTest)engine.applyURLTestResults(group.tag,plan.nativeResults(latest,pings))==tag else engine.selectGroup(group.tag,tag)
+                check(applied) { "内核未能切换 ${group.tag} 到最快节点" }
+            }
+            val settings=latest.settings+(GROUP_SELECTION_PREFIX+group.tag to tag)+
+                (if(group.urlTest)mapOf(GROUP_SELECTION_DELAY_PREFIX+group.tag to best.coerceIn(1,65535).toString())else emptyMap())
+            message="目标测速完成，已选择最快节点（${best}ms）"
+            latest.copy(settings=settings,merges=if(group.mergeId>0 && !group.urlTest)
+                latest.merges.map { if(it.id==group.mergeId)it.copy(selectedId=winner)else it }else latest.merges)
+        }
+        return message
+    }
+    /** Re-applies saved target-test winners of live URLTest and selector groups, so an offline round survives connect/restart and an older selector cache. */
+    private fun restoreTargetChoices(config:String):List<String> {
+        val data=store.snapshot()
+        val outbounds=JSONObject(config).optJSONArray("outbounds") ?: JSONArray()
+        val groups=(0 until outbounds.length()).map { outbounds.getJSONObject(it) }.filter { it.optString("type")=="urltest" }.associateBy { it.getString("tag") }
+        val failures=mutableListOf<String>()
+        data.settings.forEach { (key,value) ->
+            if(!key.startsWith(GROUP_SELECTION_PREFIX))return@forEach
+            val tag=key.removePrefix(GROUP_SELECTION_PREFIX)
+            val members=groups[tag]?.optJSONArray("outbounds")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: return@forEach
+            val node=data.nodes.firstOrNull { "node-${it.id}"==value } ?: return@forEach
+            // A later all-failed round rewrites node pings to -1; the saved choice must still come back.
+            val ping=savedChoiceDelay(data,tag,node.ping)
+            if(value !in members || ping<=0)return@forEach
+            val chosen=try { engine.applyURLTestResults(tag,mapOf(value to ping)) } catch(e:Throwable) { failures.add("$tag：${safeError(e)}");return@forEach }
+            if(chosen!=value)failures.add("$tag：内核未恢复已保存的最快节点")
+        }
+        restorableSelectorChoices(data,config).forEach { (tag,node) ->
+            val applied=try { engine.selectGroup(tag,node) } catch(e:Throwable) { failures.add("$tag：${safeError(e)}");return@forEach }
+            if(!applied)failures.add("$tag：内核未恢复已保存的最快节点")
+        }
+        return failures.map { "已保存的目标择优未能恢复，$it" }
+    }
+    private suspend fun startTests(ids:JSONArray,request:String=java.util.UUID.randomUUID().toString(),targetRequest:TargetRequest?=null):Job? = testAccess.withLock {
         require(request.matches(Regex("[0-9a-f-]{36}"))) { "无效测速请求" }
         cancelTestsLocked()
         val data=store.snapshot()
         val outbounds=data.nodes.associate { it.id to it.outbound }
-        val requested=(0 until ids.length()).map { ids.getLong(it) }.distinct()
+        val plan=targetRequest?.let { TargetPlan.create(data,it.target,it.serviceKey) }
+        val requested=if(targetRequest!=null)plan?.members.orEmpty() else (0 until ids.length()).map { ids.getLong(it) }.distinct()
         require(requested.size<=10000)
         val selected=requested.filter { it in outbounds }
         val batchId=++testSequence
@@ -572,11 +640,13 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             activeTestBatch=batchId
             publishTestState(batchId,request,remaining,selected.size,0,selected.isNotEmpty(),begin=true)
         }
-        if(selected.isEmpty()) {event("message","没有可测速的节点");return@withLock null}
+        if(selected.isEmpty()) {event("message",if(targetRequest!=null && plan==null)"分流目标已变化，已取消测速" else "没有可测速的节点");return@withLock null}
         event("message","正在测试 ${selected.size} 个节点")
         val job=scope.launch(start=CoroutineStart.LAZY) {
             val semaphore=Semaphore(com.zane.zanebox.data.SettingDefaults.testConcurrency(data.setting("testConcurrency")))
             val pending=java.util.concurrent.ConcurrentLinkedQueue<NodeStatusUpdate>()
+            val pings=java.util.concurrent.ConcurrentHashMap<Long,Int>()
+            var finished=false
             fun flush() {
                 val updates=generateSequence { pending.poll() }.toList();if(updates.isEmpty())return
                 // Batch validation and commit share this lock with cancellation; superseded work cannot land late.
@@ -603,20 +673,25 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                     val ping=try {engine.test(prepared.build(id),data.setting("testUrl"),timeout){task.isActive}}
                         catch(e:Exception){if(e is CancellationException)throw e;-1}
                     ensureActive()
+                    pings[id]=ping
                     pending.add(NodeStatusUpdate(id,outbounds.getValue(id),ping,if(ping>0)3 else 1))
                 }}}}
+                finished=true
             } catch(e:CancellationException) {throw e}
             catch(e:Exception) {event("message",safeError(e));throw e}
             finally {
                 withContext(NonCancellable) {
                     flusher.cancelAndJoin()
                     flush()
+                    if(finished && plan!=null)commitTargetChoice(batchId,plan,pings)
                     synchronized(testStateLock) {
-                        if(activeTestBatch==batchId)publishTestState(batchId,request,emptyList(),selected.size,completed,false)
+                        if(activeTestBatch==batchId) {
+                            publishTestState(batchId,request,emptyList(),selected.size,completed,false)
+                        }
                     }
                 }
             }
-            synchronized(testStateLock) {if(activeTestBatch==batchId)event("message","测速完成：${selected.size} 个节点")}
+            if(plan==null)synchronized(testStateLock) {if(activeTestBatch==batchId)event("message","测速完成：${selected.size} 个节点")}
         }
         tests=job;job.start();job
     }

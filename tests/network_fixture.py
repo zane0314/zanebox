@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Controlled HTTP and SOCKS5 exits; no internet, credentials or third-party nodes."""
 import argparse, json, socket, socketserver, threading, struct, time, select
+from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 p=argparse.ArgumentParser();p.add_argument('--log',required=True);p.add_argument('--delay-a-ms',type=int,default=0);p.add_argument('--delay-b-ms',type=int,default=0);p.add_argument('--geoip-fixture');a=p.parse_args()
@@ -8,6 +9,14 @@ assert 0<=a.delay_a_ms<=10000 and 0<=a.delay_b_ms<=10000
 lock=threading.Lock()
 def record(kind, destination, agent=None):
     with lock, open(a.log,'a') as f:f.write(json.dumps({'time':time.time(),'exit':kind,'destination':destination,**({'userAgent':agent} if agent else {})})+'\n')
+def delay_control(path):
+    if not path.startswith('/fixture-delay?'):return None
+    values=parse_qs(urlparse(path).query)
+    delays=[int(values[k][0]) for k in ('a','b')]
+    assert all(0<=value<=10000 for value in delays)
+    with lock:
+        a.delay_a_ms,a.delay_b_ms=delays
+        return json.dumps({'a':a.delay_a_ms,'b':a.delay_b_ms}).encode()
 def response(marker,payload=None):
     body=payload if payload is not None else marker.encode();return b'HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body
 def subscription_response(path):
@@ -26,6 +35,10 @@ def asset_response(path):
     return response('',header+rule)
 class HTTP(BaseHTTPRequestHandler):
     def do_GET(self):
+        body=delay_control(self.path)
+        if body is not None:
+            self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+            return
         asset=asset_response(self.path)
         if asset is not None:self.connection.sendall(asset);return
         record('DIRECT',self.path,self.headers.get('User-Agent'))
@@ -66,6 +79,8 @@ class SOCKS(socketserver.BaseRequestHandler):
             while b'\r\n\r\n' not in b:b+=self.read(1)
             marker=self.server.marker;record(marker,f'{host}:{port}')
             path=b.split(b' ',2)[1].decode()
+            control=delay_control(path)
+            if control is not None:self.request.sendall(response('',control));return
             asset=asset_response(path)
             if asset is not None:self.request.sendall(asset);return
             subscription=subscription_response(path)

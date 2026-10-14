@@ -44,6 +44,15 @@ internal fun AppData.reorderRules(front:Boolean,requested:List<Long>):AppData {
 }
 
 internal fun nodeTestLabel(node:Node):String=when { node.status==1 || node.ping == -2->"失败";node.ping>=0->"${node.ping} ms";else->"未测试" }
+/** Lowest successful latency of the target's candidates; null for targets without nodes (off/direct/block). */
+internal fun targetLatencyLabel(data:com.zane.zanebox.data.AppData,target:String,testing:Set<Long> = emptySet()):String? {
+    val members=com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,target).toSet()
+    if(members.isEmpty())return null
+    if(members.any { it in testing })return "测试中"
+    val nodes=data.nodes.filter { it.id in members }
+    nodes.filter { it.ping>0 && it.status!=1 }.minOfOrNull { it.ping }?.let { return "$it ms" }
+    return if(nodes.any { it.status==1 || it.ping==-2 })"失败" else "未测试"
+}
 
 internal fun nodeSortMode(data:AppData,group:Group):NodeSortMode {
     data.settings["sort_group_${group.id}"]?.toBooleanStrictOrNull()?.let { return if(it)NodeSortMode.LATENCY else NodeSortMode.DEFAULT }

@@ -165,14 +165,17 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun refreshSettings() { submit {remote?.command("liveSettings","")} }
     fun selectNode(id:Long)=command("select",id.toString())
     fun selectAuto()=command("selectAuto")
-    fun testNodes(ids:List<Long>) {
+    fun testNodes(ids:List<Long>) = beginTests("test") { request -> JSONObject().put("request",request).put("ids",JSONArray(ids)) }
+    /** Tests every candidate of a routing target and applies the lowest successful one; [serviceKey] binds the result to that policy. */
+    fun testTarget(target:String,serviceKey:String="") = beginTests("targetTest") { request -> JSONObject().put("request",request).put("target",target).put("serviceKey",serviceKey) }
+    private fun beginTests(action:String,payload:(String)->JSONObject) {
         val request=java.util.UUID.randomUUID().toString()
         synchronized(testLock) {
             ignoredTestRequests=ignoredTestRequests+listOf(activeTestRequest,pendingTestRequest).filter{it.isNotBlank()}
             pendingTestRequest=request;tests.value=emptyMap();testingState.value=emptySet();progress.value=LatencyTestProgress()
         }
         submit {
-            try {ensureBinding();remote!!.command("test",JSONObject().put("request",request).put("ids",JSONArray(ids)).toString())}
+            try {ensureBinding();remote!!.command(action,payload(request).toString())}
             catch(e:Exception) {
                 synchronized(testLock) {
                     if(pendingTestRequest==request) {

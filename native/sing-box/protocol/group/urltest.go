@@ -502,3 +502,69 @@ func (g *URLTestGroup) performUpdateCheck() {
 		g.interruptGroup.Interrupt(g.interruptExternalConnections)
 	}
 }
+
+// ApplyTestResults stores this round's delays for the given member tags (0 means
+// failed) and makes the strictly fastest successful member the active choice,
+// with no tolerance. TCP and UDP are chosen separately among members that
+// support that network, so an UDP-less member never becomes the UDP choice.
+// Members not named in results are ignored, and a network without any
+// successful result keeps its current choice. It returns the TCP choice, or
+// the UDP choice when TCP is unchanged and has no success, or "" if nothing
+// succeeded.
+func (g *URLTestGroup) ApplyTestResults(results map[string]uint16) string {
+	g.updateAccess.Lock()
+	defer g.updateAccess.Unlock()
+	now := time.Now()
+	for _, detour := range g.outbounds {
+		tag := RealTag(g.outbound, detour)
+		delay, tested := results[detour.Tag()]
+		if !tested {
+			continue
+		}
+		if delay == 0 {
+			g.history.DeleteURLTestHistory(tag)
+		} else {
+			g.history.StoreURLTestHistory(tag, &adapter.URLTestHistory{Time: now, Delay: delay})
+		}
+	}
+	var chosen string
+	var updated bool
+	pick := func(network string, selected *common.TypedValue[adapter.Outbound]) {
+		var best adapter.Outbound
+		var bestDelay uint16
+		for _, detour := range g.outbounds {
+			if !common.Contains(detour.Network(), network) {
+				continue
+			}
+			delay := results[detour.Tag()]
+			if delay == 0 || (bestDelay != 0 && delay >= bestDelay) {
+				continue
+			}
+			best, bestDelay = detour, delay
+		}
+		if best == nil {
+			return
+		}
+		if previous := selected.Load(); previous != nil && previous != best {
+			updated = true
+		}
+		selected.Store(best)
+		if chosen == "" || network == N.NetworkTCP {
+			chosen = best.Tag()
+		}
+	}
+	pick(N.NetworkTCP, &g.selectedOutboundTCP)
+	pick(N.NetworkUDP, &g.selectedOutboundUDP)
+	if updated {
+		g.interruptGroup.Interrupt(g.interruptExternalConnections)
+	}
+	return chosen
+}
+
+// ApplyTestResults is called by libcore for a live group; see URLTestGroup.ApplyTestResults.
+func (s *URLTest) ApplyTestResults(results map[string]uint16) string {
+	if s.group == nil {
+		return ""
+	}
+	return s.group.ApplyTestResults(results)
+}

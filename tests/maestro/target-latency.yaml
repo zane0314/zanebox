@@ -1,0 +1,163 @@
+appId: com.zane.zanebox
+---
+# @phase smart
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: home_selected_node
+      text: 已选：出口 B
+    timeout: 30000
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_latency_youtube
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: smart_latency_youtube
+    containsChild:
+      text: ".*5 ms.*"
+- tapOn:
+    id: smart_latency_youtube
+- extendedWaitUntil:
+    visible:
+      id: smart_latency_youtube
+      containsChild:
+        text: ".*[0-9]+ ms.*"
+    timeout: 30000
+- assertNotVisible:
+    text: 测试中
+
+# @phase smart-targets
+- scrollUntilVisible:
+    element:
+      id: smart_target_youtube
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: smart_target_youtube
+    containsChild:
+      text: 延迟验收订阅
+- tapOn:
+    id: smart_target_youtube
+- assertVisible: 分组 · 延迟验收订阅
+- tapOn: 取消
+- scrollUntilVisible:
+    element:
+      id: smart_target_telegram
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: smart_target_telegram
+    containsChild:
+      text: 手动汇总
+- tapOn:
+    id: smart_target_telegram
+- assertVisible: 汇总组 · 手动汇总
+- tapOn: 取消
+- scrollUntilVisible:
+    element:
+      id: smart_target_netflix
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: smart_target_netflix
+    containsChild:
+      text: 自动汇总
+- tapOn:
+    id: smart_target_netflix
+- assertVisible: 汇总组 · 自动汇总
+- tapOn: 取消
+- scrollUntilVisible:
+    element:
+      id: smart_target_ai
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: smart_target_ai
+    containsChild:
+      text: 自动选择
+- tapOn:
+    id: smart_target_ai
+- assertVisible: 自动选择
+- tapOn: 取消
+- scrollUntilVisible:
+    element:
+      id: smart_merges
+    direction: UP
+    timeout: 60000
+- tapOn:
+    id: smart_merges
+- assertVisible: 节点汇总组
+
+# @phase merges
+- scrollUntilVisible:
+    element:
+      id: merge_latency_6105
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: merge_latency_6105
+    containsChild:
+      text: ".*[0-9]+ ms.*"
+- tapOn:
+    id: merge_latency_6105
+- extendedWaitUntil:
+    notVisible:
+      id: merge_latency_6105
+      containsChild:
+        text: 测试中
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: merge_latency_6106
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: merge_latency_6106
+    containsChild:
+      text: ".*[0-9]+ ms.*"
+- tapOn:
+    id: merge_latency_6106
+- extendedWaitUntil:
+    notVisible:
+      id: merge_latency_6106
+      containsChild:
+        text: 测试中
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: merge_latency_6105
+    direction: UP
+    timeout: 60000
+- assertVisible:
+    id: merge_latency_6105
+    containsChild:
+      text: ".*[0-9]+ ms.*"
+- assertVisible:
+    id: merge_latency_6106
+    containsChild:
+      text: ".*[0-9]+ ms.*"
+
+# @phase connect
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: home_selected_node
+    text: 已选：出口 B
+- assertVisible: ".*(代理未连接|代理开关：连接).*"
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: ".*(代理已连接|代理开关：断开).*"
+    timeout: 30000
+
+# @phase disconnect
+- tapOn:
+    id: connect_toggle
+- extendedWaitUntil:
+    visible: ".*(代理未连接|代理开关：连接).*"
+    timeout: 30000

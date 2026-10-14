@@ -14,6 +14,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -442,6 +443,64 @@ func (b *BoxInstance) SelectOutbound(tag string) bool {
 		}
 	}
 	return false
+}
+
+// SelectGroupOutbound switches one named selector group without touching the
+// home "proxy" selector. It reports whether the member exists and was applied.
+func (b *BoxInstance) SelectGroupOutbound(groupTag string, tag string) bool {
+	out, ok := b.groupOutbound(groupTag)
+	if !ok {
+		return false
+	}
+	selector, ok := out.(interface{ SelectOutbound(string) bool })
+	return ok && selector.SelectOutbound(tag)
+}
+
+// ApplyURLTestResults gives a live URLTest group this round's delays and makes
+// the strictly fastest member the active choice. results is "tag\tdelayMs"
+// lines; delay 0 means failed. gobind cannot export slices, hence the string.
+// It returns the chosen member tag, or "" if the group is missing or nothing
+// succeeded.
+func (b *BoxInstance) ApplyURLTestResults(groupTag string, results string) string {
+	out, ok := b.groupOutbound(groupTag)
+	if !ok {
+		return ""
+	}
+	applier, ok := out.(interface {
+		ApplyTestResults(map[string]uint16) string
+	})
+	if !ok {
+		return ""
+	}
+	parsed := parseURLTestResults(results)
+	return applier.ApplyTestResults(parsed)
+}
+
+func parseURLTestResults(results string) map[string]uint16 {
+	parsed := make(map[string]uint16)
+	for _, line := range strings.Split(results, "\n") {
+		tag, delay, found := strings.Cut(line, "\t")
+		if !found || tag == "" {
+			continue
+		}
+		value, err := strconv.Atoi(delay)
+		if err != nil || value < 0 || value > 65535 {
+			value = 0
+		}
+		parsed[tag] = uint16(value)
+	}
+	return parsed
+}
+
+func (b *BoxInstance) groupOutbound(groupTag string) (adapter.Outbound, bool) {
+	if b == nil || b.Box == nil {
+		return nil, false
+	}
+	manager := service.FromContext[adapter.OutboundManager](b.ctx)
+	if manager == nil {
+		return nil, false
+	}
+	return manager.Outbound(groupTag)
 }
 
 const (

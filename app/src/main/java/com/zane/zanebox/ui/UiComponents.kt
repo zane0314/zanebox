@@ -99,6 +99,12 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
     }
 }
 
+@Composable internal fun LatencyAction(label:String,tag:String,onClick:()->Unit) {
+    TextButton(onClick=onClick,modifier=Modifier.testTag(tag).defaultMinSize(minHeight=48.dp),contentPadding=PaddingValues(horizontal=8.dp)) {
+        Text(uiText(label),fontSize=12.sp,maxLines=1)
+    }
+}
+
 @Composable internal fun UiSection(title:String) {
     Text(uiText(title),Modifier.padding(start=2.dp,top=10.dp,bottom=6.dp),fontSize=12.sp,lineHeight=16.sp,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
 }
