@@ -400,6 +400,7 @@ internal fun uiText(value:String):String {
 
 /** Pure lookup used by Compose and directly suitable for a small JUnit test. */
 internal fun translateText(source:String,language:String):String {
+    if(uiSkinChoices.any {it.second==source})return source
     val native=nativeUiLabels[source]?.get(language)
     val base=translations[source]
     val extra=additionalTranslations[source]

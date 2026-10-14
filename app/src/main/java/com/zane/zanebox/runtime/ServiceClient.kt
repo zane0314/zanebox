@@ -115,7 +115,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
     }
     private val connection=object:ServiceConnection {
-        override fun onServiceConnected(name:ComponentName,service:IBinder) { scope.launch { runCatching { val runtime=IRuntime.Stub.asInterface(service);runtime.registerCallback(callback);state.value=RuntimeSnapshot.parse(runtime.getSnapshot());remote=runtime;runtime.command("uiVisible","$visibilityToken|$uiVisible") }.onFailure { event.emit("服务连接失败") } } }
+        override fun onServiceConnected(name:ComponentName,service:IBinder) { scope.launch { runCatching { val runtime=IRuntime.Stub.asInterface(service);runtime.registerCallback(callback);state.value=RuntimeSnapshot.parse(runtime.getSnapshot());remote=runtime;runtime.command("uiVisible","$visibilityToken|$uiVisible");runtime.command("refreshNotification","") }.onFailure { event.emit("服务连接失败") } } }
         override fun onServiceDisconnected(name:ComponentName) { remote=null;clearPendingTests();state.value=RuntimeSnapshot(error="后台服务已断开") }
         // A dead binding never reconnects by itself (e.g. after the APK is updated); rebind so later commands work.
         override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
@@ -160,6 +160,8 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun reload() { submit { val changed=boundClass!=serviceClass();val running=state.value.state==2;ensureMode();if(changed && running)startRemote() else remote?.command("reload","") } }
     // A pending service-mode edit must not silently switch the bound service.
     fun autoReload() { submit {remote?.command("autoReload","")} }
+    // Cosmetic refresh uses the existing binding and never starts or changes a service.
+    fun refreshNotification() { scope.launch { runCatching { remote?.command("refreshNotification","") }.onFailure { event.emit("通知图标刷新失败") } } }
     fun refreshSettings() { submit {remote?.command("liveSettings","")} }
     fun selectNode(id:Long)=command("select",id.toString())
     fun selectAuto()=command("selectAuto")

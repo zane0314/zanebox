@@ -14,8 +14,9 @@ internal data class Preference(
 )
 internal fun boolean(key:String,title:String,default:Boolean=SettingDefaults.value(key,"false").toBoolean())=Preference(key,title,default.toString(),boolean=true)
 internal fun choice(key:String,title:String,default:String,vararg values:Pair<String,String>)=Preference(key,title,default,values.toList())
-// Removed skins render as the retained original UI without rewriting imported settings.
-internal fun resolvedUiSkin(value:String)=if(value.equals("linear",ignoreCase=true))"linear" else "prism"
+internal val uiSkinChoices=listOf("prism" to "棱镜流光","linear" to "简洁留白","claude" to "暖纸陶色","supabase" to "深色翡翠","miro" to "明黄工作台")
+// Retired skins render as the retained original UI without rewriting imported settings.
+internal fun resolvedUiSkin(value:String)=value.lowercase(java.util.Locale.ROOT).takeIf { id->uiSkinChoices.any {it.first==id} } ?: "prism"
 internal val strategies=listOf("" to "自动","prefer_ipv4" to "优先 IPv4","prefer_ipv6" to "优先 IPv6","ipv4_only" to "仅 IPv4","ipv6_only" to "仅 IPv6")
 private val ipv6Modes=listOf("ipv4_only" to "仅 IPv4","prefer_ipv4" to "优先 IPv4","prefer_ipv6" to "优先 IPv6","ipv6_only" to "仅 IPv6")
 private val languages=uiLanguageChoices
@@ -26,8 +27,7 @@ private val urlTestTolerances=listOf("5" to "5 ms","10" to "10 ms","30" to "30 m
 internal fun preferenceSections(data:AppData)=listOf(
     "软件设置" to listOf(
         boolean("autoStart","开机自动连接"),
-        choice("uiSkin","界面皮肤",SettingDefaults.value("uiSkin"),"prism" to "棱镜流光","linear" to "简洁留白"),
-        choice("launcherIcon","桌面图标",SettingDefaults.value("launcherIcon"),"default" to "Link","prism" to "Links · 毛玻璃","pixel" to "Pixel","node_n" to "Node N","channel_gate" to "Channel Gate","confluence" to "Confluence","launch_path" to "Launch Path"),
+        choice("uiSkin","界面皮肤",SettingDefaults.value("uiSkin"),*uiSkinChoices.toTypedArray()),
         choice("appLanguage","应用语言",SettingDefaults.value("appLanguage"),*languages.toTypedArray()),
         choice("serviceMode","服务模式",SettingDefaults.value("serviceMode"),"vpn" to "VPN","proxy" to "本地代理"),
         choice("tunStack","TUN 实现",SettingDefaults.value("tunStack"),"mixed" to "混合","system" to "系统","gvisor" to "gVisor"),
@@ -112,7 +112,6 @@ internal data class PreferenceAppearance(val title:String,val summary:String,val
 internal val preferenceAppearance=mapOf(
     "autoStart" to PreferenceAppearance("自动连接","此前已连接时，在手机启动或更新后自动恢复连接",R.drawable.zb_ref_ic_communication_phonelink_ring),
     "uiSkin" to PreferenceAppearance("界面皮肤","",R.drawable.zb_ref_ic_baseline_color_lens_24),
-    "launcherIcon" to PreferenceAppearance("桌面图标","",R.drawable.zb_ref_ic_image_photo),
     "theme" to PreferenceAppearance("夜间模式","",R.drawable.zb_ref_ic_baseline_wb_sunny_24),
     "appLanguage" to PreferenceAppearance("语言","",R.drawable.zb_ref_baseline_translate_24),
     "serviceMode" to PreferenceAppearance("运行模式","",R.drawable.zb_ref_ic_device_developer_mode),

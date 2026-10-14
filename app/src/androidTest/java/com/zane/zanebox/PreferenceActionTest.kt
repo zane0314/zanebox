@@ -31,7 +31,7 @@ class PreferenceActionTest {
     private val context get() = instrumentation.targetContext
 
     private val uiKeys = setOf(
-        "uiSkin", "launcherIcon", "appLanguage", "fontScale",
+        "uiSkin", "appLanguage", "fontScale",
         "confirmProfileDelete", "alwaysShowAddress", "hideFromRecentApps", "showBottomBar"
     )
 
@@ -69,10 +69,11 @@ class PreferenceActionTest {
     }
 
     @Test
-    fun uiSkinCatalogKeepsPrismAndLinearOnly() {
+    fun fiveChineseSkinsReplaceIndependentLauncherChoice() {
         val preferences = preferenceSections(AppData()).flatMap { it.second }
         val skins = preferences.single { it.key == "uiSkin" }
-        assertEquals(listOf("prism", "linear"), skins.choices.map { it.first })
+        assertEquals(listOf("prism", "linear", "claude", "supabase", "miro"), skins.choices.map { it.first })
+        assertTrue("独立图标选项仍在目录中", preferences.none { it.key=="launcherIcon" })
         assertTrue("旧皮肤仍出现在界面皮肤选项", skins.choices.none { it.first in setOf("azure", "spectrum") })
         assertTrue("夜间模式设置仍出现在设置目录", preferences.none { it.key == "theme" || it.title == "夜间模式" })
     }
@@ -132,7 +133,7 @@ class PreferenceActionTest {
             put("configKeys", JSONArray(preferences.filter { category(it) == "config" }.map { it.key }))
         }.toString(2))
 
-        assertEquals("设置目录必须完整枚举 UiPreferenceCatalog", 66, preferences.size)
+        assertEquals("设置目录必须完整枚举 UiPreferenceCatalog", 65, preferences.size)
         assertEquals("设置目录 JSON 数量不一致", preferences.size, JSONObject(json).getInt("count"))
         assertEquals("存在未知设置分类", preferences.size, categories.values.sum())
         assertTrue("缺少 disabled 分类", categories.containsKey("disabled"))

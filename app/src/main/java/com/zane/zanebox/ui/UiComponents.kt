@@ -106,7 +106,7 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
 @Composable internal fun UiMenu(actions:List<Pair<String,()->Unit>>,tag:String="more_menu",circle:Boolean=false) {
     var open by remember { mutableStateOf(false) }
     Box {
-        if(circle)FilledIconButton(onClick={open=true},modifier=Modifier.size(48.dp).testTag(tag),colors=IconButtonDefaults.filledIconButtonColors(containerColor=androidx.compose.ui.graphics.Color.White)){Icon(Icons.Outlined.MoreVert,"更多操作")}
+        if(circle)FilledIconButton(onClick={open=true},modifier=Modifier.size(48.dp).testTag(tag),colors=IconButtonDefaults.filledIconButtonColors(containerColor=if(skinPalette.name=="prism" || skinPalette.name=="linear")androidx.compose.ui.graphics.Color.White else skinSurfaceElevated)){Icon(Icons.Outlined.MoreVert,"更多操作")}
         else IconButton(onClick={open=true},modifier=Modifier.testTag(tag)) {Icon(Icons.Outlined.MoreVert,"更多操作")}
         DropdownMenu(expanded=open,onDismissRequest={open=false}) {
             actions.forEach { (title,action)-> DropdownMenuItem(text={Text(uiText(title))},onClick={open=false;action()}) }
@@ -141,7 +141,7 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
         UiBackdrop(Modifier.fillMaxSize(),home=false)
         Column(Modifier.fillMaxSize().semantics{testTagsAsResourceId=true}.windowInsetsPadding(WindowInsets.safeDrawing.union(navigationInsets))) {
         Scaffold(contentColor=MaterialTheme.colorScheme.onSurface,modifier=Modifier.weight(1f),contentWindowInsets=WindowInsets(0,0,0,0),containerColor=androidx.compose.ui.graphics.Color.Transparent,
-            topBar={TopAppBar(windowInsets=WindowInsets(0,0,0,0),expandedHeight=56.dp,title={Text(uiText(title),fontSize=20.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=16.dp))},navigationIcon={
+            topBar={TopAppBar(windowInsets=WindowInsets(0,0,0,0),expandedHeight=56.dp,title={Text(uiText(title),fontFamily=MaterialTheme.typography.titleLarge.fontFamily,fontSize=20.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=16.dp))},navigationIcon={
                 IconButton(onClick=onDismiss,modifier=Modifier.testTag("page_back")){Icon(Icons.AutoMirrored.Outlined.ArrowBack,"返回")}
             },actions={action?.invoke(this)},colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent))},
             content=content)
@@ -175,9 +175,9 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
 }
 
 @Composable internal fun ChoiceDialog(title:String,value:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,dismissOnChoose:Boolean=true,onChoose:(String)->Unit) {
-    UiAlertDialog(onDismissRequest=onDismiss,title={Text(uiText(title))},text={
+    UiAlertDialog(onDismissRequest=onDismiss,modifier=Modifier.semantics{testTagsAsResourceId=true},title={Text(uiText(title))},text={
         LazyColumn(Modifier.heightIn(max=440.dp).selectableGroup()) { items(choices.size) {i-> val (key,label)=choices[i]
-            Row(Modifier.fillMaxWidth().selectable(selected=value==key,role=Role.RadioButton) {onChoose(key);if(dismissOnChoose)onDismiss()}.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().testTag("choice_$key").selectable(selected=value==key,role=Role.RadioButton) {onChoose(key);if(dismissOnChoose)onDismiss()}.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
                 RadioButton(selected=value==key,onClick=null);Spacer(Modifier.width(8.dp));Text(uiText(label))
             }
         } }

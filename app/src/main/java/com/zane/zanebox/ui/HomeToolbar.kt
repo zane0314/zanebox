@@ -57,7 +57,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable internal fun HomeGroupChip(text:String,selected:Boolean,onClick:()->Unit,onLongClick:(()->Unit)?=null,active:Boolean=true,modifier:Modifier=Modifier) {
-    val linear=skinPalette.name=="linear"
+    val linear=skinPalette.name!="prism"
     Surface(color=if(selected && linear)skinSurfaceElevated else if(selected)MaterialTheme.colorScheme.primaryContainer else if(linear)skinBackground else MaterialTheme.colorScheme.surface,shape=if(linear)MaterialTheme.shapes.extraSmall else MaterialTheme.shapes.medium,
         modifier=modifier.semantics{this.selected=selected}.alpha(if(active)1f else .45f).combinedClickable(onClick=onClick,onLongClick=onLongClick)) {
         Box(Modifier.heightIn(min=if(linear)48.dp else 0.dp),contentAlignment=Alignment.Center){Text(text,Modifier.padding(horizontal=14.dp,vertical=10.dp),fontSize=12.sp,lineHeight=16.sp,maxLines=1)}
@@ -70,9 +70,12 @@ import androidx.compose.ui.viewinterop.AndroidView
     val description=uiText("代理开关")+"："+action
     UiCard(Modifier.testTag("white_connection_card")) {
         Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-            Text(status,fontSize=12.sp,color=if(state==2)skinSuccess else if(state==4)skinError else skinSecondaryText,modifier=Modifier.testTag("connection_status"))
-            Text(selected,fontSize=18.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.testTag("home_selected_node"))
-            if(subtitle.isNotBlank())Text(subtitle,fontSize=12.sp,color=skinSecondaryText,maxLines=1,overflow=TextOverflow.Ellipsis)
+            Surface(color=if(skinPalette.name=="miro")androidx.compose.ui.graphics.Color(0xFFC3FAF5) else androidx.compose.ui.graphics.Color.Transparent,shape=MaterialTheme.shapes.extraSmall) {
+                Text(status,fontSize=12.sp,color=if(state==2)skinSuccess else if(state==4)skinError else skinSecondaryText,
+                    modifier=Modifier.testTag("connection_status").padding(horizontal=if(skinPalette.name=="miro")8.dp else 0.dp,vertical=if(skinPalette.name=="miro")4.dp else 0.dp))
+            }
+            Text(selected,fontFamily=MaterialTheme.typography.titleLarge.fontFamily,fontSize=18.sp,fontWeight=FontWeight.SemiBold,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.testTag("home_selected_node"))
+            if(subtitle.isNotBlank())Surface(color=if(skinPalette.name=="miro")androidx.compose.ui.graphics.Color(0xFFFDE0F0) else androidx.compose.ui.graphics.Color.Transparent,shape=MaterialTheme.shapes.extraSmall) { Text(subtitle,modifier=Modifier.padding(horizontal=if(skinPalette.name=="miro")8.dp else 0.dp,vertical=2.dp),fontSize=12.sp,color=skinSecondaryText,maxLines=1,overflow=TextOverflow.Ellipsis) }
             Row(Modifier.fillMaxWidth().padding(top=8.dp),verticalAlignment=Alignment.CenterVertically) {
                 Text(uiText(if(serviceMode=="vpn")"VPN 模式" else "本地代理")+" · "+uiText(when(routeMode){"global"->"全局";"direct"->"直连";else->"智能分流"}),fontSize=12.sp,color=skinSecondaryText,modifier=Modifier.weight(1f))
                 Spacer(Modifier.width(12.dp))
@@ -90,7 +93,7 @@ import androidx.compose.ui.viewinterop.AndroidView
         Column { HorizontalDivider(color=skinDivider)
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal=8.dp,vertical=6.dp)) {
                 listOf("节点" to Icons.Outlined.Dns,"智能分流" to Icons.Outlined.AccountTree,"设置" to Icons.Outlined.Tune).forEachIndexed { index,(label,icon)->
-                    Surface(color=if(page==index)skinSurfaceElevated else skinSurface,shape=MaterialTheme.shapes.extraSmall,
+                    Surface(color=if(page==index && skinPalette.name=="miro")skinIconTile else if(page==index)skinSurfaceElevated else skinSurface,shape=MaterialTheme.shapes.extraSmall,
                         modifier=Modifier.weight(1f).semantics{selected=page==index;role=Role.Tab}.clickable{onPage(index)}.testTag(if(index==0)"home_tab" else "tab_$index")) {
                         Column(Modifier.heightIn(min=64.dp).padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
                             Icon(icon,null,Modifier.size(24.dp),tint=if(page==index)skinPrimary else skinSecondaryText)

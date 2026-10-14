@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val store = ZaneStore(app,autoLoad=false)
@@ -35,6 +37,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val busy = MutableStateFlow(true)
     private var taskCount=0
     private var applyJob:kotlinx.coroutines.Job?=null
+    private val uiSkinLock=Mutex()
+    private val uiSkinChoice=java.util.concurrent.atomic.AtomicLong()
     val ip get() = service.exitIp
     val webdavEntries=MutableStateFlow<List<WebDavEntry>>(emptyList())
     init {
@@ -75,12 +79,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.Main){onSaved()}
     }
     fun setting(key: String, value: String) {
+        if(key=="uiSkin") {
+            val choice=uiSkinChoice.incrementAndGet()
+            task {
+                uiSkinLock.withLock {
+                    if(choice==uiSkinChoice.get()) {
+                        val skin=resolvedUiSkin(value)
+                        withLauncherSkin(getApplication(),skin) {store.update {it.copy(settings=it.settings+("uiSkin" to skin))}}
+                        withContext(Dispatchers.Main) {service.refreshNotification()}
+                    }
+                }
+                message.value="已保存"
+            }
+            return
+        }
         if(key=="ipv6Mode") { require(value in listOf("ipv4_only","prefer_ipv4","prefer_ipv6","ipv6_only"));edit { it.copy(settings=it.settings+("ipv6Mode" to value)+("ipv6" to (value!="ipv4_only").toString())+("dnsStrategy" to value)) };return }
         if(settingsApply(key)==SettingsApply.LIVE)task {
             store.update {it.copy(settings=it.settings+(key to value))}
             if(key!="browseGroupId")message.value="已保存"
             if(key in setOf("networkReset","acquireWakeLock","rulesUpdateInterval","rulesUpdateDelay"))withContext(Dispatchers.Main){service.refreshSettings()}
         } else edit(onSaved={if(key.startsWith("smartUrl."))service.refreshSettings()},autoApply=settingsApply(key)==SettingsApply.AUTO) { it.copy(settings = it.settings + (key to value)) }
+    }
+    fun reconcileUiSkin()=task {
+        uiSkinLock.withLock {
+            val skin=resolvedUiSkin(store.snapshot().setting("uiSkin"))
+            val previous=enabledLauncherSkin(getApplication())
+            try {applyLauncherIcon(getApplication(),skin)}
+            catch(e:Exception) {
+                store.update {if(resolvedUiSkin(it.setting("uiSkin"))==skin)it.copy(settings=it.settings+("uiSkin" to previous)) else it}
+                throw e
+            }
+            withContext(Dispatchers.Main) {service.refreshNotification()}
+        }
     }
     fun resetSettings()=edit { it.copy(settings=emptyMap()) }
     fun reorderNodes(ids:List<Long>)=task {store.update{it.reorderNodes(ids)};message.value="节点顺序已保存"}

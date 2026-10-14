@@ -1,8 +1,6 @@
 package com.zane.zanebox.ui
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -14,6 +12,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -58,6 +57,8 @@ data class ZaneSkinPalette(
     val backdropStart: Color,
     val backdropCenter: Color,
     val backdropEnd: Color,
+    val onPrimary: Color = Color.White,
+    val dark: Boolean = false,
 )
 
 private val PrismLight = ZaneSkinPalette(
@@ -78,6 +79,29 @@ private val LinearLight = ZaneSkinPalette(
     iconTile = Color(0xFFE8F0FE), selectedSurface = Color(0xFFEEF0F4), success = Color(0xFF187341),
     warning = Color(0xFF9C5700), error = Color(0xFFB3261E),
     backdropStart = Color(0xFFF5F6F8), backdropCenter = Color(0xFFF5F6F8), backdropEnd = Color(0xFFF5F6F8),
+)
+
+private val ClaudeLight = LinearLight.copy(
+    name="claude", primary=Color(0xFFA9583E), primaryDark=Color(0xFFA9583E),
+    background=Color(0xFFFAF9F5), surface=Color(0xFFEFE9DE), surfaceElevated=Color(0xFFF5F0E8),
+    onSurface=Color(0xFF252523), secondaryText=Color(0xFF6C6A64), divider=Color(0xFFE6DFD8),
+    iconTile=Color(0xFFE8E0D2), selectedSurface=Color(0xFFE8E0D2),
+    success=Color(0xFF286C45), warning=Color(0xFF865C09), error=Color(0xFFAA3434),
+)
+private val SupabaseDark = LinearLight.copy(
+    name="supabase", primary=Color(0xFF3ECF8E), primaryDark=Color(0xFF24B47E),
+    background=Color(0xFF1C1C1C), surface=Color(0xFF252525), surfaceElevated=Color(0xFF303030),
+    onSurface=Color(0xFFF5F5F5), secondaryText=Color(0xFFB2B2B2), divider=Color(0xFF454545),
+    iconTile=Color(0xFF193D2C), selectedSurface=Color(0xFF193D2C),
+    success=Color(0xFF3ECF8E), warning=Color(0xFFF4C76C), error=Color(0xFFFF9696),
+    onPrimary=Color(0xFF171717), dark=true,
+)
+private val MiroLight = LinearLight.copy(
+    name="miro", primary=Color(0xFF1C1C1E), primaryDark=Color(0xFF1C1C1E),
+    background=Color.White, surface=Color(0xFFF7F8FA), surfaceElevated=Color(0xFFFFF4C4),
+    onSurface=Color(0xFF1C1C1E), secondaryText=Color(0xFF555A6A), divider=Color(0xFFE0E2E8),
+    iconTile=Color(0xFFFFD02F), selectedSurface=Color(0xFFFFF4C4),
+    success=Color(0xFF187574), warning=Color(0xFF746019), error=Color(0xFF9C2929),
 )
 
 val LocalZaneSkin = compositionLocalOf { PrismLight }
@@ -143,27 +167,40 @@ private val ZaneTypography = Typography().run {
 fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
     val view=LocalView.current
     val context=LocalContext.current
-    SideEffect { (context as? android.app.Activity)?.window?.let{configureSystemBars(it,view,false)} }
-    val skin=if(resolvedUiSkin(data.setting("uiSkin"))=="linear")LinearLight else PrismLight
-    val colors = lightColorScheme(
-        primary = skin.primary, onPrimary = Color.White, primaryContainer = skin.iconTile,
-        onPrimaryContainer = skin.onSurface, secondary = skin.secondaryText, onSecondary = Color.White,
+    val skin=when(resolvedUiSkin(data.setting("uiSkin"))) {
+        "linear"->LinearLight; "claude"->ClaudeLight; "supabase"->SupabaseDark; "miro"->MiroLight; else->PrismLight
+    }
+    SideEffect { (context as? android.app.Activity)?.window?.let{configureSystemBars(it,view,skin.dark)} }
+    val colors = (if(skin.dark)darkColorScheme() else lightColorScheme()).copy(
+        primary = skin.primary, onPrimary = skin.onPrimary, primaryContainer = skin.iconTile,
+        onPrimaryContainer = skin.onSurface, secondary = skin.secondaryText, onSecondary = if(skin.dark)skin.background else Color.White,
         background = skin.background, onBackground = skin.onSurface, surface = skin.surface,
         onSurface = skin.onSurface, surfaceVariant = skin.surfaceElevated, onSurfaceVariant = skin.secondaryText,
-        error = skin.error, onError = Color.White, outline = skin.divider, outlineVariant = skin.divider,
+        error = skin.error, onError = if(skin.dark)skin.background else Color.White, outline = skin.divider, outlineVariant = skin.divider,
         surfaceContainer = skin.surfaceElevated,
     ).let { colors ->
-        if(skin.name=="linear")colors.copy(
+        if(skin.name!="prism")colors.copy(
             secondaryContainer=skin.surfaceElevated,onSecondaryContainer=skin.onSurface,
-            tertiary=skin.primary,onTertiary=Color.White,tertiaryContainer=skin.iconTile,onTertiaryContainer=skin.onSurface,
-            surfaceContainerLowest=Color.White,surfaceContainerLow=skin.surface,
+            tertiary=skin.primary,onTertiary=skin.onPrimary,tertiaryContainer=skin.iconTile,onTertiaryContainer=skin.onSurface,
+            surfaceContainerLowest=skin.background,surfaceContainerLow=skin.surface,
             surfaceContainerHigh=skin.surface,surfaceContainerHighest=skin.surfaceElevated,
         ) else colors
     }
     CompositionLocalProvider(
         LocalZaneSkin provides skin,
     ) {
-        MaterialTheme(colorScheme = colors, typography = ZaneTypography, shapes = ZaneShapes.copy(large = androidx.compose.foundation.shape.RoundedCornerShape(if(skin.name=="linear")12.dp else 14.dp))){
+        val typography=if(skin.name=="claude")ZaneTypography.copy(
+            headlineLarge=ZaneTypography.headlineLarge.copy(fontFamily=FontFamily.Serif),
+            headlineMedium=ZaneTypography.headlineMedium.copy(fontFamily=FontFamily.Serif),
+            headlineSmall=ZaneTypography.headlineSmall.copy(fontFamily=FontFamily.Serif),
+            titleLarge=ZaneTypography.titleLarge.copy(fontFamily=FontFamily.Serif),
+        ) else ZaneTypography
+        val shapes=when(skin.name) {
+            "miro"->ZaneShapes.copy(extraSmall=androidx.compose.foundation.shape.RoundedCornerShape(50),small=androidx.compose.foundation.shape.RoundedCornerShape(24.dp),medium=androidx.compose.foundation.shape.RoundedCornerShape(24.dp),large=androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+            "supabase"->ZaneShapes.copy(extraSmall=androidx.compose.foundation.shape.RoundedCornerShape(6.dp),small=androidx.compose.foundation.shape.RoundedCornerShape(6.dp),medium=androidx.compose.foundation.shape.RoundedCornerShape(12.dp),large=androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            else->ZaneShapes.copy(large=androidx.compose.foundation.shape.RoundedCornerShape(if(skin.name=="prism")14.dp else 12.dp))
+        }
+        MaterialTheme(colorScheme = colors, typography = typography, shapes = shapes){
             UiLanguageProvider(data, content)
         }
     }
@@ -174,7 +211,7 @@ fun ZaneTheme(data: AppData, content: @Composable () -> Unit) {
 fun UiBackdrop(modifier: Modifier = Modifier, home:Boolean=true) {
     val context=androidx.compose.ui.platform.LocalContext.current
     val skin=LocalZaneSkin.current
-    if(skin.name=="linear") { Canvas(modifier.fillMaxSize()){drawRect(skin.background)}; return }
+    if(skin.name!="prism") { Canvas(modifier.fillMaxSize()){drawRect(skin.background)}; return }
     val name=if(home) "anybox_home_background" else "skin_prism_window"
     val drawable=androidx.compose.runtime.remember(name,context) {
         val id=context.resources.getIdentifier("zb_ref_${name}","drawable",context.packageName)
@@ -185,28 +222,6 @@ fun UiBackdrop(modifier: Modifier = Modifier, home:Boolean=true) {
             drawable.setBounds(0,0,size.width.toInt(),size.height.toInt())
             drawable.draw(canvas.nativeCanvas)
         }
-    }
-}
-
-private val LauncherAliases = mapOf(
-    "prism" to "launcher.PrismAlias",
-    "pixel" to "launcher.PixelAlias",
-    "node_n" to "launcher.NodeNAlias",
-    "channel_gate" to "launcher.ChannelGateAlias",
-    "confluence" to "launcher.ConfluenceAlias",
-    "launch_path" to "launcher.LaunchPathAlias",
-)
-
-fun applyLauncherIcon(context:Context,value:String) {
-    val selected=value.lowercase().takeIf(LauncherAliases::containsKey) ?:"prism"
-    val pm=context.packageManager
-    val states=LauncherAliases.map{(key,name)->ComponentName(context.packageName,"${context.packageName}.$name") to if(key==selected)PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED}
-    if(states.all{(name,state)->pm.getComponentEnabledSetting(name)==state})return
-    if(android.os.Build.VERSION.SDK_INT>=33)pm.setComponentEnabledSettings(states.map{(name,state)->PackageManager.ComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP)})
-    else {
-        val previous=states.associate{(name,_)->name to pm.getComponentEnabledSetting(name)}
-        try { states.sortedByDescending{it.second==PackageManager.COMPONENT_ENABLED_STATE_ENABLED}.forEach{(name,state)->pm.setComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP)} }
-        catch(e:Exception) {previous.forEach{(name,state)->runCatching{pm.setComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP)}};throw e}
     }
 }
 

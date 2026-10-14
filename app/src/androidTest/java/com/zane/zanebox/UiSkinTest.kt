@@ -18,7 +18,7 @@ import org.junit.Test
 
 class UiSkinThemeTest {
     @get:Rule val compose=createComposeRule()
-    @Test fun bothSkinsAndLegacySettingsStayLightUnderSystemNightMode() {
+    @Test fun fiveSkinsAndLegacySettingsKeepTheirOwnAppearanceUnderSystemNightMode() {
         var data by mutableStateOf(AppData())
         var background=Color.Unspecified
         var resolved=""
@@ -35,11 +35,14 @@ class UiSkinThemeTest {
                 }
             }
         }
-        for(skin in listOf("prism","linear","azure","spectrum"))for(mode in listOf("dark","system")) {
+        for(skin in listOf("prism","linear","claude","supabase","miro","azure","spectrum","unknown"))for(mode in listOf("dark","system")) {
             compose.runOnIdle {data=AppData(settings=mapOf("uiSkin" to skin,"theme" to mode))}
             compose.waitForIdle()
-            assertEquals(if(skin=="linear")"linear" else "prism",resolved)
-            assertEquals(if(skin=="linear")Color(0xFFF5F6F8) else Color(0xFFEAEBF3),background)
+            assertEquals(if(skin in listOf("prism","linear","claude","supabase","miro"))skin else "prism",resolved)
+            assertEquals(when(skin) {
+                "linear"->Color(0xFFF5F6F8); "claude"->Color(0xFFFAF9F5)
+                "supabase"->Color(0xFF1C1C1C); "miro"->Color.White; else->Color(0xFFEAEBF3)
+            },background)
         }
     }
 }
@@ -47,6 +50,40 @@ class UiSkinThemeTest {
 class UiSkinNavigationTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private val vm get()=ViewModelProvider(compose.activity)[AppViewModel::class.java]
+    @Test fun everyStructuredSkinKeepsPagesDialogsAndDataAcrossRecreation() {
+        val outbound="""{"type":"socks","server":"127.0.0.1","server_port":9}"""
+        val original=AppData(nodes=listOf(Node(1,1,"保留节点",outbound)),groups=listOf(Group(1,"保留分组")),
+            settings=mapOf("appLanguage" to "zh-CN","selectedNodeId" to "1","browseGroupId" to "1"))
+        compose.runOnIdle {vm.edit {original}}
+        compose.waitUntil(15000){!vm.busy.value && vm.data.value.nodes.size==1}
+        for(skin in listOf("linear","claude","supabase","miro")) {
+            compose.runOnIdle {vm.setting("uiSkin",skin)}
+            compose.waitUntil(10000){vm.data.value.setting("uiSkin")==skin && !vm.busy.value}
+            compose.onNodeWithTag("white_connection_card").assertIsDisplayed()
+            compose.onNodeWithTag("home_toolbar").assertDoesNotExist()
+            compose.onNodeWithTag("node_1").assertIsDisplayed()
+            compose.onNodeWithTag("node_info_1").performClick()
+            compose.onNodeWithText("节点详情").assertIsDisplayed()
+            compose.onNodeWithText("关闭").performClick()
+            compose.onNodeWithTag("tab_1").performClick()
+            compose.onNodeWithTag("smart_rules").assertIsDisplayed()
+            compose.onNodeWithTag("tab_2").performClick()
+            compose.onNodeWithTag("settings_general").performClick()
+            compose.onNodeWithTag("setting_launcherIcon").assertDoesNotExist()
+            compose.onNodeWithTag("setting_uiSkin").performClick()
+            for((id,name) in uiSkinChoices) {
+                compose.onNodeWithTag("choice_$id").assertIsDisplayed().assertTextContains(name)
+            }
+            compose.onNodeWithText("取消").performClick()
+            compose.onNodeWithTag("page_back").performClick()
+            compose.onNodeWithTag("home_tab").performClick()
+            compose.runOnUiThread {compose.activity.recreate()}
+            compose.waitUntil(10000){compose.onAllNodesWithTag("white_connection_card").fetchSemanticsNodes().isNotEmpty()}
+            assertEquals(skin,vm.store.snapshot().setting("uiSkin"))
+            assertEquals(original.nodes,vm.data.value.nodes)
+            assertEquals(original.groups,vm.data.value.groups)
+        }
+    }
     @Test fun switchingUiKeepsDataAndWhiteUiRetainsNavigationSearchMenusAndSelection() {
         val outbound="""{"type":"socks","server":"127.0.0.1","server_port":9}"""
         val original=AppData(

@@ -1,0 +1,66 @@
+appId: com.zane.zanebox
+---
+- launchApp:
+    permissions:
+      all: allow
+- assertVisible:
+    id: home_header
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- assertNotVisible:
+    id: setting_launcherIcon
+- tapOn:
+    id: setting_uiSkin
+- assertVisible: 棱镜流光
+- assertVisible: 简洁留白
+- assertVisible: 暖纸陶色
+- assertVisible: 深色翡翠
+- assertVisible: 明黄工作台
+- tapOn:
+    id: choice_${SKIN_ID}
+- takeScreenshot: reports/ui-1.0.2/current/${SKIN_ID}-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- assertVisible:
+    id: home_header
+- takeScreenshot: reports/ui-1.0.2/current/${SKIN_ID}-home
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_rules
+    direction: UP
+    timeout: 10000
+- assertVisible:
+    id: smart_rules
+- takeScreenshot: reports/ui-1.0.2/current/${SKIN_ID}-smart
+- tapOn:
+    id: main_back
+- stopApp
+- launchApp
+- assertVisible:
+    id: home_header
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- assertVisible: ${SKIN_NAME}
+- assertNotVisible:
+    id: setting_launcherIcon
+- takeScreenshot: reports/ui-1.0.2/current/${SKIN_ID}-restart-settings
+- tapOn:
+    id: page_back
+- tapOn:
+    id: main_back
+- pressKey: Home
+- swipe:
+    direction: UP
+- assertVisible: Links
+- takeScreenshot: reports/ui-1.0.2/current/${SKIN_ID}-launcher
+- tapOn: Links
+- assertVisible:
+    id: home_header

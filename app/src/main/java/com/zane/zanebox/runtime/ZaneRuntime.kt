@@ -17,7 +17,6 @@ import android.os.SystemClock
 import android.util.AtomicFile
 import androidx.core.app.NotificationCompat
 import com.zane.zanebox.MainActivity
-import com.zane.zanebox.R
 import com.zane.zanebox.config.ConfigBuilder
 import com.zane.zanebox.config.Purpose
 import com.zane.zanebox.core.NativePlatform
@@ -90,7 +89,13 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     @Volatile private var cachedSecret:String?=null
     @Volatile private var apiPort=9090
     private var publishedFlags=""
+    private val notificationEpoch=java.util.concurrent.atomic.AtomicLong()
+    private val notificationIconReads=java.util.concurrent.atomic.AtomicLong()
+    private var publishedIconRead=0L
+    private var publishedIcon=0
     private var notificationText=""
+    private var notificationTitle=""
+    private var notificationBody=""
     private var inForeground=false
     private var channelReady=false
     private var wakeLock:android.os.PowerManager.WakeLock?=null
@@ -136,12 +141,23 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     }
     fun bind():IBinder = binder
     fun startCommand(intent:Intent?):Int {
-        notification(if(intent?.action=="stop")"正在断开" else if(current.get().connectionState==RuntimeState.CONNECTED)"已连接" else "正在连接")
-        if(intent?.action=="stop")dispatch("stop","")
-        else if(intent?.action!="foreground")dispatch("start","")
+        val stopping=intent?.action=="stop"
+        // Preserve command arrival order; only the cosmetic database read leaves Main.
+        if(stopping)dispatch("stop","")
+        val epoch=notificationEpoch.get()
+        scope.launch {
+            notification(if(stopping)"正在断开" else if(current.get().connectionState==RuntimeState.CONNECTED)"已连接" else "正在连接",
+                expectedEpoch=epoch,initial=!stopping,existingOnly=stopping)
+        }
+        if(!stopping && intent?.action!="foreground")dispatch("start","")
         return Service.START_STICKY
     }
     private fun dispatch(action:String,payload:String) {
+        if(action=="stop")notificationEpoch.incrementAndGet()
+        if(action=="refreshNotification") {
+            scope.launch { ready.await();runCatching {refreshNotificationIcon()}.onFailure {event("message","通知图标刷新失败")} }
+            return
+        }
         if(action=="uiVisible") {
             val (token,value)=payload.split('|',limit=2).takeIf{it.size==2} ?: return
             if(!token.matches(Regex("[0-9a-f-]{36}")))return
@@ -726,23 +742,56 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         }
     }
     /** Status changes always go through startForeground; per-second rate text only re-posts when it actually changed. */
-    @Synchronized private fun notification(text:String,rate:Boolean=false,data:AppData=appliedData ?: store.data.value) {
+    private fun notification(text:String,rate:Boolean=false,data:AppData=appliedData ?: store.data.value,
+        expectedEpoch:Long=notificationEpoch.get(),initial:Boolean=false,existingOnly:Boolean=false) {
         val group=if(data.bool("showGroupInNotification"))data.groups.firstOrNull { it.id==data.selectedGroupId }?.name.orEmpty() else ""
         val title=if(group.isBlank())"Links" else "Links · $group"
-        val key="$title|$text"
-        if(rate && (!inForeground || key==notificationText)) return
-        notificationText=key
-        val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if(!channelReady && Build.VERSION.SDK_INT>=26) { manager.createNotificationChannel(NotificationChannel("proxy","Links 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true }
+        // Never hold the lifecycle/notification monitor while SQLite opens or waits.
+        val iconRead=readNotificationIcon()
+        synchronized(this) {
+            if(destroyed || expectedEpoch!=notificationEpoch.get() || (initial && inForeground) || (existingOnly && !inForeground))return
+            val icon=notificationIconForPublish(iconRead)
+            val key="$title|$text|$icon"
+            if(rate && (!inForeground || key==notificationText)) return
+            val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if(!channelReady && Build.VERSION.SDK_INT>=26) { manager.createNotificationChannel(NotificationChannel("proxy","Links 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true }
+            val built=buildNotification(title,text,icon)
+            if(rate || existingOnly)manager.notify(1,built) else { owner.startForeground(1,built);inForeground=true }
+            notificationText=key;notificationTitle=title;notificationBody=text
+        }
+    }
+    private fun readNotificationIcon():Pair<Long,Int> {
+        val sequence=notificationIconReads.incrementAndGet()
+        return sequence to skinNotificationIcon(store.readSetting("uiSkin","prism"))
+    }
+    // Called under the notification monitor. An older read may still publish new status text,
+    // but it must reuse the icon already committed by the newer read.
+    private fun notificationIconForPublish(read:Pair<Long,Int>):Int {
+        if(read.first>publishedIconRead) {publishedIconRead=read.first;publishedIcon=read.second}
+        return publishedIcon
+    }
+    private fun buildNotification(title:String,text:String,icon:Int):android.app.Notification {
         val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop=PendingIntent.getService(this,1,Intent(this,owner.javaClass).setAction("stop"),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val built=NotificationCompat.Builder(this,"proxy").setSmallIcon(R.drawable.ic_zanebox).setContentTitle(title).setContentText(text).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(0,"断开",stop).build()
-        if(rate) manager.notify(1,built) else { owner.startForeground(1,built);inForeground=true }
+        return NotificationCompat.Builder(this,"proxy").setSmallIcon(icon).setContentTitle(title).setContentText(text).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(0,"断开",stop).build()
     }
-    @Synchronized private fun foregroundStop() { inForeground=false;notificationText="";if(Build.VERSION.SDK_INT>=24)owner.stopForeground(Service.STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") owner.stopForeground(true) }
+    private fun refreshNotificationIcon() {
+        val epoch=notificationEpoch.get()
+        val iconRead=readNotificationIcon()
+        synchronized(this) {
+            if(destroyed || epoch!=notificationEpoch.get() || !inForeground)return
+            val icon=notificationIconForPublish(iconRead)
+            val key="$notificationTitle|$notificationBody|$icon"
+            if(key==notificationText)return
+            val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(1,buildNotification(notificationTitle,notificationBody,icon))
+            notificationText=key
+        }
+    }
+    @Synchronized private fun foregroundStop() { notificationEpoch.incrementAndGet();inForeground=false;notificationText="";if(Build.VERSION.SDK_INT>=24)owner.stopForeground(Service.STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") owner.stopForeground(true) }
     fun revoke() { dispatch("stop","") }
     fun destroy() {
-        destroyed=true
+        notificationEpoch.incrementAndGet();destroyed=true
         cancelSubscriptionAlarm()
         releaseWakeLock();runCatching { unregisterReceiver(wakeReceiver) }
         synchronized(testStateLock){activeTestBatch=0L}

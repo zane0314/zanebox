@@ -224,7 +224,7 @@ import org.json.JSONObject
     }
     selecting?.let{p->ChoiceDialog(p.title,if(p.key=="uiSkin")resolvedUiSkin(data.setting(p.key,p.default)) else data.setting(p.key,p.default),p.choices,{selecting=null}){value->
         if(p.key=="serviceMode" && vm.service.snapshot.value.state in 1..3)vm.message.value="切换服务模式前请先断开连接"
-        else runCatching {if(p.key=="launcherIcon")applyLauncherIcon(context,value);vm.setting(p.key,value)}.onFailure {vm.message.value=it.message ?: "设置失败"}
+        else runCatching {vm.setting(p.key,value)}.onFailure {vm.message.value=it.message ?: "设置失败"}
     }}
 
     confirmation?.let{(title,action)->UiAlertDialog(onDismissRequest={confirmation=null},title={Text(uiText("确认操作"))},text={Text(uiText(title))},confirmButton={TextButton(onClick={action();confirmation=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirmation=null}){Text(uiText("取消"))}})}

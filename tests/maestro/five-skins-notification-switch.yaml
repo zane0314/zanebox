@@ -1,0 +1,12 @@
+appId: com.zane.zanebox
+---
+- assertVisible:
+    id: home_header
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- tapOn:
+    id: setting_uiSkin
+- tapOn:
+    id: choice_${SKIN_ID}

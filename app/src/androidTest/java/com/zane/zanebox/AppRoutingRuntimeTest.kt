@@ -19,10 +19,17 @@ class AppRoutingRuntimeTest {
         val base=AppData(nodes=listOf(Node(1,1,"A","""{"type":"socks","server":"10.0.2.2","server_port":19081}"""),Node(2,1,"B","""{"type":"socks","server":"10.0.2.2","server_port":19082}""")),groups=listOf(Group(1,"应用范围验收")),settings=mapOf("selectedNodeId" to "1","appLanguage" to "zh-CN","serviceMode" to "vpn","dnsRemote" to "local","dnsDirect" to "local","sniff" to "false","statsEnabled" to "false","bypassLan" to "false","bypassLanInCore" to "false","smartRules.ai" to "","smart.ai.target" to "node:2","smartCustom.ai.packages" to stored)+com.zane.zanebox.config.builtinSmartRuleFiles.keys.filter{it!="ai"}.associate{"smart.$it.target" to "off"})
         val store=ZaneStore(context);store.replace(base)
         val client=ServiceClient(context);client.connect();shell("appops set com.zane.zanebox ACTIVATE_VPN allow")
+        var previousVpnNetwork=""
         fun request(expected:String) {
-            val nonce="scope"+System.nanoTime();shell("am start -W -n com.zane.probe/.ProbeActivity --es url http://10.0.2.2:19080/probe --es nonce $nonce")
+            val nonce="scope"+System.nanoTime()
+            val throughVpn=expected!="DIRECT"
+            // Runtime CONNECTED precedes Android's default-network callback for another UID.
+            val previous=if(previousVpnNetwork.isEmpty())"" else " --es previous_vpn_network $previousVpnNetwork"
+            shell("am start -W -n com.zane.probe/.ProbeActivity --es url http://10.0.2.2:19080/probe --es nonce $nonce --ez expected_vpn $throughVpn$previous")
             var logs="";waitFor("不同 UID 出口 $expected"){logs=shell("logcat -d -s ZaneProbe:I");logs.contains("$nonce=")}
             assertTrue(logs,logs.contains("$nonce=$expected uid="))
+            if(throughVpn) previousVpnNetwork=Regex("${Regex.escape(nonce)} READY network=(\\d+) vpn=true").find(logs)?.groupValues?.get(1)
+                ?: error("Probe 未确认本轮默认 VPN 网络：$logs")
             assertEquals(stored,store.snapshot().setting("smartCustom.ai.packages"))
         }
         try {

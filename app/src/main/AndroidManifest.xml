@@ -27,6 +27,18 @@
         <activity-alias android:name=".launcher.PrismAlias" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_links" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
+        <activity-alias android:name=".launcher.LinearAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/links_skin_linear" android:roundIcon="@mipmap/links_skin_linear" android:label="Links" android:targetActivity=".LauncherActivity">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".launcher.ClaudeAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/links_skin_claude" android:roundIcon="@mipmap/links_skin_claude" android:label="Links" android:targetActivity=".LauncherActivity">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".launcher.SupabaseAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/links_skin_supabase" android:roundIcon="@mipmap/links_skin_supabase" android:label="Links" android:targetActivity=".LauncherActivity">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".launcher.MiroAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/links_skin_miro" android:roundIcon="@mipmap/links_skin_miro" android:label="Links" android:targetActivity=".LauncherActivity">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
         <activity-alias android:name=".launcher.PixelAlias" android:enabled="false" android:exported="true" android:icon="@drawable/zb_launcher_pixel" android:label="Links" android:targetActivity=".LauncherActivity">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity-alias>
