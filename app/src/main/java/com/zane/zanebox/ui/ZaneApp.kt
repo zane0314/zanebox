@@ -57,7 +57,11 @@ internal data class TextEditor(val title:String,val fields:List<Pair<String,Stri
 internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctUntilChangedBy {listOf(it.state,it.generation,it.error,it.pendingManual)}
 
 @Composable fun ZaneApp(vm:AppViewModel) {
-    val data by vm.data.collectAsStateWithLifecycle()
+    val savedData by vm.data.collectAsStateWithLifecycle()
+    val pendingSkin by vm.pendingUiSkin.collectAsStateWithLifecycle()
+    val data=remember(savedData,pendingSkin) {
+        pendingSkin?.let {savedData.copy(settings=savedData.settings+("uiSkin" to it))} ?: savedData
+    }
     val runtime by remember(vm){homeRuntimeSnapshots(vm.service.snapshot)}.collectAsStateWithLifecycle(initialValue=vm.service.snapshot.value)
     val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     val testProgress by vm.service.testProgress.collectAsStateWithLifecycle()
@@ -107,7 +111,11 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     LaunchedEffect(data.setting("hideFromRecentApps")) {
         (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).appTasks.forEach{runCatching{it.setExcludeFromRecents(data.bool("hideFromRecentApps"))}}
     }
-    LaunchedEffect(vm,data.setting("uiSkin")) { vm.reconcileUiSkin() }
+    LaunchedEffect(vm,savedData.setting("uiSkin")) { vm.reconcileUiSkin() }
+    LaunchedEffect(vm,pendingSkin,savedData.setting("uiSkin")) {
+        // Retire the preview only once this composition has received the saved skin.
+        if(pendingSkin!=null && pendingSkin==resolvedUiSkin(savedData.setting("uiSkin")))vm.pendingUiSkin.compareAndSet(pendingSkin,null)
+    }
     LaunchedEffect(runtime.generation,runtime.state,runtime.pendingManual) { if(runtime.state==2)dirty=runtime.pendingManual }
     fun form(title:String,fields:List<Pair<String,String>>,save:(List<String>)->Unit) {editor=TextEditor(title,fields,save)}
     fun share(text:String) {if(text.isBlank()){vm.message.value="没有可分享的内容";return};runCatching{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text),"分享节点"))}.onFailure { vm.message.value=it.message ?: "分享失败" }}

@@ -39,6 +39,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var applyJob:kotlinx.coroutines.Job?=null
     private val uiSkinLock=Mutex()
     private val uiSkinChoice=java.util.concurrent.atomic.AtomicLong()
+    internal val pendingUiSkin=MutableStateFlow<String?>(null)
     val ip get() = service.exitIp
     val webdavEntries=MutableStateFlow<List<WebDavEntry>>(emptyList())
     init {
@@ -81,15 +82,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setting(key: String, value: String) {
         if(key=="uiSkin") {
             val choice=uiSkinChoice.incrementAndGet()
-            task {
-                uiSkinLock.withLock {
-                    if(choice==uiSkinChoice.get()) {
-                        val skin=resolvedUiSkin(value)
-                        withLauncherSkin(getApplication(),skin) {store.update {it.copy(settings=it.settings+("uiSkin" to skin))}}
-                        withContext(Dispatchers.Main) {service.refreshNotification()}
-                    }
+            val skin=resolvedUiSkin(value)
+            pendingUiSkin.value=skin
+            task(onError={if(choice==uiSkinChoice.get())pendingUiSkin.value=null}) {
+                // Keep the generation check and the small kv write together, away from PackageManager.
+                synchronized(store) {
+                    if(choice!=uiSkinChoice.get())return@task
+                    store.putSetting("uiSkin",skin)
                 }
-                message.value="已保存"
+                service.refreshNotification()
+                syncUiSkin()
+                if(choice==uiSkinChoice.get())message.value="已保存"
             }
             return
         }
@@ -100,19 +103,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if(key in setOf("networkReset","acquireWakeLock","rulesUpdateInterval","rulesUpdateDelay"))withContext(Dispatchers.Main){service.refreshSettings()}
         } else edit(onSaved={if(key.startsWith("smartUrl."))service.refreshSettings()},autoApply=settingsApply(key)==SettingsApply.AUTO) { it.copy(settings = it.settings + (key to value)) }
     }
-    fun reconcileUiSkin()=task {
+    fun reconcileUiSkin()=task {syncUiSkin()}
+    private suspend fun syncUiSkin() {
         uiSkinLock.withLock {
-            val skin=resolvedUiSkin(store.snapshot().setting("uiSkin"))
+            val choice=uiSkinChoice.get()
+            val skin=resolvedUiSkin(store.readSetting("uiSkin"))
+            service.refreshNotification()
             val previous=enabledLauncherSkin(getApplication())
             try {applyLauncherIcon(getApplication(),skin)}
             catch(e:Exception) {
-                store.update {if(resolvedUiSkin(it.setting("uiSkin"))==skin)it.copy(settings=it.settings+("uiSkin" to previous)) else it}
+                store.update {
+                    if(choice==uiSkinChoice.get() && (pendingUiSkin.value==null || pendingUiSkin.value==skin) && resolvedUiSkin(it.setting("uiSkin"))==skin)
+                        it.copy(settings=it.settings+("uiSkin" to previous)) else it
+                }
+                service.refreshNotification()
+                withContext(Dispatchers.Main) {if(choice==uiSkinChoice.get())pendingUiSkin.compareAndSet(skin,null)}
                 throw e
             }
-            withContext(Dispatchers.Main) {service.refreshNotification()}
         }
     }
-    fun resetSettings()=edit { it.copy(settings=emptyMap()) }
+    private fun invalidateUiSkin() {uiSkinChoice.incrementAndGet();pendingUiSkin.value=null}
+    fun resetSettings() {invalidateUiSkin();edit { it.copy(settings=emptyMap()) }}
     fun reorderNodes(ids:List<Long>)=task {store.update{it.reorderNodes(ids)};message.value="节点顺序已保存"}
     fun reorderGroups(ids:List<Long>)=task {store.update{it.reorderGroups(ids)};message.value="分组顺序已保存"}
     fun reorderRules(front:Boolean,ids:List<Long>)=edit{it.reorderRules(front,ids)}
@@ -131,7 +142,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         saved("节点已保存")
         withContext(Dispatchers.Main) { onSaved() }
     }
-    fun factoryReset()=task { service.restore(com.zane.zanebox.config.withFactoryRouteDefaults(AppData(),java.util.Locale.getDefault().country));message.value="正在清除应用配置" }
+    fun factoryReset() {invalidateUiSkin();task { service.restore(com.zane.zanebox.config.withFactoryRouteDefaults(AppData(),java.util.Locale.getDefault().country));message.value="正在清除应用配置" }}
     fun clearCache()=task {
         require(service.snapshot.value.state !in 1..3) { "清除缓存前请先断开连接" }
         getApplication<Application>().cacheDir.listFiles()?.forEach { require(it.deleteRecursively()) { "缓存清除失败" } }
@@ -179,6 +190,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val pending=pendingImport.value ?: return
         if(importing.value)return
         importing.value=true
+        if(pending is PendingImport.Backup)invalidateUiSkin()
         task {
             try {
                 when(pending) {
@@ -227,7 +239,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun dav():WebDavClient { val d=store.snapshot();return WebDavClient(d.setting("webdavUrl"),d.setting("webdavUser"),d.setting("webdavPassword")) }
     fun listWebdav() = task { webdavEntries.value=dav().list();message.value="WebDAV 连接成功：${webdavEntries.value.size} 个备份" }
     fun uploadWebdav() = task { dav().upload(BackupManager(getApplication()).export(store.snapshot()));webdavEntries.value=dav().list();message.value="云备份已上传" }
-    fun restoreWebdav(entry:WebDavEntry) = task { service.restore(BackupManager(getApplication()).`import`(dav().download(entry)));message.value="云备份已验证，正在应用" }
+    fun restoreWebdav(entry:WebDavEntry) {invalidateUiSkin();task { service.restore(BackupManager(getApplication()).`import`(dav().download(entry)));message.value="云备份已验证，正在应用" }}
     fun deleteWebdav(entry:WebDavEntry) = task { dav().delete(entry);webdavEntries.value=dav().list();message.value="云备份已删除" }
     fun updateAllSmartRules() {
         val keys=data.value.settings.filterKeys { it.startsWith("smartUrl.") }.filterValues { it.isNotBlank() }.keys
@@ -282,10 +294,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { input -> readLimited(input) }
         if(isZip(bytes)) stageImport(PendingImport.Backup(BackupManager(getApplication()).`import`(bytes))) else offerTextNow(bytes.toString(Charsets.UTF_8))
     }
-    fun restore(uri: Uri) = task {
+    fun restore(uri: Uri) {invalidateUiSkin();task {
         val bytes = getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
         service.restore(BackupManager(getApplication()).`import`(bytes)); message.value = "备份已验证，正在应用"
-    }
+    }}
     fun backup(uri: Uri,scope:com.zane.zanebox.backup.BackupScope=com.zane.zanebox.backup.BackupScope()) = task { val bytes=BackupManager(getApplication()).export(com.zane.zanebox.backup.backupSelection(store.snapshot(),scope));getApplication<Application>().contentResolver.openOutputStream(uri)!!.use { it.write(bytes) }; message.value="备份已保存" }
     fun shareBackup(scope:com.zane.zanebox.backup.BackupScope)=task {
         val context=getApplication<Application>();val file=java.io.File(context.cacheDir,"exports/zanebox-backup.zip").also { it.parentFile!!.mkdirs() }

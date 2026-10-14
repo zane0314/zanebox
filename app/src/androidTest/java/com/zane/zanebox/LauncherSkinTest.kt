@@ -51,6 +51,25 @@ class LauncherSkinTest {
             assertLauncher("linear")
         } finally {applyLauncherIcon(context,original)}
     }
+    @Test fun failedPersistenceRestoresExactDefaultAndRetiredStates() {
+        val pm=context.packageManager
+        val components=(skinLauncherAliases.values+listOf("launcher.PixelAlias","launcher.NodeNAlias","launcher.ChannelGateAlias","launcher.ConfluenceAlias","launcher.LaunchPathAlias"))
+            .map {ComponentName(context.packageName,"${context.packageName}.$it")}
+        val original=components.associateWith(pm::getComponentEnabledSetting)
+        fun restore(states:Map<ComponentName,Int>) {
+            states.forEach { (name,state) -> pm.setComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP) }
+        }
+        try {
+            restore(components.associateWith {PackageManager.COMPONENT_ENABLED_STATE_DEFAULT})
+            val before=components.associateWith(pm::getComponentEnabledSetting)
+            try {
+                withLauncherSkin(context,"supabase") {throw IllegalStateException("fixture database failure")}
+                fail("保存失败应被报告")
+            } catch(e:IllegalStateException) {assertEquals("fixture database failure",e.message)}
+            assertEquals(before,components.associateWith(pm::getComponentEnabledSetting))
+            assertLauncher("prism")
+        } finally {restore(original)}
+    }
     @Test fun legacyIconIsIgnoredAndRapidChangesRestartAndResetStayBound() {
         val store=ZaneStore(context)
         val original=store.snapshot()

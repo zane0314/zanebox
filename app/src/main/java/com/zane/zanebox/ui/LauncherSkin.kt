@@ -19,10 +19,14 @@ internal fun enabledLauncherSkin(context:Context):String = skinLauncherAliases.e
     state==PackageManager.COMPONENT_ENABLED_STATE_ENABLED || (state==PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && skin=="prism")
 }?.key ?: "prism"
 
-private fun setLauncherStates(pm:PackageManager,states:Map<ComponentName,Int>) {
-    if(android.os.Build.VERSION.SDK_INT>=33)pm.setComponentEnabledSettings(states.map { (name,state) -> PackageManager.ComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP) })
+private fun setLauncherStates(pm:PackageManager,states:Map<ComponentName,Int>,beforeWrite:(Collection<ComponentName>)->Unit={}) {
+    if(states.isEmpty())return
+    if(android.os.Build.VERSION.SDK_INT>=33) {
+        beforeWrite(states.keys)
+        pm.setComponentEnabledSettings(states.map { (name,state) -> PackageManager.ComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP) })
+    }
     else states.entries.sortedByDescending { (name,state) -> state==PackageManager.COMPONENT_ENABLED_STATE_ENABLED || (state==PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && name.className.endsWith(".PrismAlias")) }
-        .forEach { (name,state) -> pm.setComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP) }
+        .forEach { (name,state) -> beforeWrite(listOf(name));pm.setComponentEnabledSetting(name,state,PackageManager.DONT_KILL_APP) }
 }
 
 /** A failed database save restores the exact previous launcher state. Startup reconciles process death. */
@@ -31,11 +35,13 @@ internal fun withLauncherSkin(context:Context,value:String,persist:()->Unit) {
     val selected="${context.packageName}.${launcherAliasForSkin(value)}"
     val before=launcherComponents(context).associateWith(pm::getComponentEnabledSetting)
     val next=before.mapValues { (name,_) -> if(name.className==selected)PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED }
+    val changed=next.filter { (name,state) -> before.getValue(name)!=state }
+    val attempted=linkedMapOf<ComponentName,Int>()
     try {
-        if(before!=next)setLauncherStates(pm,next)
+        setLauncherStates(pm,changed) { names -> names.forEach {name -> attempted[name]=before.getValue(name)} }
         persist()
     } catch(e:Exception) {
-        runCatching {setLauncherStates(pm,before)}.exceptionOrNull()?.let(e::addSuppressed)
+        runCatching {setLauncherStates(pm,attempted)}.exceptionOrNull()?.let(e::addSuppressed)
         throw e
     }
 }
