@@ -2,6 +2,8 @@ package com.zane.zanebox.data
 
 /** Shared catalog/runtime defaults. Saved user values always win. */
 internal object SettingDefaults {
+    const val TEST_TIMEOUT_MS=4000
+    const val TEST_CONCURRENCY=12
     val values=mapOf(
         "autoStart" to "false",
         "statsEnabled" to "true",
@@ -63,10 +65,12 @@ internal object SettingDefaults {
         "muxProtocol" to "h2mux",
         "muxMaxStreams" to "8",
         "testUrl" to "https://www.gstatic.com/generate_204",
-        "testTimeout" to "10000",
-        "testConcurrency" to "4",
+        "testTimeout" to TEST_TIMEOUT_MS.toString(),
+        "testConcurrency" to TEST_CONCURRENCY.toString(),
         "apiPort" to "9090",
         "appTLSVersion" to "1.2",
     )
     fun value(key:String,fallback:String="")=values[key] ?: fallback
+    fun testTimeout(value:String)=(value.toIntOrNull() ?: TEST_TIMEOUT_MS).coerceIn(1000,TEST_TIMEOUT_MS)
+    fun testConcurrency(value:String)=(value.toIntOrNull() ?: TEST_CONCURRENCY).coerceIn(1,16)
 }

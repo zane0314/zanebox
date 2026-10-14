@@ -60,6 +60,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     val data by vm.data.collectAsStateWithLifecycle()
     val runtime by remember(vm){homeRuntimeSnapshots(vm.service.snapshot)}.collectAsStateWithLifecycle(initialValue=vm.service.snapshot.value)
     val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
+    val testProgress by vm.service.testProgress.collectAsStateWithLifecycle()
     val autoNodeId by vm.service.autoNodeId.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val pending by vm.pendingImport.collectAsStateWithLifecycle()
@@ -234,6 +235,11 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                 items(orderedGroups,key={it.id}){g->HomeGroupChip(g.name,homeGroupId==g.id,{pageScope.launch{pager.animateScrollToPage(homeGroupIds.indexOf(g.id))}},onLongClick={menuGroupId=g.id},active=g.enabled,modifier=Modifier.testTag("group_${g.id}"))}
                             }
                             Spacer(Modifier.height(10.dp))
+                        }
+                        if(testProgress.running) {
+                            Text(uiTestProgress(testProgress.completed,testProgress.total),fontSize=12.sp,
+                                color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.testTag("latency_progress"))
+                            Spacer(Modifier.height(8.dp))
                         }
                         HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))
                         Spacer(Modifier.height(8.dp))

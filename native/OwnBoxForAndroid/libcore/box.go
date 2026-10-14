@@ -115,6 +115,7 @@ type BoxInstance struct {
 
 	*box.Box
 	cancel context.CancelFunc
+	ctx    context.Context
 	state  boxLifecycleState
 
 	startBox func() error
@@ -248,6 +249,7 @@ func newSingBoxInstance(config string, localTransport LocalDNSTransport, platfor
 	b = &BoxInstance{
 		Box:           instance,
 		cancel:        cancel,
+		ctx:           ctx,
 		startBox:      instance.Start,
 		closeBox:      instance.Close,
 		pauseManager:  service.FromContext[pause.Manager](ctx),
@@ -461,7 +463,7 @@ func splitURLTestTimeout(timeout int32) (primary int32, fallback int32) {
 	}
 	if timeout < 2000 {
 		fallback = timeout * 30 / 100
-	} else if timeout <= 3500 {
+	} else if timeout <= 4000 {
 		fallback = 1000
 	} else {
 		fallback = 1500
@@ -479,26 +481,33 @@ func UrlTest(i *BoxInstance, link string, timeout int32) (latency int32, err err
 	}
 	boxPlatformLogWriter.WriteMessage(sblog.LevelDebug, fmt.Sprintf("box.UrlTest link=%s timeout=%dms instance=%v", link, timeout, i != nil))
 
+	parent := context.Background()
+	if i != nil && i.ctx != nil {
+		parent = i.ctx
+	}
+	ctx, cancel := context.WithTimeout(parent, time.Duration(timeout)*time.Millisecond)
+	defer cancel()
+
 	primaryTimeout, fallbackTimeout := splitURLTestTimeout(timeout)
 
 	if i == nil {
 		// 无实例：直连测试（单 GET，计时含拨号）
 		client := &http.Client{Timeout: time.Duration(primaryTimeout) * time.Millisecond}
-		latency, err = urlTestDirect(client, link)
+		latency, err = urlTestDirect(ctx, client, link)
 		if err != nil {
 			fallback := getFallbackLink(link)
 			boxPlatformLogWriter.WriteMessage(sblog.LevelDebug, fmt.Sprintf("box.UrlTest direct failed: %v, trying fallback: %s", err, fallback))
 			fbClient := &http.Client{Timeout: time.Duration(fallbackTimeout) * time.Millisecond}
-			latency, err = urlTestDirect(fbClient, fallback)
+			latency, err = urlTestDirect(ctx, fbClient, fallback)
 		}
 	} else {
-		latency, err = urlTest(i, link, primaryTimeout)
+		latency, err = urlTest(ctx, i, link, primaryTimeout)
 		if err != nil {
 			primaryErr := err
 			fallback := getFallbackLink(link)
 			boxPlatformLogWriter.WriteMessage(sblog.LevelDebug, fmt.Sprintf("box.UrlTest primary failed: %v, trying fallback: %s", err, fallback))
 			var fbErr error
-			latency, fbErr = urlTest(i, fallback, fallbackTimeout)
+			latency, fbErr = urlTest(ctx, i, fallback, fallbackTimeout)
 			if fbErr != nil {
 				err = primaryErr
 			} else {
@@ -520,7 +529,7 @@ func UrlTestFull(i *BoxInstance, link string, timeout int32) (latency int32, err
 // 若中转/CDN 对 HEAD 请求不兼容（返回 EOF/405/403/400+ 等），自动以 GET 请求重试预热；
 // 阶段二（测量）：复用连接池中已就绪的长连接发送探测，测得纯 1-RTT 网络往返时延（~150-250ms），
 // 彻底消除冷启动握手与 TLS 重建带来的额外虚高延迟，且严格保持真实低延迟水平不退化。
-func urlTest(instance *BoxInstance, link string, timeout int32) (int32, error) {
+func urlTest(parent context.Context, instance *BoxInstance, link string, timeout int32) (int32, error) {
 	outbound := instance.Outbound().Default()
 	if outbound == nil {
 		return 0, E.New("no default outbound")
@@ -535,7 +544,7 @@ func urlTest(instance *BoxInstance, link string, timeout int32) (int32, error) {
 	}
 	hostname := linkURL.Hostname()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(parent, time.Duration(timeout)*time.Millisecond)
 	defer cancel()
 
 	transport := &http.Transport{
@@ -611,9 +620,11 @@ func urlTest(instance *BoxInstance, link string, timeout int32) (int32, error) {
 }
 
 // urlTestDirect 为直连测速：同样采用两阶段 Keep-Alive 探测纯 RTT。
-func urlTestDirect(client *http.Client, link string) (int32, error) {
+func urlTestDirect(parent context.Context, client *http.Client, link string) (int32, error) {
+	ctx, cancel := context.WithTimeout(parent, client.Timeout)
+	defer cancel()
 	methodUsed := http.MethodHead
-	req1, err := http.NewRequest(http.MethodHead, link, nil)
+	req1, err := http.NewRequestWithContext(ctx, http.MethodHead, link, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -629,7 +640,7 @@ func urlTestDirect(client *http.Client, link string) (int32, error) {
 	}
 
 	if err != nil {
-		req1Get, errGet := http.NewRequest(http.MethodGet, link, nil)
+		req1Get, errGet := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
 		if errGet == nil {
 			req1Get.Header.Set("User-Agent", browserUserAgent)
 			start1 = time.Now()
@@ -652,7 +663,7 @@ func urlTestDirect(client *http.Client, link string) (int32, error) {
 	}
 	pass1 := time.Since(start1)
 
-	req2, err := http.NewRequest(methodUsed, link, nil)
+	req2, err := http.NewRequestWithContext(ctx, methodUsed, link, nil)
 	if err == nil {
 		req2.Header.Set("User-Agent", browserUserAgent)
 		start2 := time.Now()

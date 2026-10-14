@@ -47,6 +47,14 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     val testResults:StateFlow<Map<Long,Int>> = tests
     private val testingState=MutableStateFlow<Set<Long>>(emptySet())
     val testingNodes:StateFlow<Set<Long>> = testingState
+    private val progress=MutableStateFlow(LatencyTestProgress())
+    val testProgress:StateFlow<LatencyTestProgress> = progress
+    private val testLock=Any()
+    private var activeTestBatch=0L
+    private var activeTestRequest=""
+    private var pendingTestRequest=""
+    // A cancelled request may still be queued without a server batch ID; retain its fence until binding resets.
+    private var ignoredTestRequests:Set<String> = emptySet()
     private val assetState=MutableStateFlow(0L)
     val assetRevision:StateFlow<Long> = assetState
     private val logState=MutableStateFlow<List<String>>(emptyList());val logs:StateFlow<List<String>> = logState
@@ -75,8 +83,23 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
         override fun onEvent(kind:String,payload:String) { when(kind) {
             "autoSelection" -> autoNodeId.value=payload.toLongOrNull() ?: 0L
-            "test" -> { val o=JSONObject(payload);tests.value=tests.value+(o.getLong("id") to o.getInt("ping")) }
-            "testing" -> { val a=JSONArray(payload);testingState.value=(0 until a.length()).map { a.getLong(it) }.toSet() }
+            "test" -> synchronized(testLock) {
+                val o=JSONObject(payload)
+                if(pendingTestRequest.isBlank() && o.getLong("batchId")==activeTestBatch && o.getString("request")==activeTestRequest && activeTestRequest !in ignoredTestRequests) {
+                    val id=o.getLong("id");tests.value=tests.value+(id to o.getInt("ping"));testingState.value=testingState.value-id
+                }
+            }
+            "testing" -> synchronized(testLock) {
+                val o=JSONObject(payload);val batch=o.getLong("batchId");val request=o.getString("request")
+                if(batch>=activeTestBatch && request !in ignoredTestRequests && (pendingTestRequest.isBlank() || request==pendingTestRequest)) {
+                    if(o.optBoolean("begin") || batch==activeTestBatch) {
+                        if(batch!=activeTestBatch)tests.value=emptyMap()
+                        activeTestBatch=batch;activeTestRequest=request;pendingTestRequest=""
+                        val nodes=o.getJSONArray("nodes");testingState.value=(0 until nodes.length()).map{nodes.getLong(it)}.toSet()
+                        progress.value=LatencyTestProgress(batch,o.getInt("total"),o.getInt("completed"),o.getBoolean("running"))
+                    }
+                }
+            }
             "assetInstalled" -> { assetState.value++;event.tryEmit(payload) }
             "logs" -> { val a=JSONArray(payload);logState.value=(0 until a.length()).map { a.getString(it) } }
             "ip" -> ipState.value=payload
@@ -98,7 +121,10 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
     }
     private fun clearPendingTests() {
-        testingState.value=emptySet()
+        synchronized(testLock) {
+            testingState.value=emptySet();progress.value=progress.value.copy(running=false)
+            activeTestBatch=0L;activeTestRequest="";pendingTestRequest="";ignoredTestRequests=emptySet()
+        }
         if(speedState.value.isNotBlank() && !runCatching { JSONObject(speedState.value).optBoolean("done") }.getOrDefault(true))speedState.value=JSONObject().put("stage","error").put("done",true).put("error","后台服务已断开，请重新测速").toString()
     }
     private fun bind(target:Class<*>) { if(!bound) {boundClass=target;bound=context.bindService(Intent(context,boundClass),connection,Context.BIND_AUTO_CREATE)} }
@@ -137,8 +163,32 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     fun refreshSettings() { submit {remote?.command("liveSettings","")} }
     fun selectNode(id:Long)=command("select",id.toString())
     fun selectAuto()=command("selectAuto")
-    fun testNodes(ids:List<Long>) { tests.value=emptyMap();command("test",JSONArray(ids).toString()) }
-    fun cancelTests()=command("cancelTests")
+    fun testNodes(ids:List<Long>) {
+        val request=java.util.UUID.randomUUID().toString()
+        synchronized(testLock) {
+            ignoredTestRequests=ignoredTestRequests+listOf(activeTestRequest,pendingTestRequest).filter{it.isNotBlank()}
+            pendingTestRequest=request;tests.value=emptyMap();testingState.value=emptySet();progress.value=LatencyTestProgress()
+        }
+        submit {
+            try {ensureBinding();remote!!.command("test",JSONObject().put("request",request).put("ids",JSONArray(ids)).toString())}
+            catch(e:Exception) {
+                synchronized(testLock) {
+                    if(pendingTestRequest==request) {
+                        ignoredTestRequests=ignoredTestRequests+request;pendingTestRequest=""
+                        testingState.value=emptySet();progress.value=progress.value.copy(running=false)
+                    }
+                }
+                throw e
+            }
+        }
+    }
+    fun cancelTests() {
+        synchronized(testLock) {
+            ignoredTestRequests=ignoredTestRequests+listOf(activeTestRequest,pendingTestRequest).filter{it.isNotBlank()};pendingTestRequest=""
+            testingState.value=emptySet();progress.value=progress.value.copy(running=false)
+        }
+        command("cancelTests")
+    }
     fun installAsset(filename:String)=command("asset",filename)
     fun refreshLogs()=command("logs")
     fun clearLogs()=command("clearLogs")

@@ -722,7 +722,7 @@ appId: com.zane.zanebox
     commands:
     - tapOn: "全选|Select all|Select All"
 - eraseText: 1
-- setClipboard: '5000'
+- setClipboard: '4000'
 - pasteText
 - hideKeyboard
 - tapOn:

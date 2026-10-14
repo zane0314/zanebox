@@ -201,7 +201,7 @@ import org.json.JSONObject
             item{Text(uiText(title),Modifier.padding(start=4.dp,top=10.dp,bottom=0.dp),style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.primary)}
             item{Surface(shape=MaterialTheme.shapes.large,color=if(MaterialTheme.colorScheme.background.luminance()>.5f)Color.White else MaterialTheme.colorScheme.surface.copy(alpha=1f)) {
                 Column { prefs.forEachIndexed{index,p->
-                    val value=when(p.key){"ipv6Mode"->data.setting("dnsStrategy",if(data.bool("ipv6"))"prefer_ipv4" else "ipv4_only");"uiSkin"->resolvedUiSkin(data.setting(p.key,p.default));else->data.setting(p.key,p.default)}
+                    val value=when(p.key){"ipv6Mode"->data.setting("dnsStrategy",if(data.bool("ipv6"))"prefer_ipv4" else "ipv4_only");"uiSkin"->resolvedUiSkin(data.setting(p.key,p.default));"testTimeout"->SettingDefaults.testTimeout(data.setting(p.key,p.default)).toString();else->data.setting(p.key,p.default)}
                     val visual=preferenceAppearance[p.key]
                     val summary=if(p.key=="perAppEnabled")(if(!data.bool("perAppEnabled"))"关闭" else if(data.setting("perAppMode","exclude")=="include")"代理" else "绕过")+" · ${data.setting("perAppPackages").lines().count{it.isNotBlank()}} 个应用" else p.availability.ifBlank{if(p.boolean)visual?.summary.orEmpty() else p.choices.firstOrNull{it.first==value}?.second ?:value.ifBlank{"未设置"}}
                     fun setToggle(enabled:Boolean) {
@@ -235,7 +235,7 @@ internal fun validatePreference(key:String,value:String) {
     when(key) {
         "mixedPort","sharePort","apiPort"->require(value.toIntOrNull() in 1..65535){"端口须为 1–65535"}
         "mtu"->require(value.toIntOrNull() in 576..65535){"MTU 须为 576–65535"}
-        "testTimeout"->require(value.toIntOrNull() in 1000..60000){"超时须为 1000–60000 毫秒"}
+        "testTimeout"->require(value.toIntOrNull() in 1000..SettingDefaults.TEST_TIMEOUT_MS){"超时须为 1000–4000 毫秒"}
         "testConcurrency"->require(value.toIntOrNull() in 1..16){"并发须为 1–16"}
         "muxMaxStreams"->require(value.toIntOrNull() in 1..1024){"流数须为 1–1024"}
         "urlTestTolerance"->require(value.toIntOrNull() in 0..65535){"容差须为 0–65535"}

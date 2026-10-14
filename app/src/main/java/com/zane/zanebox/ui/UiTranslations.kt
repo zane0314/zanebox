@@ -428,6 +428,8 @@ internal fun translateCount(kind:String,count:Int,language:String):String {
     }
 }
 
+@Composable internal fun uiTestProgress(completed:Int,total:Int)=translateProgress(completed,total,LocalUiLanguage.current)
+
 internal fun translateProgress(current:Int,total:Int,language:String):String = when(language.lowercase(Locale.ROOT)) {
     "en" -> "Testing $current / $total"
     "zh-tw","zh-hk","zh-mo" -> "正在測速 $current / $total"

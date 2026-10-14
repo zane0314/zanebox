@@ -1,0 +1,59 @@
+appId: com.zane.zanebox
+---
+# Synthetic 100-node fixture: default concurrency12, legacy timeout10000, /hang.
+- launchApp
+- tapOn:
+    id: node_menu
+- tapOn: 全部测速（全部分组）
+- assertVisible:
+    id: latency_progress
+- assertVisible: 正在测速.*100
+- extendedWaitUntil:
+    visible: 正在测速 [1-9][0-9]* / 100
+    timeout: 15000
+- assertVisible:
+    id: latency_progress
+- assertVisible:
+    id: node_latency_1001
+    text: 失败
+- tapOn:
+    id: node_menu
+- tapOn: 取消测速
+- assertNotVisible:
+    id: latency_progress
+- assertNotVisible: 测试中
+- tapOn:
+    id: node_latency_1001
+- assertVisible:
+    id: latency_progress
+- extendedWaitUntil:
+    notVisible:
+      id: latency_progress
+    timeout: 10000
+- assertVisible:
+    id: node_latency_1001
+    text: 失败
+- tapOn:
+    id: tab_2
+- tapOn:
+    id: settings_general
+- scrollUntilVisible:
+    element:
+      id: setting_testTimeout
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_testTimeout
+- assertVisible: "4000"
+- tapOn:
+    id: page_back
+- scrollUntilVisible:
+    element:
+      id: setting_testConcurrency
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: setting_testConcurrency
+- assertVisible: "12"
+- tapOn:
+    id: page_back

@@ -36,10 +36,16 @@ class SingBoxEngine(private val platform:NativePlatform) {
     fun sleep() { main?.sleep() }
     fun wake() { main?.wake() }
     fun validate(config:String) { val box=Libcore.newTestSingBoxInstance(config,platform);box.close() }
-    fun test(config:String,url:String,timeout:Int):Int {
+    fun test(config:String,url:String,timeout:Int,active:()->Boolean={true}):Int {
+        if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
         val box=Libcore.newTestSingBoxInstance(config,platform)
         tests.add(box)
-        return try { box.start();Libcore.urlTest(box,url,timeout) } finally { tests.remove(box);runCatching { box.close() } }
+        return try {
+            if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
+            box.start()
+            if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
+            Libcore.urlTest(box,url,timeout)
+        } finally { tests.remove(box);runCatching { box.close() } }
     }
     fun cancelTests() { val snapshot=synchronized(tests) { tests.toList() };snapshot.forEach { runCatching { it.close() } } }
 }

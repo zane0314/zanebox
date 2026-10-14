@@ -9,6 +9,25 @@ import java.net.URI
 enum class Purpose { MAIN, TEST, EXPORT }
 
 object ConfigBuilder {
+    class PreparedTestBatch internal constructor(private val buildNode:(Long)->String) {
+        fun build(nodeId:Long):String = buildNode(nodeId)
+    }
+
+    private class Inputs(val data:AppData) {
+        val nodesById=data.nodes.associateBy { it.id }
+        val groupsById=data.groups.associateBy { it.id }
+        // Parsed JSON is shared read-only; every outbound is copied before normalization.
+        val beans=data.nodes.associate { it.id to JSONObject(it.outbound) }
+        val metadata=data.nodes.associate { it.id to JSONObject(it.metadata) }
+        val sources=data.nodes.asReversed().mapNotNull { n -> metadata.getValue(n.id).optString("sourceTag").takeIf { it.isNotBlank() }?.let { (n.groupId to it) to n } }.toMap()
+    }
+
+    fun prepareTestBatch(data:AppData):PreparedTestBatch {
+        val snapshot=data.copy(nodes=data.nodes.toList(),groups=data.groups.toList(),rules=data.rules.toList(),
+            merges=data.merges.map { it.copy(nodeIds=it.nodeIds.toList(),groupIds=it.groupIds.toList()) },settings=data.settings.toMap())
+        val inputs=Inputs(snapshot)
+        return PreparedTestBatch { id -> build(inputs,Purpose.TEST,id,"",null) }
+    }
     internal fun normalizeTransportHost(outbound:JSONObject) {
         val transport=outbound.optJSONObject("transport") ?: return
         if(transport.optString("type") !in listOf("httpupgrade","xhttp") || transport.optString("host").isNotBlank())return
@@ -47,11 +66,16 @@ object ConfigBuilder {
     }
 
     fun build(data: AppData, purpose: Purpose = Purpose.MAIN, testNodeId: Long = 0, runtimeSecret: String = "", installedPackages:Set<String>?=null): String {
+        return build(Inputs(data),purpose,testNodeId,runtimeSecret,installedPackages)
+    }
+
+    private fun build(inputs:Inputs,purpose:Purpose,testNodeId:Long,runtimeSecret:String,installedPackages:Set<String>?):String {
+        val data=inputs.data
         val testing = purpose == Purpose.TEST
-        val nodesById=data.nodes.associateBy { it.id }
-        val groupsById=data.groups.associateBy { it.id }
-        val beans=data.nodes.associate { it.id to JSONObject(it.outbound) }
-        val sources=data.nodes.asReversed().mapNotNull { n -> JSONObject(n.metadata).optString("sourceTag").takeIf { it.isNotBlank() }?.let { (n.groupId to it) to n } }.toMap()
+        val nodesById=inputs.nodesById
+        val groupsById=inputs.groupsById
+        val beans=inputs.beans
+        val sources=inputs.sources
         val subscriptionGroups=data.groups.filter { it.enabled && it.subscriptionUrl.isNotBlank() }.map { it.id }.toSet()
         val mode=data.setting("routeMode"); require(mode in listOf("rule","global","direct")) { "路由模式无效" }
         val serviceMode=data.setting("serviceMode");require(serviceMode in listOf("vpn","proxy")) { "服务模式无效" }
@@ -62,7 +86,7 @@ object ConfigBuilder {
         val auto=!testing && data.bool("homeAutoSelect")
         val homeEligible=if(auto)eligible.filter { beans.getValue(it.id).optString("type")!="custom" } else eligible
         require(homeEligible.isNotEmpty()) { "没有可自动选择的节点" }
-        val chosen=if(testing) eligible.find { it.id==testNodeId } ?: error("测速节点不存在") else homeEligible.find { it.id==data.selectedNodeId } ?: homeEligible.find { it.groupId==data.selectedGroupId } ?: homeEligible.first()
+        val chosen=if(testing) nodesById[testNodeId] ?: error("测速节点不存在") else homeEligible.find { it.id==data.selectedNodeId } ?: homeEligible.find { it.groupId==data.selectedGroupId } ?: homeEligible.first()
         if(beans.getValue(chosen.id).optString("type")=="custom") return customConfig(beans.getValue(chosen.id).getJSONObject("config"),data,purpose,runtimeSecret)
         val required = mutableSetOf<Long>()
         fun include(id: Long) { if (!required.add(id)) return; val n=nodesById[id] ?: error("代理链引用不存在的节点 $id"); val bean=beans.getValue(n.id);if(bean.optString("type")=="chain") { val ids=bean.getJSONArray("node_ids");for(i in 0 until ids.length()) include(ids.getLong(i)) }; if(bean.has("detour")) { val tag=bean.getString("detour");sources[n.groupId to tag]?.let { include(it.id) } }; val g=groupsById[n.groupId]; if(g!=null) { if(g.frontProxy>0) include(g.frontProxy); if(g.landingProxy>0) include(g.landingProxy) } }
@@ -100,7 +124,7 @@ object ConfigBuilder {
         nodes.forEach { n ->
             if(beans.getValue(n.id).optString("type")=="chain") {
                 val g=groupsById[n.groupId]?.takeUnless { n.id==it.frontProxy || n.id==it.landingProxy };val chain=flatten(n.id).toMutableList()
-                if(g!=null && g.landingProxy>0) chain.add(0,flatten(g.landingProxy).first().also { require(JSONObject(data.nodes.first { it.id==g.landingProxy }.outbound).optString("type")!="chain") { "落地代理不能是链" } })
+                if(g!=null && g.landingProxy>0) chain.add(0,flatten(g.landingProxy).first().also { require(beans.getValue(g.landingProxy).optString("type")!="chain") { "落地代理不能是链" } })
                 chain.forEachIndexed { index,item ->
                     item.put("tag",if(index==0) "node-${n.id}" else "node-${n.id}-chain-$index")
                     if(index<chain.lastIndex) item.put("detour","node-${n.id}-chain-${index+1}") else if(g!=null && g.frontProxy>0) item.put("detour","node-${g.frontProxy}")
@@ -109,14 +133,14 @@ object ConfigBuilder {
                 return@forEach
             }
             val g=groupsById[n.groupId]?.takeUnless { n.id==it.frontProxy || n.id==it.landingProxy }
-            val item=JSONObject(n.outbound).put("tag", "node-${n.id}")
+            val item=JSONObject(beans.getValue(n.id).toString()).put("tag", "node-${n.id}")
             if(item.has("detour")) { val original=item.getString("detour"); val ref=sources[n.groupId to original]; if(ref!=null) item.put("detour", "node-${ref.id}") }
             if(g!=null && g.frontProxy>0) { require(g.frontProxy!=n.id) { "前置代理不能引用自身" }; item.put("detour", "node-${g.frontProxy}") }
             if(g!=null && g.landingProxy>0) {
                 require(g.landingProxy!=n.id) { "落地代理不能引用自身" }
                 val landing=nodesById[g.landingProxy] ?: error("落地代理不存在")
                 item.put("tag", "node-${n.id}-hop"); addOutbound(item)
-                addOutbound(JSONObject(landing.outbound).put("tag", "node-${n.id}").put("detour", "node-${n.id}-hop"))
+                addOutbound(JSONObject(beans.getValue(landing.id).toString()).put("tag", "node-${n.id}").put("detour", "node-${n.id}-hop"))
             } else addOutbound(item)
         }
         out.put(JSONObject().put("type", "direct").put("tag", "direct"))
@@ -383,7 +407,7 @@ object ConfigBuilder {
         root.put("inbounds", inbound)
         SubscriptionDnsOptions.apply(root,data)
         if(!testing && data.setting("globalCustomConfig").isNotBlank()) mergeJson(root,JSONObject(data.setting("globalCustomConfig")))
-        chosen.let { JSONObject(it.metadata).optJSONObject("customConfig")?.let { custom -> mergeJson(root,custom) } }
+        chosen.let { inputs.metadata.getValue(it.id).optJSONObject("customConfig")?.let { custom -> mergeJson(root,JSONObject(custom.toString())) } }
         return sanitizeRuntime(root,data,purpose,runtimeSecret)
     }
     private fun urlTestOptions(item:JSONObject,data:AppData):JSONObject {

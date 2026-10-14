@@ -68,6 +68,11 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private val visibleClients=ConcurrentHashMap<String,Long>()
     private var sampler:Job?=null
     private var tests:Job?=null
+    private val testAccess=Mutex()
+    private val testStateLock=Any()
+    private var testSequence=0L
+    private var activeTestBatch=0L
+    private var testState=JSONObject().put("batchId",0).put("request","").put("nodes",JSONArray()).put("total",0).put("completed",0).put("running",false).toString()
     private var speed:SpeedTestSession?=null
     private var speedJob:Job?=null
     private var ruleUpdates:Job?=null
@@ -101,7 +106,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private val counters get()=traffic.counters
     private val binder=object:IRuntime.Stub() {
         override fun getSnapshot()=current.get().json()
-        override fun registerCallback(callback:IRuntimeCallback) { callbacks.register(callback);callback.onSnapshot(current.get().json());callback.onEvent("autoSelection",lastAutoNode.toString()) }
+        override fun registerCallback(callback:IRuntimeCallback) { callbacks.register(callback);callback.onSnapshot(current.get().json());callback.onEvent("autoSelection",lastAutoNode.toString());synchronized(testStateLock){callback.onEvent("testing",JSONObject(testState).put("begin",true).toString())} }
         override fun unregisterCallback(callback:IRuntimeCallback) { callbacks.unregister(callback) }
         override fun command(action:String,payload:String) { dispatch(action,payload) }
     }
@@ -171,8 +176,8 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 }
                 RuntimeCommand.RESTORE -> access.withLock { restoreData(payload) }
                 RuntimeCommand.VALIDATE -> { val args=JSONObject(payload);val name=args.getString("name");val filename=args.getString("file");require(filename.matches(Regex("validate-[0-9a-f-]{36}\\.json")));val file=File(noBackupFilesDir,filename);val error=try { require(file.length() in 1..64*1024*1024L);engine.validate(file.readText());"" } catch(e:Exception) { safeError(e) } finally { file.delete() };event("validation",JSONObject().put("name",name).put("error",error).toString()) }
-                RuntimeCommand.TEST -> startTests(JSONArray(payload))
-                RuntimeCommand.CANCEL_TESTS -> { tests?.cancel();engine.cancelTests();event("testing","[]");event("message","测速已取消") }
+                RuntimeCommand.TEST -> { val args=JSONObject(payload);startTests(args.getJSONArray("ids"),args.getString("request")) }
+                RuntimeCommand.CANCEL_TESTS -> { cancelTestBatch();event("message","测速已取消") }
                 RuntimeCommand.LOGS -> { val log=File(cacheDir,"neko.log");event("logs",JSONArray(LogTail.read(log)).toString()) }
                 RuntimeCommand.CLEAR_LOGS -> { File(cacheDir,"neko.log").writeText("");event("logs","[]") }
                 RuntimeCommand.SYSTEM_LOGS -> { val process=ProcessBuilder("logcat","-d","-t","500").redirectErrorStream(true).start();val lines=process.inputStream.bufferedReader().use { it.readLines().takeLast(500) };process.waitFor();event("logs",JSONArray(lines).toString()) }
@@ -253,9 +258,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                     ownedTest?.join()
                     completed(if(ownedTest?.isCancelled==true)"订阅已应用，延迟测试被取消" else "")
                 } finally {ownedTest?.takeIf{it.isActive}?.let { job ->
-                    job.cancel()
-                    if(tests===job){engine.cancelTests();event("testing","[]")}
-                    withContext(NonCancellable){withTimeoutOrNull(5000){job.join()}}
+                    withContext(NonCancellable){cancelTestBatch(job)}
                 }}
             }}} catch(e:TimeoutCancellationException) {completed("订阅自动应用或测速超时，将自动重试")}
             catch(e:CancellationException) { throw e } catch(e:Exception) {completed(safeError(e))}
@@ -521,37 +524,85 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             return if(connection.responseCode==204) "{}" else connection.inputStream.use { input -> val out=java.io.ByteArrayOutputStream();val bytes=ByteArray(4096);val limit=if(path=="/connections")TrafficSamples.MAX_BYTES else 1024*1024;while(true) { val n=input.read(bytes);if(n<0)break;require(out.size()+n<=limit) { "控制响应过大" };out.write(bytes,0,n) };out.toString("UTF-8") }
         } finally { connection.disconnect() }
     }
-    private fun startTests(ids:JSONArray):Job? {
-        tests?.cancel();engine.cancelTests()
-        val data=store.snapshot();val generation=current.get().generation
-        val selected=(0 until ids.length()).map { ids.getLong(it) }.distinct()
-        require(selected.size<=10000)
-        if(selected.isEmpty()) { event("testing","[]");event("message","没有可测速的节点");return null }
-        val outbounds=data.nodes.associate { it.id to it.outbound }
-        event("testing",JSONArray(selected).toString())
-        event("message","正在测试 ${selected.size} 个节点")
-        tests=scope.launch {
-            val semaphore=Semaphore((data.setting("testConcurrency").toIntOrNull() ?:4).coerceIn(1,16))
-            val pending=java.util.concurrent.ConcurrentLinkedQueue<NodeStatusUpdate>()
-            // One store transaction per second instead of one full-state rewrite per tested node.
-            fun flush() {
-                val batch=generateSequence { pending.poll() }.toList();if(batch.isEmpty()) return
-                store.updateNodeStatus(batch)
-                batch.forEach { event("test",JSONObject().put("id",it.id).put("ping",it.ping).toString()) }
-            }
-            val flusher=launch { while(isActive) { delay(1000);flush() } }
-            try {
-                coroutineScope { selected.forEach { id -> launch { semaphore.withPermit {
-                    val outbound=outbounds[id] ?: return@withPermit
-                    val ping=try { engine.test(ConfigBuilder.build(data,Purpose.TEST,id),data.setting("testUrl"),data.setting("testTimeout").toInt().coerceIn(1000,60000)) } catch(e:Exception) { if(e is CancellationException)throw e;-1 }
-                    ensureActive()
-                    pending.add(NodeStatusUpdate(id,outbound,ping,if(ping>0)3 else 1))
-                } } } }
-            } finally { flusher.cancel();withContext(NonCancellable) { flush() } }
-            event("testing","[]")
-            event("message","测速完成：${selected.size} 个节点")
+    private fun publishTestState(batchId:Long,request:String,remaining:Collection<Long>,total:Int,completed:Int,running:Boolean,begin:Boolean=false) {
+        testState=JSONObject().put("batchId",batchId).put("request",request).put("nodes",JSONArray(remaining))
+            .put("total",total).put("completed",completed).put("running",running).put("begin",begin).toString()
+        event("testing",testState)
+    }
+    private suspend fun cancelTestsLocked() {
+        val old=tests
+        synchronized(testStateLock) { activeTestBatch=0L }
+        old?.cancel();engine.cancelTests();old?.join();tests=null
+        synchronized(testStateLock) {
+            val state=JSONObject(testState)
+            publishTestState(state.getLong("batchId"),state.getString("request"),emptyList(),state.getInt("total"),state.getInt("completed"),false)
         }
-        return tests
+    }
+    private suspend fun cancelTestBatch(owned:Job?=null) = testAccess.withLock {
+        if(owned==null || tests===owned)cancelTestsLocked() else owned.cancelAndJoin()
+    }
+    private suspend fun startTests(ids:JSONArray,request:String=java.util.UUID.randomUUID().toString()):Job? = testAccess.withLock {
+        require(request.matches(Regex("[0-9a-f-]{36}"))) { "无效测速请求" }
+        cancelTestsLocked()
+        val data=store.snapshot()
+        val outbounds=data.nodes.associate { it.id to it.outbound }
+        val requested=(0 until ids.length()).map { ids.getLong(it) }.distinct()
+        require(requested.size<=10000)
+        val selected=requested.filter { it in outbounds }
+        val batchId=++testSequence
+        val remaining=selected.toMutableSet()
+        var completed=0
+        synchronized(testStateLock) {
+            activeTestBatch=batchId
+            publishTestState(batchId,request,remaining,selected.size,0,selected.isNotEmpty(),begin=true)
+        }
+        if(selected.isEmpty()) {event("message","没有可测速的节点");return@withLock null}
+        event("message","正在测试 ${selected.size} 个节点")
+        val job=scope.launch(start=CoroutineStart.LAZY) {
+            val semaphore=Semaphore(com.zane.zanebox.data.SettingDefaults.testConcurrency(data.setting("testConcurrency")))
+            val pending=java.util.concurrent.ConcurrentLinkedQueue<NodeStatusUpdate>()
+            fun flush() {
+                val updates=generateSequence { pending.poll() }.toList();if(updates.isEmpty())return
+                // Batch validation and commit share this lock with cancellation; superseded work cannot land late.
+                synchronized(testStateLock) {
+                    if(activeTestBatch!=batchId)return
+                    store.updateNodeStatus(updates)
+                    val currentNodes=store.snapshot().nodes.associateBy { it.id }
+                    updates.forEach { update ->
+                        remaining.remove(update.id);completed++
+                        val current=currentNodes[update.id]
+                        if(current?.outbound==update.outbound && current.ping==update.ping && current.status==update.status)
+                            event("test",JSONObject().put("batchId",batchId).put("request",request).put("id",update.id).put("ping",update.ping).toString())
+                    }
+                    publishTestState(batchId,request,remaining,selected.size,completed,true)
+                }
+            }
+            val flusher=launch {while(isActive){delay(1000);flush()}}
+            try {
+                val prepared=ConfigBuilder.prepareTestBatch(data)
+                val timeout=com.zane.zanebox.data.SettingDefaults.testTimeout(data.setting("testTimeout"))
+                coroutineScope {selected.forEach {id -> launch {semaphore.withPermit {
+                    ensureActive()
+                    val task=currentCoroutineContext()[Job]!!
+                    val ping=try {engine.test(prepared.build(id),data.setting("testUrl"),timeout){task.isActive}}
+                        catch(e:Exception){if(e is CancellationException)throw e;-1}
+                    ensureActive()
+                    pending.add(NodeStatusUpdate(id,outbounds.getValue(id),ping,if(ping>0)3 else 1))
+                }}}}
+            } catch(e:CancellationException) {throw e}
+            catch(e:Exception) {event("message",safeError(e));throw e}
+            finally {
+                withContext(NonCancellable) {
+                    flusher.cancelAndJoin()
+                    flush()
+                    synchronized(testStateLock) {
+                        if(activeTestBatch==batchId)publishTestState(batchId,request,emptyList(),selected.size,completed,false)
+                    }
+                }
+            }
+            synchronized(testStateLock) {if(activeTestBatch==batchId)event("message","测速完成：${selected.size} 个节点")}
+        }
+        tests=job;job.start();job
     }
     private fun startSpeed(request:JSONObject) {
         speed?.cancel();speedJob?.cancel()
@@ -694,6 +745,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         destroyed=true
         cancelSubscriptionAlarm()
         releaseWakeLock();runCatching { unregisterReceiver(wakeReceiver) }
+        synchronized(testStateLock){activeTestBatch=0L}
         commands.close();scope.cancel();engine.cancelTests();speed?.cancel()
         // onDestroy runs on the main thread; a start stuck in native code must not turn into an ANR.
         val finished=runBlocking(Dispatchers.IO) {withTimeoutOrNull(4000) {access.withLock {cleanupCore()}}}
