@@ -31,7 +31,9 @@ class SmartDragTest {
         val source=compose.onNodeWithTag(from).fetchSemanticsNode().layoutInfo.coordinates
         val target=compose.onNodeWithTag(to).fetchSemanticsNode().layoutInfo.coordinates
         val a=source.localToScreen(Offset(60f,source.size.height/2f))
-        val b=target.localToScreen(Offset(60f,target.size.height/2f))
+        val center=target.localToScreen(Offset(60f,target.size.height/2f))
+        // Cross the reorder midpoint; ending exactly on it can miss after the first consumed movement.
+        val b=center.copy(y=center.y+(if(center.y>a.y)1 else -1)*target.size.height/4f)
         inject(a,b,cancel)
     }
     private var beforeRelease:(()->Unit)?=null

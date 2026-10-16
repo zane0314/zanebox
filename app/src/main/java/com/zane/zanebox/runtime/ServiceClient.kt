@@ -41,6 +41,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private val state=MutableStateFlow(RuntimeSnapshot())
     val snapshot:StateFlow<RuntimeSnapshot> = state
     val autoNodeId=MutableStateFlow(0L)
+    private val switchGate=SwitchTestGate()
     private val event=MutableSharedFlow<String>(extraBufferCapacity=32)
     val events:SharedFlow<String> = event
     private val tests=MutableStateFlow<Map<Long,Int>>(emptyMap())
@@ -83,6 +84,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
         override fun onEvent(kind:String,payload:String) { when(kind) {
             "autoSelection" -> autoNodeId.value=payload.toLongOrNull() ?: 0L
+            "selected" -> runCatching { val o=JSONObject(payload);if(switchGate.accept(o.optString("token")) && o.optBoolean("changed"))testSwitchedNode(o.getLong("id")) }
             "test" -> synchronized(testLock) {
                 val o=JSONObject(payload)
                 if(pendingTestRequest.isBlank() && o.getLong("batchId")==activeTestBatch && o.getString("request")==activeTestRequest && activeTestRequest !in ignoredTestRequests) {
@@ -116,9 +118,9 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     }
     private val connection=object:ServiceConnection {
         override fun onServiceConnected(name:ComponentName,service:IBinder) { scope.launch { runCatching { val runtime=IRuntime.Stub.asInterface(service);runtime.registerCallback(callback);state.value=RuntimeSnapshot.parse(runtime.getSnapshot());remote=runtime;runtime.command("uiVisible","$visibilityToken|$uiVisible");runtime.command("refreshNotification","") }.onFailure { event.emit("服务连接失败") } } }
-        override fun onServiceDisconnected(name:ComponentName) { remote=null;clearPendingTests();state.value=RuntimeSnapshot(error="后台服务已断开") }
+        override fun onServiceDisconnected(name:ComponentName) { remote=null;clearPendingTests();switchGate.clear();state.value=RuntimeSnapshot(error="后台服务已断开") }
         // A dead binding never reconnects by itself (e.g. after the APK is updated); rebind so later commands work.
-        override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
+        override fun onBindingDied(name:ComponentName) { remote=null;clearPendingTests();switchGate.clear();submit { if(bound) { runCatching { context.unbindService(this) };bound=false };connect() } }
     }
     private fun clearPendingTests() {
         synchronized(testLock) {
@@ -163,7 +165,13 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     // Cosmetic refresh uses the existing binding and never starts or changes a service.
     fun refreshNotification() { scope.launch { runCatching { remote?.command("refreshNotification","") }.onFailure { event.emit("通知图标刷新失败") } } }
     fun refreshSettings() { submit {remote?.command("liveSettings","")} }
-    fun selectNode(id:Long)=command("select",id.toString())
+    /** The single entry for user node switches. The token is issued only once the command is about to be sent, and is released by the runtime's receipt or by a failed send. */
+    fun selectNode(id:Long) { submit {
+        ensureBinding()
+        val token=switchGate.issue()
+        try { remote!!.command("select",selectPayload(id,token)) } catch(e:Exception) { switchGate.accept(token);throw e }
+    } }
+    private fun testSwitchedNode(id:Long) = beginTests("test") { request -> JSONObject().put("request",request).put("ids",JSONArray().put(id)).put("quiet",true) }
     fun selectAuto()=command("selectAuto")
     fun testNodes(ids:List<Long>) = beginTests("test") { request -> JSONObject().put("request",request).put("ids",JSONArray(ids)) }
     /** Tests every candidate of a routing target and applies the lowest successful one; [serviceKey] binds the result to that policy. */
@@ -234,7 +242,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     } }
     fun close() {
         runCatching {remote?.command("uiVisible","$visibilityToken|false")}
-        commands.close();runCatching { remote?.unregisterCallback(callback) };if(bound) { context.unbindService(connection);bound=false };remote=null;scope.cancel() }
+        commands.close();switchGate.clear();runCatching { remote?.unregisterCallback(callback) };if(bound) { context.unbindService(connection);bound=false };remote=null;scope.cancel() }
     companion object {
         // ponytail: serialize group application/tests; foreground work is needed if queues exceed WorkManager's window.
         private val subscriptionApply=Mutex()

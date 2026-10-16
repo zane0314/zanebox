@@ -416,12 +416,17 @@ def run_ui(out: Path, version: dict[str, str], appdata: dict[str, object]) -> di
                 if choice not in ("node-6101", "node-6102"):
                     raise AcceptanceError(f"release UI 未保存本轮分组择优：{choice}")
                 expected_exit = "EXIT_A" if choice == "node-6101" else "EXIT_B"
+                successful = [node for node in selected["nodes"] if node["id"] in (6101, 6102) and node["ping"] > 0 and node["status"] != 1]
+                lowest = min(successful, key=lambda node: node["ping"])
+                env["LOWEST_NODE_NAME"] = lowest["name"]
+                env["LOWEST_NODE_DELAY"] = f"{lowest['ping']} ms"
             elif phase == "connect":
                 opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": "http://127.0.0.1:12080"}))
                 with opener.open(PROBE_URL, timeout=8) as response:
                     exit_name = response.read().decode("utf-8").strip()
                 if exit_name != expected_exit:
                     raise AcceptanceError(f"实际代理出口应为本轮择优 {expected_exit}，收到 {exit_name!r}")
+                capture_screenshot(out / "smart-lowest-connected.png")
         return {"status": "PASS", "phases": completed, "proxyExit": expected_exit}
     finally:
         if client is not None:

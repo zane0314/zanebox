@@ -12,7 +12,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zane.zanebox.data.AppData
@@ -68,15 +74,14 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
             item(key=itemKey) {
                 val value=smartTarget(data,key)
                 UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==itemKey)null else spring()).then(drag.modifier(itemKey)).testTag("smart_card_$key")) {
-                    UiRow(title,targetName(value,data),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
-                    onClick={expanded=if(expanded==key)"" else key},modifier=Modifier.testTag("smart_$key"),trailing={Column(horizontalAlignment=Alignment.End) {
-                        targetLatencyLabel(data,value,testing)?.let { label->LatencyAction(label,"smart_latency_$key"){vm.service.testTarget(value,key)} }
-                        TextButton(onClick={target=key},modifier=Modifier.testTag("smart_target_$key")){Text(targetName(value,data))}
-                    }})
+                    val node=smartLowestNode(data,value,testing)
+                    SmartPolicyRow(title,when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
+                        node,targetName(value,data),smartLatencyLabel(data,value,testing),key,onClick={expanded=if(expanded==key)"" else key},onLatency={vm.service.testTarget(value,key)},onTarget={target=key})
                     if(expanded==key) {
                         val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
                         val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))
-                        UiRow("分流目标",targetName(value,data),onClick={target=key})
+                        UiRow("分流目标",targetName(value,data),onClick={target=key},summaryLines=Int.MAX_VALUE,modifier=Modifier.testTag("smart_goal_$key"))
+                        node?.let{UiRow("最低延迟节点",it,chevron=false,summaryLines=Int.MAX_VALUE,modifier=Modifier.testTag("smart_current_$key"))}
                         UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(usesBuiltin)"内置兼容规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
                         UiRow("选择应用",if(installedPackages==null)"正在读取应用" else "${com.zane.zanebox.config.effectiveSmartPackages(data,key,installedPackages).size} 个有效应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
                         if(custom.any{it.first==key}) {
@@ -101,6 +106,60 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         }
     }
     if(confirmDelete.isNotBlank())UiAlertDialog(onDismissRequest={confirmDelete=""},title={Text("删除自定义应用组？")},confirmButton={TextButton(onClick={val key=confirmDelete;vm.edit{d->d.copy(settings=d.settings.filterKeys{!it.startsWith("smartCustom.$key.") && it!="smart.$key.target" && it!="smartUrl.$key" && it!="smartRules.$key"})};confirmDelete=""}){Text("删除")}},dismissButton={TextButton(onClick={confirmDelete=""}){Text("取消")}})
+}
+
+/** Two lines: name + group-lowest latency, then the concrete node + the one target button. Names ellipsize, the latency value is always complete; large fonts grow the row. */
+@Composable private fun SmartPolicyRow(title:String,icon:androidx.compose.ui.graphics.vector.ImageVector,node:String?,targetName:String,latency:String?,key:String,
+    onClick:()->Unit,onLatency:()->Unit,onTarget:()->Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).testTag("smart_$key").heightIn(min=68.dp).padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+        Icon(icon,null,Modifier.size(24.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant);Spacer(Modifier.width(14.dp))
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val half=maxWidth*0.5f
+            Column(Modifier.fillMaxWidth()) {
+                TitleWithLatency(
+                    title={Text(uiText(title),fontSize=13.sp,lineHeight=18.sp,fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)},
+                    latency=latency?.let { label -> {
+                        TextButton(onClick=onLatency,modifier=Modifier.defaultMinSize(minHeight=48.dp).testTag("smart_latency_$key"),contentPadding=PaddingValues(horizontal=8.dp)) {
+                            LatencyText(uiText(label))
+                        }
+                    } })
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    if(node!=null)Text(uiText(node),Modifier.weight(1f).testTag("smart_node_$key"),fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                    else Spacer(Modifier.weight(1f))
+                    TextButton(onClick=onTarget,modifier=Modifier.widthIn(max=half).testTag("smart_target_$key"),contentPadding=PaddingValues(start=8.dp,end=4.dp)) {
+                        Text(uiText(targetName),fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
+                        Icon(Icons.Outlined.ArrowDropDown,null,Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The value keeps its full natural width (one unbreakable line), measured from a finite intrinsic width. */
+@Composable private fun LatencyText(value:String) {
+    Layout({ Text(value,fontSize=12.sp,softWrap=false) }) { measurables,_ ->
+        val part=measurables.single().let { it.measure(Constraints.fixedWidth(it.maxIntrinsicWidth(Constraints.Infinity))) }
+        layout(part.width,part.height) { part.placeRelative(0,0) }
+    }
+}
+
+/**
+ * Title and latency share a line only while the latency keeps its full natural width and the title keeps a readable minimum;
+ * otherwise the latency moves under the title, right-aligned. The value is never given less than it needs.
+ */
+@Composable private fun TitleWithLatency(title:@Composable ()->Unit,latency:(@Composable ()->Unit)?) {
+    if(latency==null) { title();return }
+    Layout({ title();latency() },Modifier.fillMaxWidth()) { measurables,constraints ->
+        val width=constraints.maxWidth
+        val action=measurables[1].measure(Constraints(maxWidth=width))
+        val side=width-action.width>=88.dp.roundToPx()
+        val head=measurables[0].measure(Constraints(maxWidth=if(side)width-action.width else width))
+        if(side) {
+            val height=maxOf(head.height,action.height)
+            layout(width,height) { head.placeRelative(0,(height-head.height)/2);action.placeRelative(width-action.width,(height-action.height)/2) }
+        } else layout(width,head.height+action.height) { head.placeRelative(0,0);action.placeRelative(width-action.width,head.height) }
+    }
 }
 
 @Composable internal fun SmartMenu(data:AppData,vm:AppViewModel,onOpen:(String)->Unit) {

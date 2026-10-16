@@ -175,7 +175,12 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 RuntimeCommand.RELOAD,RuntimeCommand.AUTO_RELOAD -> access.withLock {reloadCore(action==RuntimeCommand.AUTO_RELOAD)}
                 RuntimeCommand.SUBSCRIPTION_UPDATED -> applySubscription(payload)
                 RuntimeCommand.LIVE_SETTINGS -> access.withLock {applyLiveSettings(store.snapshot());if(current.get().connectionState==RuntimeState.CONNECTED)startRuleUpdates()}
-                RuntimeCommand.SELECT -> access.withLock { selectNode(payload.toLong()) }
+                RuntimeCommand.SELECT -> {
+                    val request=parseSelectRequest(payload);var changed=false
+                    // Success, no-op and failure all report back, so the client can always release the token.
+                    try { changed=access.withLock { selectNode(request.id) } }
+                    finally { if(request.token.isNotBlank())event("selected",JSONObject().put("id",request.id).put("token",request.token).put("changed",changed).toString()) }
+                }
                 RuntimeCommand.SELECT_AUTO -> access.withLock {
                     val before=store.snapshot()
                     check(current.get().connectionState !in listOf(RuntimeState.STARTING,RuntimeState.STOPPING)) { "请等待连接操作完成" }
@@ -192,7 +197,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 }
                 RuntimeCommand.RESTORE -> access.withLock { restoreData(payload) }
                 RuntimeCommand.VALIDATE -> { val args=JSONObject(payload);val name=args.getString("name");val filename=args.getString("file");require(filename.matches(Regex("validate-[0-9a-f-]{36}\\.json")));val file=File(noBackupFilesDir,filename);val error=try { require(file.length() in 1..64*1024*1024L);engine.validate(file.readText());"" } catch(e:Exception) { safeError(e) } finally { file.delete() };event("validation",JSONObject().put("name",name).put("error",error).toString()) }
-                RuntimeCommand.TEST -> { val args=JSONObject(payload);startTests(args.getJSONArray("ids"),args.getString("request")) }
+                RuntimeCommand.TEST -> { val args=JSONObject(payload);startTests(args.getJSONArray("ids"),args.getString("request"),quiet=args.optBoolean("quiet")) }
                 RuntimeCommand.CANCEL_TESTS -> { cancelTestBatch();event("message","测速已取消") }
                 RuntimeCommand.LOGS -> { val log=File(cacheDir,"neko.log");event("logs",JSONArray(LogTail.read(log)).toString()) }
                 RuntimeCommand.CLEAR_LOGS -> { File(cacheDir,"neko.log").writeText("");event("logs","[]") }
@@ -384,8 +389,9 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         val old=current.get();publish(old.copy(state=RuntimeState.STOPPING.code));sampler?.cancel();sampler=null;ruleUpdates?.cancel();ruleUpdates=null
         try { recordTraffic(data,engine.close(),selections);traffic.persistTraffic();connectionBytes.clear() } finally { publish(RuntimeSnapshot(generation=old.generation+1,txTotal=sessionTx,rxTotal=sessionRx));if(terminal) {cancelSubscriptionAlarm();foregroundStop();owner.stopSelf()};event("message","已断开") }
     }
-    private suspend fun selectNode(id:Long) {
-        val before=store.snapshot();val node=before.nodes.firstOrNull { it.id==id } ?: error("节点不存在")
+    /** Returns whether the user's selection really changed the node (re-picking the stored one does not). */
+    private suspend fun selectNode(id:Long):Boolean {
+        val before=store.snapshot();val changed=isEffectiveNodeSwitch(before,id);val node=before.nodes.firstOrNull { it.id==id } ?: error("节点不存在")
         require(before.groups.any { it.id==node.groupId && it.enabled }) { "节点分组已禁用" }
         check(current.get().connectionState !in listOf(RuntimeState.STARTING,RuntimeState.STOPPING)) { "请等待连接操作完成" }
         if(current.get().connectionState==RuntimeState.CONNECTED) { collectTraffic(before);publish(current.get().copy(txTotal=sessionTx,rxTotal=sessionRx)) }
@@ -397,6 +403,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         store.update { it.copy(settings=it.settings+("selectedNodeId" to id.toString())+("selectedGroupId" to node.groupId.toString())+("homeAutoSelect" to "false")) }
         try { if(current.get().connectionState==RuntimeState.CONNECTED && (selectionBase.bool("homeAutoSelect") || engine.configuredProxyDefault=="home-auto" || !engine.select("node-$id"))) { stopCore(terminal=false,syncSelection=false);startCore(selectionData) };syncAppliedSelection(id);event("autoSelection","0");event("message","默认节点已切换") }
         catch(e:Exception) { store.update { it.copy(settings=it.settings+("selectedNodeId" to before.selectedNodeId.toString())+("selectedGroupId" to before.selectedGroupId.toString())+("homeAutoSelect" to before.setting("homeAutoSelect","false"))) };if(running && current.get().connectionState!=RuntimeState.CONNECTED)runCatching{startCore(previous)};throw e }
+        return changed
     }
     private suspend fun restoreData(name:String) {
         require(name.matches(Regex("restore-[0-9a-f-]{36}\\.json"))) { "恢复文件名无效" }
@@ -624,7 +631,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         }
         return failures.map { "已保存的目标择优未能恢复，$it" }
     }
-    private suspend fun startTests(ids:JSONArray,request:String=java.util.UUID.randomUUID().toString(),targetRequest:TargetRequest?=null):Job? = testAccess.withLock {
+    private suspend fun startTests(ids:JSONArray,request:String=java.util.UUID.randomUUID().toString(),targetRequest:TargetRequest?=null,quiet:Boolean=false):Job? = testAccess.withLock {
         require(request.matches(Regex("[0-9a-f-]{36}"))) { "无效测速请求" }
         cancelTestsLocked()
         val data=store.snapshot()
@@ -641,7 +648,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             publishTestState(batchId,request,remaining,selected.size,0,selected.isNotEmpty(),begin=true)
         }
         if(selected.isEmpty()) {event("message",if(targetRequest!=null && plan==null)"分流目标已变化，已取消测速" else "没有可测速的节点");return@withLock null}
-        event("message","正在测试 ${selected.size} 个节点")
+        if(!quiet)event("message","正在测试 ${selected.size} 个节点")
         val job=scope.launch(start=CoroutineStart.LAZY) {
             val semaphore=Semaphore(com.zane.zanebox.data.SettingDefaults.testConcurrency(data.setting("testConcurrency")))
             val pending=java.util.concurrent.ConcurrentLinkedQueue<NodeStatusUpdate>()
@@ -691,7 +698,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                     }
                 }
             }
-            if(plan==null)synchronized(testStateLock) {if(activeTestBatch==batchId)event("message","测速完成：${selected.size} 个节点")}
+            if(plan==null && !quiet)synchronized(testStateLock) {if(activeTestBatch==batchId)event("message","测速完成：${selected.size} 个节点")}
         }
         tests=job;job.start();job
     }

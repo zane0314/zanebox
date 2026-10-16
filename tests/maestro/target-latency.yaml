@@ -154,8 +154,26 @@ appId: com.zane.zanebox
 - extendedWaitUntil:
     visible: ".*(代理已连接|代理开关：断开).*"
     timeout: 30000
+- tapOn:
+    id: tab_1
+- scrollUntilVisible:
+    element:
+      id: smart_node_youtube
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: smart_node_youtube
+      text: ${LOWEST_NODE_NAME}
+    timeout: 15000
+- assertVisible:
+    id: smart_latency_youtube
+    containsChild:
+      text: ${LOWEST_NODE_DELAY}
 
 # @phase disconnect
+- tapOn:
+    id: main_back
 - tapOn:
     id: connect_toggle
 - extendedWaitUntil:
