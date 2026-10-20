@@ -13,7 +13,7 @@ internal val manualApplyDefaults=mapOf(
 private val liveSettings=setOf(
     "browseGroupId","theme","uiSkin","launcherIcon","appLanguage","showBottomBar","alwaysShowAddress","hideFromRecentApps","confirmProfileDelete",
     "autoStart","showDirectSpeed","showGroupInNotification","acquireWakeLock","networkReset","wakeResetConnections",
-    "testTimeout","testConcurrency","rulesProvider","rulesGeoipUrl","rulesGeositeUrl","rulesUpdateInterval","rulesUpdateDelay",
+    "testTimeout","testConcurrency","autoTestSelectedNode","rulesProvider","rulesGeoipUrl","rulesGeositeUrl","rulesUpdateInterval","rulesUpdateDelay",
     "allowInsecureOnRequest","appTLSVersion","webdavUrl","webdavUser","webdavPassword","exitProbeUrl")
 private val autoSettings=setOf(
     "routeMode","tunStack","mtu","statsEnabled","meteredNetwork","logLevel","bypassLan","bypassLanInCore","concurrentDial","sniff","resolveDestination",

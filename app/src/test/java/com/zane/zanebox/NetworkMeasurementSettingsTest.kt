@@ -9,6 +9,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NetworkMeasurementSettingsTest {
+    @Test fun selectedNodeAutoTestDefaultsOnAndIsAnImmediatePersistentPreference() {
+        val base=AppData()
+        assertTrue("延续现有选择节点自动测速行为",base.bool("autoTestSelectedNode"))
+        val pref=preferenceSections(base).flatMap { it.second }.single { it.key=="autoTestSelectedNode" }
+        assertTrue(pref.boolean)
+        assertEquals(SettingsApply.LIVE,settingsApply(pref.key))
+        val disabled=base.copy(settings=mapOf(pref.key to "false"))
+        assertFalse(AppData.fromJson(disabled.toJson()).bool(pref.key))
+    }
+
     @Test fun settingsReachEveryConfigPurposeAndRoundTrip() {
         val base=AppData(nodes=listOf(Node(1,1,"fixture","""{"type":"socks","server":"example.test","server_port":1080}""")),groups=listOf(Group(1,"fixture")))
         assertTrue(base.bool("unifiedDelay")); assertTrue(base.bool("tcpConcurrent"))

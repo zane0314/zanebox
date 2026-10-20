@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.zane.zanebox.data.*
 import com.zane.zanebox.runtime.ServiceClient
+import com.zane.zanebox.ui.nodeComparator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -27,6 +28,61 @@ class NodeSwitchLatencyTest {
         nodes=listOf(node(7101,19081),node(7102,19082),node(7103,19999)),groups=listOf(Group(7101,"switch")),
         settings=mapOf("serviceMode" to "proxy","dnsRemote" to "local","sniff" to "false","homeAutoSelect" to "false",
             "selectedNodeId" to "7101","selectedGroupId" to "7101","testUrl" to "http://203.0.113.9:19080/test","testTimeout" to "4000","testConcurrency" to "12"))
+
+    @Test fun disabledSwitchStartsNoTestButManualTestsStillWork() {
+        ZaneStore(context).use { store ->
+            val original=store.snapshot();val client=ServiceClient(context)
+            try {
+                store.replace(data.copy(settings=data.settings+("autoTestSelectedNode" to "false")));client.connect()
+                kotlinx.coroutines.runBlocking {client.readSnapshot()}
+                val base=client.testProgress.value.batchId
+                client.selectNode(7102)
+                waitFor("关闭开关仍能选择节点") {store.snapshot().selectedNodeId==7102L}
+                Thread.sleep(1200)
+                assertEquals(base,client.testProgress.value.batchId)
+                assertEquals(-1,store.snapshot().nodes.first {it.id==7102L}.ping)
+                client.testNodes(listOf(7102))
+                waitFor("关闭自动测速不影响手动测速") {client.testProgress.value.batchId>base && !client.testProgress.value.running && client.testResults.value[7102L]?.let {it>0}==true}
+                store.putSetting("autoTestSelectedNode","true")
+                val manual=client.testProgress.value.batchId
+                client.selectNode(7101)
+                waitFor("重新开启立即生效") {client.testProgress.value.batchId> manual && !client.testProgress.value.running && client.testResults.value[7101L]?.let {it>0}==true}
+            } finally {client.cancelTests();client.close();store.replace(original)}
+        }
+    }
+
+    @Test fun automaticSwitchUsesUnifiedDelayAndPreservesRankAcrossReloads() {
+        ZaneStore(context).use { store ->
+            val original=store.snapshot();val client=ServiceClient(context)
+            val results=org.json.JSONObject()
+            try {
+                client.connect();kotlinx.coroutines.runBlocking {client.readSnapshot()}
+                for(unified in listOf(false,true)) {
+                    val source=data.copy(nodes=listOf(node(7101,19081).copy(ping=100,order=0,status=3),node(7102,19092).copy(ping=2000,order=1,status=3)),
+                        settings=data.settings+("autoTestSelectedNode" to "true")+("unifiedDelay" to unified.toString())+("sort_group_7101" to "true")+("testUrl" to "http://203.0.113.9:19093/measure"))
+                    store.replace(source)
+                    val base=client.testProgress.value.batchId
+                    client.selectNode(7102)
+                    waitFor("自动测速统一延迟=$unified") {client.testProgress.value.batchId>base && !client.testProgress.value.running && client.testResults.value[7102L]?.let {it>0}==true}
+                    val updated=store.snapshot();val ping=updated.nodes.last().ping
+                    results.put(unified.toString(),ping)
+                    if(unified)assertTrue("开启后排除首次握手 $ping",ping in 1..300)
+                    else assertTrue("关闭后保留首次握手 $ping",ping>=350)
+                    assertEquals("保持延迟升序模式", "true",updated.setting("sort_group_7101"))
+                    fun order(d:AppData)=d.nodes.sortedWith(nodeComparator(d,d.groups.single())).map {it.id}
+                    assertEquals(listOf(7101L,7102L),order(updated))
+                    ZaneStore(context).use {reopened->assertEquals("重开仍保持原顺序",listOf(7101L,7102L),order(reopened.snapshot()))}
+                    if(unified) {
+                        val round=client.testProgress.value.batchId
+                        client.testNodes(listOf(7102))
+                        waitFor("手动重测可更新排序") {client.testProgress.value.batchId>round && !client.testProgress.value.running}
+                        assertEquals(listOf(7102L,7101L),order(store.snapshot()))
+                    }
+                }
+                java.io.File(context.getExternalFilesDir(null),"switch-unified-delay.json").writeText(results.toString())
+            } finally {client.cancelTests();client.close();store.replace(original)}
+        }
+    }
 
     @Test fun everyEffectiveSwitchTestsOnceAndResultsStayWithTheirRound() {
         val store=ZaneStore(context);val original=store.snapshot();val client=ServiceClient(context)

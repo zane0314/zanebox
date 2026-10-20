@@ -173,10 +173,10 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
             homeGroupIds.getOrNull(index)?.takeIf{it!=latestBrowse}?.let{vm.setting("browseGroupId",it.toString())}
         }
     }
-    val sortSettings=data.settings.filterKeys{it.startsWith("sort_group_") || it.startsWith("sort_mode_group_") || it.startsWith("legacy.preference.anybox_nodes.sort_group_")}
+    val sortSettings=data.settings.filterKeys{it.startsWith("sort_ping_") || it.startsWith("sort_group_") || it.startsWith("sort_mode_group_") || it.startsWith("legacy.preference.anybox_nodes.sort_group_")}
     val groupNodes=remember(data.nodes,data.groups,search,sortSettings) {
         val filtered=data.nodes.filter{search.isBlank() || it.name.contains(search,true)}.groupBy{it.groupId}
-        val grouped=orderedGroups.associate{it.id to filtered[it.id].orEmpty().sortedWith(nodeComparator(nodeSortMode(data,it)))}
+        val grouped=orderedGroups.associate{it.id to filtered[it.id].orEmpty().sortedWith(nodeComparator(data,it))}
         grouped+(0L to orderedGroups.filter{it.enabled}.flatMap{grouped[it.id].orEmpty()})
     }
     LaunchedEffect(data.browseGroupId,search) { selectingNodes=false;selectedNodes=emptySet() }

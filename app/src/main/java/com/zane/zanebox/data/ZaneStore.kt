@@ -112,25 +112,37 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
         return next.merged
     }
     fun replace(data:AppData):AppData = update { data }
-    /** Latency results only touch node_status; a result is dropped if the node was deleted or edited meanwhile. */
-    @Synchronized fun updateNodeStatus(updates:List<NodeStatusUpdate>):Int {
+    /** Automatic results retain the pre-test sort ping in kv; manual results release it. Both commit atomically. */
+    @Synchronized fun updateNodeStatus(updates:List<NodeStatusUpdate>,preserveSort:Boolean=false):Int {
         if(updates.isEmpty()) return 0
         val db=writableDatabase;db.beginTransaction()
         var next:Cache?=null;var changed=0
         try {
             val current=load(db);val nodes=current.base.nodes.associateBy { it.id }
             val status=HashMap(current.status)
+            val kv=HashMap(current.kv)
             updates.forEach { update ->
                 if(nodes[update.id]?.outbound!=update.outbound) return@forEach
                 val previous=status[update.id] ?: DEFAULT;val value=previous.copy(ping=update.ping,status=update.status)
+                val sortKey="sort_ping_${update.id}"
+                if(preserveSort) { if(value!=previous && sortKey !in kv)kv[sortKey]=previous.ping.toString() }
+                else kv.remove(sortKey)
                 if(value==previous) return@forEach
                 if(value==DEFAULT) { status.remove(update.id);db.delete("node_status","node_id=?",arrayOf(update.id.toString())) } else { status[update.id]=value;writeStatus(db,update.id,value) }
                 changed++
             }
+            var statusRevision=current.statusRevision;var kvRevision=current.kvRevision
             if(changed>0) {
+                statusRevision++
                 db.execSQL("UPDATE state SET status_revision=? WHERE id=1",arrayOf(current.statusRevision+1))
-                next=Cache(current.revision,current.statusRevision+1,current.kvRevision,current.base,current.baseJson,status,current.kv)
             }
+            if(kv!=current.kv) {
+                kvRevision++
+                current.kv.keys.filter { it !in kv }.forEach {writeKv(db,it,null,kvRevision)}
+                kv.forEach { (key,value)->if(current.kv[key]!=value)writeKv(db,key,value,kvRevision) }
+                db.execSQL("UPDATE state SET kv_revision=? WHERE id=1",arrayOf(kvRevision))
+            }
+            if(changed>0 || kvRevision!=current.kvRevision)next=Cache(current.revision,statusRevision,kvRevision,current.base,current.baseJson,status,kv)
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         next?.let { publish(it) }

@@ -21,7 +21,7 @@ internal fun AppData.reorderNodes(requested:List<Long>):AppData {
     val orders=mutableMapOf<Long,Int>();var nextSettings=settings
     val byGroup=nodes.groupBy{it.groupId}
     groups.forEach { group ->
-        val current=byGroup[group.id].orEmpty().sortedWith(nodeComparator(nodeSortMode(this,group))).map{it.id}
+        val current=byGroup[group.id].orEmpty().sortedWith(nodeComparator(this,group)).map{it.id}
         val currentIds=current.toSet()
         val visible=requested.filter{it in currentIds}
         val reordered=reorderVisibleIds(current,visible)
@@ -70,6 +70,12 @@ internal fun nodeSortMode(data:AppData,group:Group):NodeSortMode {
 }
 
 internal fun nodeComparator(latency:Boolean):Comparator<Node> = nodeComparator(if(latency)NodeSortMode.LATENCY else NodeSortMode.DEFAULT)
+internal fun nodeComparator(data:AppData,group:Group):Comparator<Node> {
+    val mode=nodeSortMode(data,group)
+    if(mode!=NodeSortMode.LATENCY)return nodeComparator(mode)
+    fun ping(node:Node)=data.settings["sort_ping_${node.id}"]?.toIntOrNull() ?: node.ping
+    return compareBy<Node> { if(ping(it)>0)0 else 1 }.thenBy { if(ping(it)>0)ping(it) else 0 }.thenBy { it.order }
+}
 internal fun nodeComparator(mode:NodeSortMode):Comparator<Node> = when(mode) {
     NodeSortMode.DEFAULT -> compareBy { it.order }
     NodeSortMode.LATENCY -> compareBy<Node> { if(it.ping>0)0 else 1 }.thenBy { if(it.ping>0)it.ping else 0 }.thenBy { it.order }

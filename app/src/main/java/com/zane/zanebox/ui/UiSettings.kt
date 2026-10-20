@@ -83,9 +83,9 @@ import org.json.JSONObject
             val expanded=expandedGroups
             val groupsById=groups.associateBy{it.id}
             val groupDrag=rememberDragSort(groups.map{"manage-group-${it.id}"},listState){vm.reorderGroups(it.map{key->key.toString().substringAfterLast('-').toLong()})}
-            val byGroup=remember(data.nodes,data.groups,data.settings.filterKeys{it.contains("sort_group_") || it.startsWith("sort_mode_group_")}) {
+            val byGroup=remember(data.nodes,data.groups,data.settings.filterKeys{it.startsWith("sort_ping_") || it.contains("sort_group_") || it.startsWith("sort_mode_group_")}) {
                 val grouped=data.nodes.groupBy{it.groupId}
-                groups.associate{it.id to grouped[it.id].orEmpty().sortedWith(nodeComparator(nodeSortMode(data,it)))}
+                groups.associate{it.id to grouped[it.id].orEmpty().sortedWith(nodeComparator(data,it))}
             }
             val nodesById=remember(data.nodes){data.nodes.associateBy{it.id}}
             val nodeDrags=groups.filter{it.id in expanded}.associate { group -> group.id to key(group.id) {

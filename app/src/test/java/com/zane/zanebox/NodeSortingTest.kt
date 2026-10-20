@@ -28,4 +28,13 @@ class NodeSortingTest {
         assertEquals(listOf("节点2","节点02","节点002","节点10","节点20","节点1000000000000000000000000"),names.sortedWith(Comparator(::naturalNodeName)))
         assertEquals(0,naturalNodeName("Alpha2","alpha2"))
     }
+    @Test fun automaticResultsKeepTheOriginalLatencyRankUntilExplicitRefresh() {
+        val data=AppData(nodes=listOf(Node(1,7,"a","{}",ping=20,order=0),Node(2,7,"b","{}",ping=100,order=1)),groups=listOf(group))
+        val updated=data.copy(nodes=data.nodes.map { if(it.id==2L)it.copy(ping=5) else it },settings=mapOf("sort_ping_2" to "100"))
+        assertEquals(listOf(1L,2L),updated.nodes.sortedWith(nodeComparator(updated,group)).map { it.id })
+        assertEquals(5,updated.nodes.last().ping)
+        val refreshed=updated.copy(settings=emptyMap())
+        assertEquals(listOf(2L,1L),refreshed.nodes.sortedWith(nodeComparator(refreshed,group)).map { it.id })
+        assertEquals(listOf(1L,2L),updated.nodes.sortedWith(nodeComparator(updated,group.copy(options="{}"))).map { it.id })
+    }
 }

@@ -58,6 +58,27 @@ class ZaneStoreV2Test {
         } finally { context.deleteDatabase(name) }
     }
 
+    @Test fun automaticLatencyRankAndResultCommitTogetherAndManualTestReleasesRank() {
+        val name="auto-rank-${java.util.UUID.randomUUID()}.db"
+        try {
+            ZaneStore(context,name).use { a -> ZaneStore(context,name).use { b ->
+                val node=Node(1,1,"a",outbound(1),ping=100,status=3,tx=17,rx=31)
+                a.replace(AppData(nodes=listOf(node),groups=listOf(Group(1,"g"))))
+                val revision=raw(name,"SELECT revision FROM state")
+                assertEquals(1,a.updateNodeStatus(listOf(NodeStatusUpdate(1,node.outbound,5,3)),preserveSort=true))
+                assertEquals("100",b.snapshot().setting("sort_ping_1"));assertEquals(5,b.snapshot().nodes.single().ping)
+                a.updateNodeStatus(listOf(NodeStatusUpdate(1,node.outbound,9,3)),preserveSort=true)
+                assertEquals("首次自动更新前的排序依据应保留","100",b.snapshot().setting("sort_ping_1"))
+                a.updateNodeStatus(listOf(NodeStatusUpdate(1,"{}",1,3)),preserveSort=true)
+                assertEquals(9,b.snapshot().nodes.single().ping)
+                assertEquals(0,a.updateNodeStatus(listOf(NodeStatusUpdate(1,node.outbound,9,3))))
+                assertFalse("即使手动测值相同也要解除排序保持",b.snapshot().settings.containsKey("sort_ping_1"))
+                assertEquals(17L,b.snapshot().nodes.single().tx);assertEquals(31L,b.snapshot().nodes.single().rx)
+                assertEquals("延迟更新不改主数据",revision,raw(name,"SELECT revision FROM state"))
+            } }
+        } finally {context.deleteDatabase(name)}
+    }
+
     /** Compares the 1.0.0 write pattern (whole JSON state per result) with v2 batched rows on the same 2000-node data. */
     @Test fun twoThousandNodeStoragePerformance() {
         val name="perf-${java.util.UUID.randomUUID()}.db";val legacyName="perf-legacy-${java.util.UUID.randomUUID()}.db"

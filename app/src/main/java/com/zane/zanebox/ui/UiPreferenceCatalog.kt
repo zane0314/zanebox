@@ -96,6 +96,7 @@ internal fun preferenceSections(data:AppData)=listOf(
     "其他设置" to listOf(
         Preference("testUrl","测速链接",SettingDefaults.value("testUrl")),
         boolean("unifiedDelay","统一延迟"),
+        boolean("autoTestSelectedNode","选择节点后自动更新延迟"),
         boolean("tcpConcurrent","TCP 并发"),
         Preference("testTimeout","连接测试超时（毫秒）",SettingDefaults.value("testTimeout")),
         Preference("testConcurrency","连接测试并发",SettingDefaults.value("testConcurrency")),
@@ -161,6 +162,7 @@ internal val preferenceAppearance=mapOf(
     "strictRoute" to PreferenceAppearance("严格路由","",0),
     "testUrl" to PreferenceAppearance("测速链接","",R.drawable.zb_ref_ic_baseline_cast_connected_24),
     "unifiedDelay" to PreferenceAppearance("统一延迟","复用已建立的连接测量延迟，减少首次握手的影响",0),
+    "autoTestSelectedNode" to PreferenceAppearance("选择节点后自动更新延迟","选择节点后按统一延迟设置更新该节点延迟，保持列表顺序",0),
     "tcpConcurrent" to PreferenceAppearance("TCP 并发","同时尝试域名的多个 IP，使用先成功的连接",0),
     "clashApi" to PreferenceAppearance("启用 Clash API","在 127.0.0.1:9090 提供 clash api 和 yacd 仪表板",R.drawable.zb_ref_baseline_construction_24),
     "networkReset" to PreferenceAppearance("当网络发生变化时重置出站连接","",R.drawable.zb_ref_ic_baseline_flip_camera_android_24),

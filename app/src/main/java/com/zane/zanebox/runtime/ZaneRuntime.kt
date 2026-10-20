@@ -179,7 +179,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                     val request=parseSelectRequest(payload);var changed=false
                     // Success, no-op and failure all report back, so the client can always release the token.
                     try { changed=access.withLock { selectNode(request.id) } }
-                    finally { if(request.token.isNotBlank())event("selected",JSONObject().put("id",request.id).put("token",request.token).put("changed",changed).toString()) }
+                    finally { if(request.token.isNotBlank())event("selected",JSONObject().put("id",request.id).put("token",request.token).put("changed",changed).put("autoTest",store.snapshot().bool("autoTestSelectedNode")).toString()) }
                 }
                 RuntimeCommand.SELECT_AUTO -> access.withLock {
                     val before=store.snapshot()
@@ -659,7 +659,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                 // Batch validation and commit share this lock with cancellation; superseded work cannot land late.
                 synchronized(testStateLock) {
                     if(activeTestBatch!=batchId)return
-                    store.updateNodeStatus(updates)
+                    store.updateNodeStatus(updates,preserveSort=quiet)
                     val currentNodes=store.snapshot().nodes.associateBy { it.id }
                     updates.forEach { update ->
                         remaining.remove(update.id);completed++

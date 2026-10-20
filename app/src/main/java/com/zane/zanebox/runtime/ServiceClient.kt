@@ -84,7 +84,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         } }
         override fun onEvent(kind:String,payload:String) { when(kind) {
             "autoSelection" -> autoNodeId.value=payload.toLongOrNull() ?: 0L
-            "selected" -> runCatching { val o=JSONObject(payload);if(switchGate.accept(o.optString("token")) && o.optBoolean("changed"))testSwitchedNode(o.getLong("id")) }
+            "selected" -> runCatching { val o=JSONObject(payload);if(switchGate.accept(o.optString("token")) && o.optBoolean("changed") && o.optBoolean("autoTest",true))testSwitchedNode(o.getLong("id")) }
             "test" -> synchronized(testLock) {
                 val o=JSONObject(payload)
                 if(pendingTestRequest.isBlank() && o.getLong("batchId")==activeTestBatch && o.getString("request")==activeTestRequest && activeTestRequest !in ignoredTestRequests) {

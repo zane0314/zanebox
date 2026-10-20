@@ -98,7 +98,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         if(key=="ipv6Mode") { require(value in listOf("ipv4_only","prefer_ipv4","prefer_ipv6","ipv6_only"));edit { it.copy(settings=it.settings+("ipv6Mode" to value)+("ipv6" to (value!="ipv4_only").toString())+("dnsStrategy" to value)) };return }
         if(settingsApply(key)==SettingsApply.LIVE)task {
-            store.update {it.copy(settings=it.settings+(key to value))}
+            store.update {data->
+                val group=if(key.startsWith("sort_group_"))key.removePrefix("sort_group_").toLongOrNull() else if(key.startsWith("sort_mode_group_"))key.removePrefix("sort_mode_group_").toLongOrNull() else null
+                val ranks=data.nodes.filter {it.groupId==group}.map {"sort_ping_${it.id}"}.toSet()
+                data.copy(settings=data.settings.filterKeys {it !in ranks}+(key to value))
+            }
             if(key!="browseGroupId")message.value="已保存"
             if(key in setOf("networkReset","acquireWakeLock","rulesUpdateInterval","rulesUpdateDelay"))withContext(Dispatchers.Main){service.refreshSettings()}
         } else edit(onSaved={if(key.startsWith("smartUrl."))service.refreshSettings()},autoApply=settingsApply(key)==SettingsApply.AUTO) { it.copy(settings = it.settings + (key to value)) }
@@ -233,7 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         message.value="订阅已更新并完成延迟测试"
     }
     fun saveGroup(inputGroup:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { val group=inputGroup.copy(id=inputGroup.id.takeIf {it>0} ?: store.nextId());SubscriptionOptions.parse(group.options);store.update { d->
-        val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}") else emptySet()
+        val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}")+d.nodes.filter {it.groupId==group.id}.map {"sort_ping_${it.id}"} else emptySet()
         d.copy(groups=if(d.groups.any{it.id==group.id})d.groups.map{if(it.id==group.id)group else it}else d.groups+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
     }; saved("组已保存"); withContext(Dispatchers.Main){onSaved()}; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }
     private fun dav():WebDavClient { val d=store.snapshot();return WebDavClient(d.setting("webdavUrl"),d.setting("webdavUser"),d.setting("webdavPassword")) }

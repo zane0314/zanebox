@@ -19,6 +19,7 @@ internal object SettingDefaults {
         "concurrentDial" to "false",
         "tcpConcurrent" to "true",
         "unifiedDelay" to "true",
+        "autoTestSelectedNode" to "true",
         "sniff" to "true",
         "resolveDestination" to "false",
         "enableTLSFragment" to "false",
