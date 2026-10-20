@@ -266,28 +266,20 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 		waitReader.Set(resp.Body)
 	}()
 
-	if body == nil {
-		select {
-		case <-waitReader.Wait:
-		case <-ctx.Done():
-			c.closed.Store(true)
-			waitReader.SetErr(ctx.Err())
-			waitReader.Close()
-			return nil, nil, nil, ctx.Err()
+	// A downstream server may defer headers until the first upload arrives.
+	// Return once connected so DialContext can start that upload; Read still
+	// waits for the response (and receives any later HTTP error).
+	select {
+	case <-gotConn.Wait():
+	case <-waitReader.Wait:
+	case <-ctx.Done():
+		c.closed.Store(true)
+		waitReader.SetErr(ctx.Err())
+		waitReader.Close()
+		if closer, ok := body.(io.Closer); ok {
+			closer.Close()
 		}
-	} else {
-		select {
-		case <-gotConn.Wait():
-		case <-waitReader.Wait:
-		case <-ctx.Done():
-			c.closed.Store(true)
-			waitReader.SetErr(ctx.Err())
-			waitReader.Close()
-			if closer, ok := body.(io.Closer); ok {
-				closer.Close()
-			}
-			return nil, nil, nil, ctx.Err()
-		}
+		return nil, nil, nil, ctx.Err()
 	}
 
 	doErrMu.Lock()
@@ -325,11 +317,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body i
 		req.Header.Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	}
 	if req.Header.Get("Content-Type") == "" {
-		if !c.options.NoGRPCHeader {
-			req.Header.Set("Content-Type", "application/grpc")
-		} else {
-			req.Header.Set("Content-Type", "application/octet-stream")
-		}
+		req.Header.Set("Content-Type", "application/octet-stream")
 	}
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)

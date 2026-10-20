@@ -17,6 +17,8 @@ internal object SettingDefaults {
         "bypassLan" to "false",
         "bypassLanInCore" to "false",
         "concurrentDial" to "false",
+        "tcpConcurrent" to "true",
+        "unifiedDelay" to "true",
         "sniff" to "true",
         "resolveDestination" to "false",
         "enableTLSFragment" to "false",

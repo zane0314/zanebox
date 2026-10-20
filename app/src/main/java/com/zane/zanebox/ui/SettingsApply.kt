@@ -18,7 +18,7 @@ private val liveSettings=setOf(
 private val autoSettings=setOf(
     "routeMode","tunStack","mtu","statsEnabled","meteredNetwork","logLevel","bypassLan","bypassLanInCore","concurrentDial","sniff","resolveDestination",
     "ipv6Mode","ipv6","dnsStrategy","dnsRemote","dnsDirect","dnsStrategyRemote","dnsStrategyDirect","dnsStrategyServer","domainStrategy","dnsHosts",
-    "enableDnsRouting","fakeDns","testUrl","urlTestInterval","urlTestTolerance","enableTLSFragment","muxEnabled","muxProtocol","muxMaxStreams","muxPadding")
+    "enableDnsRouting","fakeDns","testUrl","unifiedDelay","tcpConcurrent","urlTestInterval","urlTestTolerance","enableTLSFragment","muxEnabled","muxProtocol","muxMaxStreams","muxPadding")
 internal fun settingsApply(key:String):SettingsApply=when {
     key in liveSettings || key.startsWith("sort_group_") || key.startsWith("sort_mode_group_") -> SettingsApply.LIVE
     key in autoSettings -> SettingsApply.AUTO

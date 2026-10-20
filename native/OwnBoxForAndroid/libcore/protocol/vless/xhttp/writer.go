@@ -29,11 +29,15 @@ func (w uploadWriter) Write(b []byte) (int, error) {
 	xray.Must2(buffer.Write(b))
 
 	var writed int
-	for _, buff := range buffer.MultiBuffer {
+	for i, buff := range buffer.MultiBuffer {
+		// WriteMultiBuffer transfers ownership; the upload may drain and release
+		// buff before it returns, so capture its length before the handoff.
+		size := int(buff.Len())
 		if err := w.WriteMultiBuffer(buf.MultiBuffer{buff}); err != nil {
+			buf.ReleaseMulti(buffer.MultiBuffer[i+1:])
 			return writed, err
 		}
-		writed += int(buff.Len())
+		writed += size
 	}
 	return writed, nil
 }

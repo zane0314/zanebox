@@ -150,7 +150,7 @@ object SubscriptionParser {
             "httpupgrade" -> { val tr = JSONObject().put("type", t).put("path", q["path"] ?: "/"); q["host"]?.takeIf { it.isNotEmpty() }?.let { tr.put("host", it) }; o.put("transport", tr) }
             "http", "h2" -> o.put("transport", httpTransport(q["path"] ?: "/", splitHosts(q["host"])))
             "grpc" -> o.put("transport", JSONObject().put("type", "grpc").put("service_name", q["serviceName"] ?: q["path"] ?: ""))
-            "xhttp", "splithttp" -> { val extra = q["extra"]?.let { JSONObject(it) } ?: JSONObject(); o.put("transport", extra.put("type", "xhttp").put("path", q["path"] ?: "/").put("host", q["host"] ?: "").put("mode", q["mode"] ?: "auto")) }
+            "xhttp", "splithttp" -> o.put("transport", xhttpTransport(q["extra"]?.let { JSONObject(it) } ?: JSONObject(), q))
             "quic" -> o.put("transport", JSONObject().put("type", "quic"))
             else -> error("暂不支持传输 $t；可导入完整 sing-box JSON")
         }
@@ -171,6 +171,35 @@ object SubscriptionParser {
     }
     private fun firstString(value: Any?): String? = when (value) { null -> null; is List<*> -> value.firstOrNull()?.toString(); else -> value.toString() }
     private fun stringList(value: Any?): List<String> = when (value) { null -> emptyList(); is List<*> -> value.mapNotNull { it?.toString() }; else -> splitHosts(value.toString()) }
+    private fun xhttpTransport(extra: JSONObject, fields: Map<String, String>): JSONObject {
+        // Only rename known XHTTP options; headers and their values are opaque.
+        fun aliases(obj: JSONObject, keys: Map<String, String>, ranges: Set<String>) {
+            keys.forEach { (from, to) ->
+                listOf(from, to.replace('_', '-')).forEach { alias ->
+                    if (obj.has(alias)) { if (!obj.has(to)) obj.put(to, obj.get(alias)); obj.remove(alias) }
+                }
+            }
+            // The native Range decoder accepts strings or {from,to}, not JSON numbers.
+            ranges.forEach { key -> if (obj.opt(key) is Number) obj.put(key, obj.get(key).toString()) }
+        }
+        aliases(extra, mapOf(
+            "xPaddingBytes" to "x_padding_bytes", "noGRPCHeader" to "no_grpc_header", "noSSEHeader" to "no_sse_header",
+            "scMaxEachPostBytes" to "sc_max_each_post_bytes", "scMinPostsIntervalMs" to "sc_min_posts_interval_ms",
+            "scMaxBufferedPosts" to "sc_max_buffered_posts", "scStreamUpServerSecs" to "sc_stream_up_server_secs"
+        ), setOf("x_padding_bytes", "sc_max_each_post_bytes", "sc_min_posts_interval_ms", "sc_stream_up_server_secs"))
+        extra.optJSONObject("xmux")?.let { xmux ->
+            aliases(xmux, mapOf(
+                "maxConcurrency" to "max_concurrency", "maxConnections" to "max_connections", "cMaxReuseTimes" to "c_max_reuse_times",
+                "hMaxRequestTimes" to "h_max_request_times", "hMaxReusableSecs" to "h_max_reusable_secs", "hKeepAlivePeriod" to "h_keep_alive_period"
+            ), setOf("max_concurrency", "max_connections", "c_max_reuse_times", "h_max_request_times", "h_max_reusable_secs"))
+        }
+        require(!extra.has("downloadSettings")) { "XHTTP downloadSettings 暂不兼容；请使用含 transport.download 的 sing-box JSON" }
+        extra.put("type", "xhttp")
+        listOf("path" to "/", "host" to "", "mode" to "auto").forEach { (key, fallback) ->
+            extra.put(key, fields[key] ?: extra.optString(key, fallback))
+        }
+        return extra
+    }
     private fun clashTransport(o: JSONObject, m: Map<*, *>) {
         val network = m["network"]?.toString() ?: "tcp"
         val opts = m["$network-opts"] as? Map<*, *> ?: emptyMap<Any, Any>()
@@ -185,6 +214,21 @@ object SubscriptionParser {
             "http" -> o.put("transport", httpTransport(firstString(opts["path"]) ?: "/", stringList(headers["Host"]), opts["method"]?.toString()))
             "h2" -> o.put("transport", httpTransport(firstString(opts["path"]) ?: "/", stringList(opts["host"])))
             "grpc" -> o.put("transport", JSONObject().put("type", "grpc").put("service_name", opts["grpc-service-name"]?.toString() ?: ""))
+            "xhttp", "splithttp" -> {
+                val extra = when (val raw = opts["extra"]) {
+                    null -> JSONObject()
+                    is Map<*, *> -> JSONObject(raw)
+                    is String -> JSONObject(raw)
+                    else -> error("XHTTP extra 格式无效")
+                }
+                opts.forEach { (key, value) -> if (key != "extra" && value != null) extra.put(key.toString(), JSONObject.wrap(value)) }
+                val host = firstString(opts["host"]) ?: firstString(headers.entries.firstOrNull { it.key.toString().equals("Host", true) }?.value)
+                val fields = mutableMapOf<String, String>()
+                host?.let { fields["host"] = it }
+                firstString(opts["path"])?.let { fields["path"] = it }
+                opts["mode"]?.let { fields["mode"] = it.toString() }
+                o.put("transport", xhttpTransport(extra, fields))
+            }
             else -> transport(o, mapOf("type" to network, "path" to (firstString(opts["path"]) ?: "/"), "host" to (firstString(headers["Host"]) ?: "")))
         }
     }

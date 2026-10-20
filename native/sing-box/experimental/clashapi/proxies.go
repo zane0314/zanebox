@@ -225,6 +225,9 @@ func getProxyDelay(server *Server) func(w http.ResponseWriter, r *http.Request) 
 		proxy := r.Context().Value(CtxKeyProxy).(adapter.Outbound)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(timeout))
 		defer cancel()
+		if unified, configured := urltest.UnifiedDelayPolicy(server.ctx); configured {
+			ctx = urltest.WithUnifiedDelay(ctx, unified)
+		}
 
 		delay, err := urltest.URLTest(ctx, url, proxy)
 		defer func() {

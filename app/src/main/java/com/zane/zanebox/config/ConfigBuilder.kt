@@ -437,6 +437,10 @@ object ConfigBuilder {
         }
     }
     private fun sanitizeRuntime(root:JSONObject,data:AppData,purpose:Purpose,secret:String):String {
+        val experimental=root.optJSONObject("experimental") ?: JSONObject().also {root.put("experimental",it)}
+        experimental.put("unified_delay",data.bool("unifiedDelay"))
+        val route=root.optJSONObject("route") ?: JSONObject().also {root.put("route",it)}
+        route.put("tcp_concurrent",data.bool("tcpConcurrent"))
         root.optJSONObject("dns")?.let { dns ->
             fun migrate(array:JSONArray):JSONArray { val result=JSONArray();for(i in 0 until array.length()) {
                 val rule=array.getJSONObject(i);rule.optJSONArray("rules")?.let { rule.put("rules",migrate(it)) }

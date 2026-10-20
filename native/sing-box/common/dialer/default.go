@@ -31,6 +31,7 @@ var (
 )
 
 type DefaultDialer struct {
+	tcpConcurrent          *bool
 	dialer4                tfo.Dialer
 	dialer6                tfo.Dialer
 	udpDialer4             net.Dialer
@@ -226,6 +227,12 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 	tcpDialer4 := tfo.Dialer{Dialer: dialer4, DisableTFO: !options.TCPFastOpen}
 	tcpDialer6 := tfo.Dialer{Dialer: dialer6, DisableTFO: !options.TCPFastOpen}
 	return &DefaultDialer{
+		tcpConcurrent: func() *bool {
+			if networkManager != nil {
+				return networkManager.DefaultOptions().TCPConcurrent
+			}
+			return nil
+		}(),
 		dialer4:                tcpDialer4,
 		dialer6:                tcpDialer6,
 		udpDialer4:             udpDialer4,
@@ -247,6 +254,8 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 		networkFallbackDelay:   networkFallbackDelay,
 	}, nil
 }
+
+func (d *DefaultDialer) TCPConcurrent() *bool { return d.tcpConcurrent }
 
 func setMarkWrapper(networkManager adapter.NetworkManager, mark uint32, isDefault bool) control.Func {
 	if networkManager == nil {

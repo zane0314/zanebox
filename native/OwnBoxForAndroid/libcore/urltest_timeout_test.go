@@ -2,10 +2,14 @@ package libcore
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sagernet/sing-box/protocol/group"
 )
 
 func TestSplitURLTestTimeoutKeepsTotalBudget(t *testing.T) {
@@ -17,6 +21,50 @@ func TestSplitURLTestTimeoutKeepsTotalBudget(t *testing.T) {
 		if primary <= 0 {
 			t.Fatalf("timeout=%d has no primary budget", timeout)
 		}
+	}
+}
+
+func TestUnifiedDelayConfigControlsAutomaticURLTestGroup(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if requests.Add(1) == 1 {
+					time.Sleep(120 * time.Millisecond)
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+			config := fmt.Sprintf(`{"log":{"disabled":true},"experimental":{"unified_delay":%t},"outbounds":[{"type":"direct","tag":"direct"},{"type":"urltest","tag":"auto","outbounds":["direct"],"url":%q}],"route":{"final":"direct","tcp_concurrent":true}}`, enabled, server.URL)
+			instance, err := checkVlessConfig(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer instance.Close()
+			outbound, _ := instance.Outbound().Outbound("auto")
+			// Initialize the automatic group's existing pipeline without its
+			// background PostStart probe racing the controlled first response.
+			auto := outbound.(*group.URLTest)
+			if err := auto.Start(); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			result, _ := auto.URLTest(ctx)
+			measured := int(result["direct"])
+			if measured <= 0 {
+				t.Fatal("automatic group did not produce a result")
+			}
+			if enabled && measured >= 100 {
+				t.Fatalf("automatic unified delay retained warm-up: %d", measured)
+			}
+			if enabled && requests.Load() < 2 {
+				t.Fatal("automatic group did not perform warm measurement")
+			}
+			if !enabled && (measured < 100 || requests.Load() != 1) {
+				t.Fatalf("automatic cold mode: %dms, %d requests", measured, requests.Load())
+			}
+		})
 	}
 }
 

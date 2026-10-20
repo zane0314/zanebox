@@ -79,6 +79,30 @@ func (s *HistoryStorage) Close() error {
 }
 
 func URLTest(ctx context.Context, link string, detour N.Dialer) (uint16, error) {
+	if unified, configured := UnifiedDelayPolicy(ctx); configured {
+		ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		defer cancel()
+		if link == "" {
+			link = "https://www.gstatic.com/generate_204"
+		}
+		transport := &http.Transport{
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				return detour.DialContext(ctx, network, M.ParseSocksaddr(address))
+			},
+			TLSClientConfig: &tls.Config{Time: ntp.TimeFuncFromContext(ctx), RootCAs: adapter.RootPoolFromContext(ctx)},
+		}
+		defer transport.CloseIdleConnections()
+		client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		request, err := http.NewRequestWithContext(ctx, http.MethodHead, link, nil)
+		if err != nil {
+			return 0, err
+		}
+		delay, err := MeasureDelay(ctx, client, request, unified)
+		if delay > 65535 {
+			delay = 65535
+		}
+		return uint16(delay), err
+	}
 	multiplexOutbound, isMultiplexOutbound := common.Cast[adapter.OutboundWithMultiplex](detour)
 	if isMultiplexOutbound && multiplexOutbound.MultiplexEnabled() {
 		_, err := urlTest(ctx, link, detour)

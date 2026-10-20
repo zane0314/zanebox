@@ -25,7 +25,9 @@ class ConfigSubscriptionTest {
         assertEquals(3,main.getJSONArray("inbounds").length())
         assertFalse(ConfigBuilder.build(data,Purpose.EXPORT).contains("runtime-only"))
         val test=JSONObject(ConfigBuilder.build(data,Purpose.TEST,1))
-        assertEquals(0,test.getJSONArray("inbounds").length()); assertFalse(test.has("experimental"))
+        assertEquals(0,test.getJSONArray("inbounds").length())
+        assertFalse(test.getJSONObject("experimental").has("clash_api"));assertFalse(test.getJSONObject("experimental").has("cache_file"))
+        assertTrue(test.getJSONObject("experimental").getBoolean("unified_delay"))
     }
     @Test fun ruleTargetsAndDnsSets() {
         val data=AppData(nodes=listOf(node),groups=listOf(Group(1,"组")),merges=listOf(MergeGroup(2,"合并",groupIds=listOf(1))),rules=listOf(RouteRule(1,"国内",domains="geosite:cn,geoip:cn",outbound="direct"),RouteRule(2,"拒绝",domains="ads.example",outbound="block"),RouteRule(3,"合并",domains="site.example",outbound="merge:2")))

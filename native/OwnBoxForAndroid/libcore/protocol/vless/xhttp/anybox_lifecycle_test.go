@@ -530,7 +530,11 @@ func TestAnyBoxDefaultDialerClientCloseHTTP2(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		_, _, _, err := client.OpenStream(context.Background(), server.URL, nil, false)
+		reader, _, _, err := client.OpenStream(context.Background(), server.URL, nil, false)
+		if err == nil {
+			defer reader.Close()
+			_, err = reader.Read(make([]byte, 1))
+		}
 		result <- err
 	}()
 	select {
@@ -577,14 +581,12 @@ func TestAnyBoxDefaultDialerClientCloseHTTP2(t *testing.T) {
 	}
 }
 
-func TestAnyBoxOpenStreamContextCancelPendingH2(t *testing.T) {
+func TestAnyBoxOpenStreamContextCancelBeforeH2Connection(t *testing.T) {
 	started := make(chan struct{})
 	canceled := make(chan struct{})
 	var startOnce, cancelOnce sync.Once
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		startOnce.Do(func() { close(started) })
-		<-r.Context().Done()
-		cancelOnce.Do(func() { close(canceled) })
+		t.Error("canceled connection unexpectedly sent a request")
 	}))
 	server.EnableHTTP2 = true
 	if err := http2.ConfigureServer(server.Config, &http2.Server{}); err != nil {
@@ -593,7 +595,15 @@ func TestAnyBoxOpenStreamContextCancelPendingH2(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 	baseTransport := server.Client().Transport.(*http.Transport)
-	h2Transport := &http2.Transport{TLSClientConfig: baseTransport.TLSClientConfig.Clone()}
+	h2Transport := &http2.Transport{
+		TLSClientConfig: baseTransport.TLSClientConfig.Clone(),
+		DialTLSContext: func(ctx context.Context, _, _ string, _ *tls.Config) (net.Conn, error) {
+			startOnce.Do(func() { close(started) })
+			<-ctx.Done()
+			cancelOnce.Do(func() { close(canceled) })
+			return nil, ctx.Err()
+		},
+	}
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
 	client := &DefaultDialerClient{
 		options:     &V2RayXHTTPBaseOptions{},
@@ -616,7 +626,7 @@ func TestAnyBoxOpenStreamContextCancelPendingH2(t *testing.T) {
 	select {
 	case <-started:
 	case <-time.After(3 * time.Second):
-		t.Fatal("local H2 server did not receive request")
+		t.Fatal("H2 connection did not start")
 	}
 	cancelDial()
 	select {
@@ -762,7 +772,11 @@ func TestAnyBoxDefaultDialerClientCloseHTTP3(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		_, _, _, err := client.OpenStream(context.Background(), "https://"+udpConn.LocalAddr().String()+"/xhttp", nil, false)
+		reader, _, _, err := client.OpenStream(context.Background(), "https://"+udpConn.LocalAddr().String()+"/xhttp", nil, false)
+		if err == nil {
+			defer reader.Close()
+			_, err = reader.Read(make([]byte, 1))
+		}
 		result <- err
 	}()
 	select {

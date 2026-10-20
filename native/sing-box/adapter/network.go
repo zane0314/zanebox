@@ -38,6 +38,7 @@ type NetworkManager interface {
 }
 
 type NetworkOptions struct {
+	TCPConcurrent        *bool
 	BindInterface        string
 	RoutingMark          uint32
 	DomainResolver       string

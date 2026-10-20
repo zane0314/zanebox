@@ -36,6 +36,7 @@ type resolveDialer struct {
 	router        adapter.DNSRouter
 	dialer        N.Dialer
 	parallel      bool
+	tcpConcurrent *bool
 	server        string
 	initOnce      sync.Once
 	initErr       error
@@ -44,6 +45,10 @@ type resolveDialer struct {
 }
 
 func NewResolveDialer(ctx context.Context, dialer N.Dialer, parallel bool, server string, queryOptions adapter.DNSQueryOptions, fallbackDelay time.Duration) ResolveDialer {
+	var tcpConcurrent *bool
+	if manager := service.FromContext[adapter.NetworkManager](ctx); manager != nil {
+		tcpConcurrent = manager.DefaultOptions().TCPConcurrent
+	}
 	if parallelDialer, isParallel := dialer.(ParallelInterfaceDialer); isParallel {
 		return &resolveParallelNetworkDialer{
 			resolveDialer{
@@ -51,6 +56,7 @@ func NewResolveDialer(ctx context.Context, dialer N.Dialer, parallel bool, serve
 				router:        service.FromContext[adapter.DNSRouter](ctx),
 				dialer:        dialer,
 				parallel:      parallel,
+				tcpConcurrent: tcpConcurrent,
 				server:        server,
 				queryOptions:  queryOptions,
 				fallbackDelay: fallbackDelay,
@@ -63,6 +69,7 @@ func NewResolveDialer(ctx context.Context, dialer N.Dialer, parallel bool, serve
 		router:        service.FromContext[adapter.DNSRouter](ctx),
 		dialer:        dialer,
 		parallel:      parallel,
+		tcpConcurrent: tcpConcurrent,
 		server:        server,
 		queryOptions:  queryOptions,
 		fallbackDelay: fallbackDelay,
@@ -73,6 +80,8 @@ type resolveParallelNetworkDialer struct {
 	resolveDialer
 	dialer ParallelInterfaceDialer
 }
+
+func (d *resolveDialer) TCPConcurrent() *bool { return d.tcpConcurrent }
 
 func (d *resolveDialer) initialize() error {
 	d.initOnce.Do(d.initServer)
@@ -103,6 +112,12 @@ func (d *resolveDialer) DialContext(ctx context.Context, network string, destina
 	addresses, err := d.router.Lookup(ctx, destination.Fqdn, d.queryOptions)
 	if err != nil {
 		return nil, err
+	}
+	if N.NetworkName(network) == N.NetworkTCP && d.tcpConcurrent != nil {
+		if *d.tcpConcurrent {
+			return dialConcurrentTCP(ctx, d.dialer, network, destination, addresses)
+		}
+		return N.DialSerial(ctx, d.dialer, network, destination, addresses)
 	}
 	if d.parallel {
 		return N.DialParallel(ctx, d.dialer, network, destination, addresses, d.queryOptions.Strategy == C.DomainStrategyPreferIPv6, d.fallbackDelay)
@@ -154,6 +169,15 @@ func (d *resolveParallelNetworkDialer) DialParallelInterface(ctx context.Context
 	}
 	if fallbackDelay == 0 {
 		fallbackDelay = d.fallbackDelay
+	}
+	if N.NetworkName(network) == N.NetworkTCP && d.tcpConcurrent != nil {
+		if *d.tcpConcurrent {
+			wrapper := interfaceTCPDialer{ParallelInterfaceDialer: d.dialer, strategy: func(ctx context.Context, network string, address M.Socksaddr) (net.Conn, error) {
+				return d.dialer.DialParallelInterface(ctx, network, address, strategy, interfaceType, fallbackInterfaceType, fallbackDelay)
+			}}
+			return dialConcurrentTCP(ctx, wrapper, network, destination, addresses)
+		}
+		return DialSerialNetwork(ctx, d.dialer, network, destination, addresses, strategy, interfaceType, fallbackInterfaceType, fallbackDelay)
 	}
 	if d.parallel {
 		return DialParallelNetwork(ctx, d.dialer, network, destination, addresses, d.queryOptions.Strategy == C.DomainStrategyPreferIPv6, strategy, interfaceType, fallbackInterfaceType, fallbackDelay)

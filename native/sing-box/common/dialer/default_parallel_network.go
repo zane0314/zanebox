@@ -51,6 +51,17 @@ func DialParallelNetwork(ctx context.Context, dialer ParallelInterfaceDialer, ne
 		}
 		destinationAddresses = []netip.Addr{destination.Addr}
 	}
+	if policy, ok := dialer.(interface{ TCPConcurrent() *bool }); ok && N.NetworkName(network) == N.NetworkTCP {
+		if enabled := policy.TCPConcurrent(); enabled != nil {
+			if !*enabled {
+				return DialSerialNetwork(ctx, dialer, network, destination, destinationAddresses, strategy, interfaceType, fallbackInterfaceType, fallbackDelay)
+			}
+			wrapper := interfaceTCPDialer{ParallelInterfaceDialer: dialer, strategy: func(ctx context.Context, network string, address M.Socksaddr) (net.Conn, error) {
+				return dialer.DialParallelInterface(ctx, network, address, strategy, interfaceType, fallbackInterfaceType, fallbackDelay)
+			}}
+			return dialConcurrentTCP(ctx, wrapper, network, destination, destinationAddresses)
+		}
+	}
 
 	if fallbackDelay == 0 {
 		fallbackDelay = N.DefaultFallbackDelay

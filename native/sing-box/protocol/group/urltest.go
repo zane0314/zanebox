@@ -371,6 +371,9 @@ func (g *URLTestGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
 }
 
 func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {
+	if unified, configured := urltest.UnifiedDelayPolicy(g.ctx); configured {
+		ctx = urltest.WithUnifiedDelay(ctx, unified)
+	}
 	if g.checking.Swap(true) {
 		return make(map[string]uint16), nil
 	}

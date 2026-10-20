@@ -146,6 +146,9 @@ func New(options Options) (*Box, error) {
 
 	ctx = pause.WithDefaultManager(ctx)
 	experimentalOptions := common.PtrValueOrDefault(options.Experimental)
+	if experimentalOptions.UnifiedDelay != nil {
+		ctx = urltest.WithUnifiedDelay(ctx, *experimentalOptions.UnifiedDelay)
+	}
 	debugOptions := common.PtrValueOrDefault(experimentalOptions.Debug)
 	err := checkDebugOptions(debugOptions)
 	if err != nil {
