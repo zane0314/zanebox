@@ -1,5 +1,6 @@
 package com.zane.zanebox.subscription
 
+import com.zane.zanebox.json.requireJsonDepth
 import org.json.JSONArray
 import org.json.JSONObject
 import org.yaml.snakeyaml.LoaderOptions
@@ -28,6 +29,7 @@ object SubscriptionParser {
         require(text.isNotBlank()) { "没有可导入的内容" }
         require(text.length <= LIMIT && depth <= 2) { "订阅超过解析限制" }
         if (text.startsWith("{") || text.startsWith("[")) {
+            requireJsonDepth(text)
             val array = if (text.startsWith("[")) JSONArray(text) else JSONObject(text).let { root ->
                 val outbounds=root.optJSONArray("outbounds"); val endpoints=root.optJSONArray("endpoints")
                 if(outbounds!=null || endpoints!=null) JSONArray().apply { listOfNotNull(outbounds,endpoints).forEach { a -> for(i in 0 until a.length()) put(a.get(i)) } }
@@ -58,6 +60,7 @@ object SubscriptionParser {
         else { out.remove("server_port");out.put("server_ports",JSONArray(ranges.map { "${it.first}:${it.second}" })) }
     }
     private fun canonical(obj: JSONObject, name: String, link: String = ""): ParsedNode {
+        if(obj.optString("type") in listOf("hysteria","hysteria2") && obj.has("hop_interval"))obj.put("hop_interval",hysteriaHopInterval(obj.getString("hop_interval")))
         require(obj.optString("type").isNotBlank()) { "节点缺少协议" }
         val metadata=JSONObject(); if(obj.has("tag")) metadata.put("sourceTag", obj.getString("tag"))
         obj.remove("name"); obj.remove("display_name"); obj.remove("tag")
@@ -65,6 +68,7 @@ object SubscriptionParser {
         require(obj.has("server") || obj.optString("type") in listOf("wireguard", "tailscale")) { "节点缺少服务器" }
         return ParsedNode(name.ifBlank { obj.optString("server", "节点") }, obj.toString(), link, metadata.toString())
     }
+    private fun checkedJson(text:String):JSONObject { require(text.length<=LIMIT) { "订阅超过解析限制" };requireJsonDepth(text);return JSONObject(text) }
     private fun decoded(s: String) = ShareUri.decode(s)
     private fun decode64(s: String): String = String(Base64.getDecoder().decode(s.filterNot { it.isWhitespace() }.replace('-', '+').replace('_', '/')), Charsets.UTF_8)
     private fun utls(tls: JSONObject, fingerprint: String?) {
@@ -75,7 +79,7 @@ object SubscriptionParser {
     private fun link(raw: String): ParsedNode {
         val scheme = raw.substringBefore("://").lowercase()
         if (scheme == "vmess") {
-            val v = JSONObject(decode64(raw.substringAfter("://").substringBefore('#')))
+            val v = checkedJson(decode64(raw.substringAfter("://").substringBefore('#')))
             val server = v.getString("add")
             val o = JSONObject().put("type", "vmess").put("server", server).put("server_port", v.get("port").toString().trim().toInt()).put("uuid", v.getString("id")).put("security", v.optString("scy").ifBlank { "auto" }).put("alter_id", v.optInt("aid", 0))
             if (v.optString("tls") == "tls") {
@@ -117,7 +121,8 @@ object SubscriptionParser {
         }
         if (type == "hysteria2" && q["obfs"] == "salamander") o.put("obfs", JSONObject().put("type", "salamander").put("password", q["obfs-password"] ?: error("混淆缺少密码")))
         if(type in listOf("hysteria","hysteria2")) {
-            (q["mport"] ?: q["ports"] ?: q["server_ports"])?.takeIf { it.isNotBlank() }?.let { applyHysteriaPorts(o,it); q["hop_interval"]?.let { hop -> o.put("hop_interval",if(hop.endsWith("s")) hop else "${hop}s") } }
+            (q["mport"] ?: q["ports"] ?: q["server_ports"])?.takeIf { it.isNotBlank() }?.let { applyHysteriaPorts(o,it) }
+            q["hop_interval"]?.let { o.put("hop_interval",hysteriaHopInterval(it)) }
         }
         transport(o, q)
         return canonical(o, decoded(uri.rawFragment.orEmpty()).ifBlank { "$type ${uri.host}" }, raw)
@@ -150,7 +155,7 @@ object SubscriptionParser {
             "httpupgrade" -> { val tr = JSONObject().put("type", t).put("path", q["path"] ?: "/"); q["host"]?.takeIf { it.isNotEmpty() }?.let { tr.put("host", it) }; o.put("transport", tr) }
             "http", "h2" -> o.put("transport", httpTransport(q["path"] ?: "/", splitHosts(q["host"])))
             "grpc" -> o.put("transport", JSONObject().put("type", "grpc").put("service_name", q["serviceName"] ?: q["path"] ?: ""))
-            "xhttp", "splithttp" -> o.put("transport", xhttpTransport(q["extra"]?.let { JSONObject(it) } ?: JSONObject(), q))
+            "xhttp", "splithttp" -> o.put("transport", xhttpTransport(q["extra"]?.let { checkedJson(it) } ?: JSONObject(), q))
             "quic" -> o.put("transport", JSONObject().put("type", "quic"))
             else -> error("暂不支持传输 $t；可导入完整 sing-box JSON")
         }
@@ -218,7 +223,7 @@ object SubscriptionParser {
                 val extra = when (val raw = opts["extra"]) {
                     null -> JSONObject()
                     is Map<*, *> -> JSONObject(raw)
-                    is String -> JSONObject(raw)
+                    is String -> checkedJson(raw)
                     else -> error("XHTTP extra 格式无效")
                 }
                 opts.forEach { (key, value) -> if (key != "extra" && value != null) extra.put(key.toString(), JSONObject.wrap(value)) }
@@ -264,6 +269,10 @@ object SubscriptionParser {
             val peer=JSONObject().put("address", s("server")).put("port", s("port").toInt()).put("public_key", s("public-key")).put("allowed_ips", JSONArray(listOf("0.0.0.0/0", "::/0")))
             m["pre-shared-key"]?.let { peer.put("pre_shared_key", it) }; (m["reserved"] as? List<*>)?.let { peer.put("reserved", JSONArray(it)) }
             o.put("peers", JSONArray().put(peer)); o.remove("server"); o.remove("server_port"); m["mtu"]?.let { o.put("mtu", it) }
+        }
+        if(type in listOf("hysteria","hysteria2")) {
+            (m["ports"] ?: m["mport"] ?: m["server_ports"])?.toString()?.let { applyHysteriaPorts(o,it) }
+            (m["hop-interval"] ?: m["hop_interval"])?.toString()?.let { o.put("hop_interval",hysteriaHopInterval(it)) }
         }
         clashTransport(o, m)
         if (type == "shadowsocks") { m["plugin"]?.let { o.put("plugin", it) }; (m["plugin-opts"] as? Map<*, *>)?.let { options -> o.put("plugin_opts", options.entries.joinToString(";") { "${it.key}=${it.value}" }) } }

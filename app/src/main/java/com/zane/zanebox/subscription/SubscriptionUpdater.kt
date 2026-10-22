@@ -33,8 +33,14 @@ object SubscriptionUpdater {
                     if(address!=null) {
                         if(target===out) { out.optJSONObject("tls")?.takeIf { it.optBoolean("enabled") && it.optString("server_name").isBlank() }?.put("server_name",host);meta.put("subscriptionOriginalServer",host) }
                         target.put(key,address)
-                    } else meta.put("subscriptionResolveError","没有允许地址族的解析结果，保留域名")
-                } catch(e:CancellationException) { throw e } catch(_:Exception) { meta.put("subscriptionResolveError","节点域名解析失败，保留域名") }
+                    } else {
+                        require(options.serverDnsResolver.isBlank() || options.serverDnsResolver=="local") { "指定节点 DNS 没有允许地址族的解析结果，已保留原节点" }
+                        meta.put("subscriptionResolveError","没有允许地址族的解析结果，保留域名")
+                    }
+                } catch(e:CancellationException) { throw e } catch(e:Exception) {
+                    require(options.serverDnsResolver.isBlank() || options.serverDnsResolver=="local") { "指定节点 DNS 解析失败，已保留原节点" }
+                    meta.put("subscriptionResolveError","节点域名解析失败，保留域名")
+                }
             }
             parsed.copy(outbound=out.toString(),metadata=meta.toString())
         } }.awaitAll() }
@@ -78,7 +84,7 @@ object SubscriptionUpdater {
         return current.copy(nodes=all,settings=settings,
             groups=current.groups.map { g -> val cleaned=g.copy(frontProxy=if(g.frontProxy in removed)0 else g.frontProxy,landingProxy=if(g.landingProxy in removed)0 else g.landingProxy);if(g.id!=group.id) cleaned else cleaned.copy(updatedAt=now,userInfo=userInfo,options=JSONObject(journal(cleaned.options) { state -> state.put("state","applying").put("lastSuccess",now).put("nextAttempt",now+5*60000L);state.remove("error") }).put("subscriptionLastUpdated",now/1000).toString()) },
             rules=current.rules.map { if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in removed) it.copy(outbound="proxy") else it },
-            merges=current.merges.map { it.copy(nodeIds=it.nodeIds.filter { id -> id !in removed },selectedId=if(it.selectedId in removed)0 else it.selectedId) })
+            merges=current.merges.map { it.copy(nodeIds=it.nodeIds.filter { id -> id !in removed },selectedId=if(it.selectedId in removed)0 else it.selectedId) }).withoutStaleNodeSettings()
     }
     fun record(current:AppData,groupId:Long,state:String,now:Long,error:String="",nextAttempt:Long=0,request:String?=null):AppData = current.copy(groups=current.groups.map { group ->
         if(group.id!=groupId || (request!=null && JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optString("request")!=request)) group

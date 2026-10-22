@@ -97,7 +97,8 @@ class NodeSwitchLatencyTest {
 
             // Re-clicking the selected node is not a switch; the next real switch is then the first batch.
             client.selectNode(7101);client.selectNode(7102)
-            waitFor("A→B 一轮完成") { settled(1) && client.testResults.value.keys==setOf(7102L) }
+            try {waitFor("A→B 一轮完成") {settled(1) && client.testResults.value.keys==setOf(7102L)}}
+            catch(e:AssertionError) {throw AssertionError("${e.message}; base=$base current=${client.testProgress.value} results=${client.testResults.value} testing=${client.testingNodes.value} runtime=${client.snapshot.value} events=$messages",e)}
             assertEquals(7102L,store.snapshot().selectedNodeId)
             assertTrue(client.testResults.value.getValue(7102)>0)
 
@@ -108,7 +109,8 @@ class NodeSwitchLatencyTest {
 
             // Fast A→B→A: both successful switches run a round; the earlier round's results are dropped, only A remains.
             client.selectNode(7102);client.selectNode(7101)
-            waitFor("快速 A→B→A 两轮") { settled(4) }
+            try {waitFor("快速 A→B→A 两轮") {settled(4)}}
+            catch(e:AssertionError) {throw AssertionError("${e.message}; base=$base current=${client.testProgress.value} results=${client.testResults.value} testing=${client.testingNodes.value} runtime=${client.snapshot.value} events=$messages",e)}
             assertEquals(setOf(7101L),client.testResults.value.keys)
             assertEquals(7101L,store.snapshot().selectedNodeId)
 

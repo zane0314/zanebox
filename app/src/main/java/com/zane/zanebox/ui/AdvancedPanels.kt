@@ -28,7 +28,7 @@ internal fun WebdavDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         onDismiss = onDismiss,
         action = {
             IconButton(onClick = vm::listWebdav, modifier = Modifier.testTag("webdav_refresh")) {
-                Icon(Icons.Outlined.Refresh, "刷新")
+                Icon(Icons.Outlined.Refresh, uiText("刷新"))
             }
         }
     ) {
@@ -50,8 +50,9 @@ internal fun WebdavDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 UiCard {
                     UiRow(
                         entry.name,
-                        "${entry.size} 字节 · ${entry.modified}",
+                        uiText("%s 字节 · %s",entry.size,entry.modified),
                         Icons.Outlined.Backup,
+                        translateTitle = false, translateSubtitle = false,
                         modifier = Modifier.testTag("webdav_entry_${entry.name.hashCode()}")
                     )
                     Row(Modifier.fillMaxWidth().padding(start = 56.dp, end = 12.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -67,7 +68,7 @@ internal fun WebdavDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         UiAlertDialog(
             onDismissRequest = { pendingRestore = null },
             title = { Text(uiText("恢复备份？")) },
-            text = { Text("将用 ${entry.name} 替换当前配置。") },
+            text = { Text(uiText("将用 %s 替换当前配置。",entry.name)) },
             confirmButton = {
                 TextButton(onClick = { vm.restoreWebdav(entry); pendingRestore = null }, modifier = Modifier.testTag("webdav_restore_confirm")) { Text(uiText("恢复")) }
             },
@@ -78,7 +79,7 @@ internal fun WebdavDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         UiAlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text(uiText("删除云备份？")) },
-            text = { Text("将永久删除 ${entry.name}，此操作不可撤销。") },
+            text = { Text(uiText("将永久删除 %s，此操作不可撤销。",entry.name)) },
             confirmButton = {
                 TextButton(onClick = { vm.deleteWebdav(entry); pendingDelete = null }, modifier = Modifier.testTag("webdav_delete_confirm")) { Text(uiText("删除")) }
             },
@@ -103,15 +104,15 @@ internal fun TrafficDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         onDismiss = onDismiss,
         action = {
             IconButton(onClick = vm.service::refreshTraffic, modifier = Modifier.testTag("traffic_refresh")) {
-                Icon(Icons.Outlined.Refresh, "刷新")
+                Icon(Icons.Outlined.Refresh, uiText("刷新"))
             }
         }
     ) {
         item {
             UiCard {
                 TabRow(selectedTabIndex = selectedTab) {
-                    tabs.forEachIndexed { index, (_, title) ->
-                        Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) }, modifier = Modifier.testTag("traffic_tab_$index"))
+                    tabs.forEachIndexed { index, (key, title) ->
+                        Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(uiText(if(key=="apps")"应用程序" else title)) }, modifier = Modifier.testTag("traffic_tab_$index"))
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -122,15 +123,16 @@ internal fun TrafficDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             }
         }
         if (array == null || array.length() == 0) {
-            item { UiCard { Text("暂无${selected.second}流量数据", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) } }
+            item { UiCard { Text(uiText(when(selected.first){"apps"->"暂无应用流量数据";"domains"->"暂无域名流量数据";else->"暂无节点流量数据"}), Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) } }
         } else {
             items(array.length()) { index ->
                 val item = array.getJSONObject(index)
                 UiCard {
                     UiRow(
-                        item.optString("name").ifBlank { "未知${selected.second}" },
+                        item.optString("name").ifBlank { uiText(when(selected.first){"apps"->"未知应用";"domains"->"未知域名";else->"未知节点"}) },
                         "↑ ${bytes(item.optLong("tx"))} · ↓ ${bytes(item.optLong("rx"))}",
-                        when (selectedTab) { 0 -> Icons.Outlined.Apps; 1 -> Icons.Outlined.Language; else -> Icons.Outlined.Dns }
+                        when (selectedTab) { 0 -> Icons.Outlined.Apps; 1 -> Icons.Outlined.Language; else -> Icons.Outlined.Dns },
+                        translateTitle = false, translateSubtitle = false
                     )
                 }
             }
@@ -160,7 +162,7 @@ internal fun ConnectionsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         onDismiss = onDismiss,
         action = {
             IconButton(onClick = vm.service::refreshConnections, modifier = Modifier.testTag("connections_refresh")) {
-                Icon(Icons.Outlined.Refresh, "刷新")
+                Icon(Icons.Outlined.Refresh, uiText("刷新"))
             }
         }
     ) {
@@ -178,7 +180,7 @@ internal fun ConnectionsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                     metadata.optString("host").ifBlank { metadata.optString("destinationIP") }
                 }.orEmpty().ifBlank { value.optString("id") }
                 UiCard {
-                    UiRow(host, "连接 ID：${value.optString("id")}", Icons.Outlined.SwapHoriz,
+                    UiRow(host, uiText("连接 ID：%s",value.optString("id")), Icons.Outlined.SwapHoriz,translateTitle=false,translateSubtitle=false,
                         trailing = { TextButton(onClick = { vm.service.closeConnection(value.optString("id")) }) { Text(uiText("关闭")) } })
                 }
             }
@@ -188,6 +190,8 @@ internal fun ConnectionsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
 
 @Composable
 internal fun QrDialog(text: String, vm: AppViewModel, onDismiss: () -> Unit) {
+    // value 在 withContext 返回后赋值，当前 Compose lint 未识别该路径。
+    @android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
     val bitmap by produceState<android.graphics.Bitmap?>(null, text) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             runCatching {
@@ -208,7 +212,7 @@ internal fun QrDialog(text: String, vm: AppViewModel, onDismiss: () -> Unit) {
         title = { Text(uiText("节点二维码")) },
         text = {
             Column(Modifier.fillMaxWidth().widthIn(max = 420.dp)) {
-                bitmap?.let { Image(it.asImageBitmap(), "节点分享二维码", Modifier.fillMaxWidth().aspectRatio(1f)) }
+                bitmap?.let { Image(it.asImageBitmap(), uiText("节点分享二维码"), Modifier.fillMaxWidth().aspectRatio(1f)) }
                     ?: Text(uiText("内容过长，无法生成二维码；请使用节点分享。"))
                 Text(text.take(200), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { bitmap?.let(vm::shareQr) }, enabled = bitmap != null) { Text(uiText("分享二维码")) }
@@ -237,7 +241,7 @@ internal fun SpeedDialog(vm: AppViewModel, nodeId: Long, onDismiss: () -> Unit) 
                 }
             }
         }
-        item { UiCard { Text(result.ifBlank { "选择测速模式；测试会产生实际流量。" }, Modifier.padding(16.dp).testTag("speed_result")) } }
+        item { UiCard { Text(result.ifBlank { uiText("选择测速模式；测试会产生实际流量。") }, Modifier.padding(16.dp).testTag("speed_result")) } }
     }
 }
 
@@ -274,7 +278,7 @@ internal fun SubscriptionOptionsDialog(group: Group, vm: AppViewModel, onDismiss
     }
 
     UiPageList(
-        title = "订阅选项 · ${group.name}",
+        title = uiText("订阅选项 · %s",group.name),
         onDismiss = onDismiss,
         action = { TextButton(onClick = ::save, modifier = Modifier.testTag("subscription_options_save")) { Text(uiText("保存")) } }
     ) {
@@ -282,7 +286,7 @@ internal fun SubscriptionOptionsDialog(group: Group, vm: AppViewModel, onDismiss
         item {
             UiCard {
                 OptionSwitch("自动更新", auto, { auto = it }, "subscription_auto_update")
-                UiRow("更新间隔", "$minutes 分钟", Icons.Outlined.Schedule, onClick = { choice = "interval" }, modifier = Modifier.testTag("subscription_interval"))
+                UiRow("更新间隔", uiText("%s 分钟",minutes), Icons.Outlined.Schedule, onClick = { choice = "interval" }, modifier = Modifier.testTag("subscription_interval"))
                 OptionSwitch("仅连接时更新", connectedOnly, { connectedOnly = it }, "subscription_connected_only")
                 OptionSwitch("按协议身份去重", dedup, { dedup = it }, "subscription_dedup")
                 OptionSwitch("更新时强制解析服务器 IP", resolve, { resolve = it }, "subscription_resolve")
@@ -295,7 +299,7 @@ internal fun SubscriptionOptionsDialog(group: Group, vm: AppViewModel, onDismiss
                 UiRow("节点名称过滤", filterLabels[mode.coerceIn(filterLabels.indices)], Icons.Outlined.FilterList, onClick = { choice = "filter" }, modifier = Modifier.testTag("subscription_filter_$mode"))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     filterLabels.forEachIndexed { index, label ->
-                        FilterChip(mode == index, { mode = index }, label = { Text(label) }, modifier = Modifier.testTag("subscription_filter_$index"))
+                        FilterChip(mode == index, { mode = index }, label = { Text(uiText(label)) }, modifier = Modifier.testTag("subscription_filter_$index"))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -305,7 +309,7 @@ internal fun SubscriptionOptionsDialog(group: Group, vm: AppViewModel, onDismiss
             }
         }
         item { Text(uiText("保存选项后可手动更新。解析、正则或过滤失败会保留原节点；自动更新使用同一流水线。"), style = MaterialTheme.typography.bodySmall) }
-        if (error.isNotBlank()) item { Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("subscription_options_error")) }
+        if (error.isNotBlank()) item { Text(uiText(error), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("subscription_options_error")) }
     }
 
     when (choice) {
@@ -329,7 +333,7 @@ internal fun SubscriptionOptionsDialog(group: Group, vm: AppViewModel, onDismiss
 @Composable
 private fun OptionSwitch(label: String, value: Boolean, onChange: (Boolean) -> Unit, tag: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(label, Modifier.weight(1f))
+        Text(uiText(label), Modifier.weight(1f))
         UiSwitch(value, onChange, Modifier.testTag(tag))
     }
 }

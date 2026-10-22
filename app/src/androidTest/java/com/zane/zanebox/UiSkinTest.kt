@@ -91,7 +91,7 @@ class UiSkinNavigationTest {
             groups=listOf(Group(1,"分组一"),Group(2,"分组二")),
             rules=listOf(RouteRule(1,"保留规则",domains="example.test",outbound="direct")),
             merges=listOf(MergeGroup(1,"保留汇总",nodeIds=listOf(1,2))),
-            settings=mapOf("appLanguage" to "zh-CN","selectedNodeId" to "1","browseGroupId" to "1","uiSkin" to "prism","theme" to "dark"))
+            settings=mapOf("appLanguage" to "zh-CN","selectedNodeId" to "1","browseGroupId" to "1","uiSkin" to "prism","theme" to "dark","autoTestSelectedNode" to "false"))
         compose.runOnIdle {vm.edit{original}}
         compose.waitUntil(15000){!vm.busy.value && vm.data.value.nodes.size==8}
         compose.onNodeWithTag("home_toolbar").assertIsDisplayed()

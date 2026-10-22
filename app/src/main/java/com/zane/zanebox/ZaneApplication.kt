@@ -8,7 +8,7 @@ class ZaneApplication : Application() {
         val process=if(android.os.Build.VERSION.SDK_INT>=28)getProcessName() else (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).runningAppProcesses?.firstOrNull { it.pid==android.os.Process.myPid() }?.processName
         mainProcess=process==packageName
         com.zane.zanebox.subscription.SubscriptionScheduler.connectionCheck={ context -> com.zane.zanebox.runtime.ServiceClient.isConnected(context) }
-        com.zane.zanebox.subscription.SubscriptionScheduler.onUpdated={ context,id -> com.zane.zanebox.runtime.ServiceClient.updateSubscription(context,id) }
+        com.zane.zanebox.subscription.SubscriptionScheduler.onUpdated={ context,id,applied -> com.zane.zanebox.runtime.ServiceClient.updateSubscription(context,id,applied) }
         if(mainProcess) {
             com.zane.zanebox.subscription.SubscriptionScheduler.initialize(this)
         }

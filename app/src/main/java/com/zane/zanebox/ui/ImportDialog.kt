@@ -17,13 +17,13 @@ import com.zane.zanebox.data.AppData
     var name by remember(pending) { mutableStateOf((pending as? PendingImport.Subscription)?.name ?: "导入节点") }
     var groupId by remember(pending) { mutableLongStateOf((pending as? PendingImport.Nodes)?.preferredGroupId ?: -1) }
     val (title,body,action)=when(pending) {
-        is PendingImport.Subscription->Triple("添加外部订阅？","地址：${pending.url.take(200)}\n确认后会新建分组并立即下载该订阅。","添加")
-        is PendingImport.Nodes->Triple("导入外部节点？","将导入 ${pending.report.nodes.size} 个节点"+(if(pending.report.skipped>0)"，跳过 ${pending.report.skipped} 条无法识别内容" else "")+"：\n"+pending.report.nodes.take(5).joinToString("\n"){"· "+it.name.take(60)},"导入")
-        is PendingImport.Backup->Triple("用外部备份替换全部数据？","备份含 ${pending.data.groups.size} 个组、${pending.data.nodes.size} 个节点、${pending.data.rules.size} 条规则。\n恢复会覆盖当前节点、订阅和设置。","替换")
+        is PendingImport.Subscription->Triple("添加外部订阅？",uiText("地址：%s\n确认后会新建分组并立即下载该订阅。",pending.url.take(200)),"添加")
+        is PendingImport.Nodes->Triple("导入外部节点？",uiText("将导入 %s 个节点",pending.report.nodes.size)+(if(pending.report.skipped>0)uiText("，跳过 %s 条无法识别内容",pending.report.skipped) else "")+"：\n"+pending.report.nodes.take(5).joinToString("\n"){"· "+it.name.take(60)},"导入")
+        is PendingImport.Backup->Triple("用外部备份替换全部数据？",uiText("备份含 %s 个组、%s 个节点、%s 条规则。\n恢复会覆盖当前节点、订阅和设置。",pending.data.groups.size,pending.data.nodes.size,pending.data.rules.size),"替换")
     }
     val missing=pending is PendingImport.Nodes && groupId>=0 && data.groups.none { it.id==groupId }
     val needsName=pending is PendingImport.Subscription || (pending is PendingImport.Nodes && groupId<0)
-    UiAlertDialog(onDismissRequest={if(!busy)onDismiss()},title={Text(title)},text={
+    UiAlertDialog(onDismissRequest={if(!busy)onDismiss()},title={Text(uiText(title))},text={
         Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(body)
             if(pending is PendingImport.Nodes) {
@@ -31,13 +31,13 @@ import com.zane.zanebox.data.AppData
                     Row(Modifier.fillMaxWidth().heightIn(min=48.dp).testTag(if(id<0)"import_new_group" else "import_group_$id")
                         .selectable(selected=groupId==id,enabled=!busy,role=Role.RadioButton){groupId=id},verticalAlignment=Alignment.CenterVertically) {
                         RadioButton(selected=groupId==id,onClick=null,enabled=!busy)
-                        Text(label)
+                        Text(if(id<0)uiText(label)else label)
                     }
                 }
             }
-            if(needsName)OutlinedTextField(name,{name=it},enabled=!busy,singleLine=true,label={Text("分组名称")},isError=name.isBlank(),modifier=Modifier.fillMaxWidth().testTag("import_group_name"))
-            if(missing)Text("所选分组已删除，请重新选择",color=MaterialTheme.colorScheme.error)
+            if(needsName)OutlinedTextField(name,{name=it},enabled=!busy,singleLine=true,label={Text(uiText("分组名称"))},isError=name.isBlank(),modifier=Modifier.fillMaxWidth().testTag("import_group_name"))
+            if(missing)Text(uiText("所选分组已删除，请重新选择"),color=MaterialTheme.colorScheme.error)
         }
-    },confirmButton={TextButton(onClick={onConfirm(name,groupId)},enabled=!busy && !missing && (!needsName || name.isNotBlank()),modifier=Modifier.testTag("import_confirm")){Text(if(busy)"正在导入…" else action)}},
+    },confirmButton={TextButton(onClick={onConfirm(name,groupId)},enabled=!busy && !missing && (!needsName || name.isNotBlank()),modifier=Modifier.testTag("import_confirm")){Text(uiText(if(busy)"正在导入…" else action))}},
         dismissButton={TextButton(onClick=onDismiss,enabled=!busy,modifier=Modifier.testTag("import_cancel")){Text(uiText("取消"))}})
 }

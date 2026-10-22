@@ -62,7 +62,8 @@ class TargetLatencyRuntimeTest {
     private fun measure(client:ServiceClient,target:String,key:String="",ids:Set<Long> = setOf(TargetLatencyFixture.A,TargetLatencyFixture.B)) {
         val batch=client.testProgress.value.batchId
         client.testTarget(target,key)
-        waitFor("$target 本轮完整结果",20000) {client.testProgress.value.batchId>batch && !client.testProgress.value.running && client.testResults.value.keys==ids}
+        try {waitFor("$target 本轮完整结果",20000) {client.testProgress.value.batchId>batch && !client.testProgress.value.running && client.testResults.value.keys==ids}}
+        catch(e:AssertionError) {throw AssertionError("${e.message}; base=$batch current=${client.testProgress.value} results=${client.testResults.value} testing=${client.testingNodes.value} runtime=${client.snapshot.value}",e)}
         assertEquals(ids.size,client.testProgress.value.total)
         assertEquals(ids.size,client.testProgress.value.completed)
         assertTrue(client.testingNodes.value.isEmpty())

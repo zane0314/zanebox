@@ -35,7 +35,7 @@ class NotificationSkinTest {
         var scenario:ActivityScenario<MainActivity>?=null
         val asset=File(context.filesDir,"core-assets/yacd/index.html")
         val heldAsset=File(asset.parentFile,"index.notification-skin-${java.util.UUID.randomUUID()}.html")
-        val observer=ServiceClient(context)
+        val observer=ServiceClient(context,ZaneProxyService::class.java)
         try {
             observer.connect();kotlinx.coroutines.runBlocking {observer.readSnapshot()};observer.stop();await("旧服务停止") {observer.snapshot.value.state==0}
             store.replace(AppData(nodes=listOf(Node(1,1,"fixture A","""{"type":"socks","server":"10.0.2.2","server_port":19081}""")),groups=listOf(Group(1,"notification")),settings=mapOf("serviceMode" to "proxy","selectedNodeId" to "1","selectedGroupId" to "1","dnsRemote" to "local","sniff" to "false","statsEnabled" to "false","uiSkin" to "claude")))
@@ -95,9 +95,12 @@ class NotificationSkinTest {
             await("快速START/STOP按原顺序完成",30000) {observer.snapshot.value.generation>stoppedGeneration && observer.snapshot.value.state==0 && notification()==null}
             Thread.sleep(2100);assertNull("初始IO通知不能晚到复活",notification())
             context.startService(Intent(context,ZaneProxyService::class.java).setAction("stop"))
-            val stoppedUntil=SystemClock.elapsedRealtime()+2100
+            // Cold STOP briefly enters foreground to satisfy the service start deadline.
+            SystemClock.sleep(6500)
+            await("冷STOP完成后撤销前台通知") {observer.snapshot.value.state==0 && notification()==null}
+            val stoppedUntil=SystemClock.elapsedRealtime()+1000
             while(SystemClock.elapsedRealtime()<stoppedUntil) {
-                assertNull("未连接STOP不得创建通知",notification());Thread.sleep(10)
+                assertNull("冷STOP完成后通知不能复活",notification());Thread.sleep(100)
             }
         } finally {
             if(heldAsset.exists())assertTrue("失败时恢复ready marker",heldAsset.renameTo(asset))

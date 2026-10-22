@@ -8,7 +8,11 @@ class SingBoxEngine(private val platform:NativePlatform) {
     private var main:BoxInstance?=null
     var trackedTags:List<String> = emptyList();private set
     var configuredProxyDefault:String="";private set
-    private val tests=java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(java.util.IdentityHashMap<BoxInstance,Boolean>()))
+    private class TestBox(val box:BoxInstance) {
+        private var closed=false
+        @Synchronized fun close() {if(!closed) {closed=true;box.close()}}
+    }
+    private val tests=java.util.Collections.synchronizedSet(mutableSetOf<TestBox>())
     fun start(config:String) {
         check(main==null)
         val next=Libcore.newSingBoxInstance(config,platform)
@@ -43,14 +47,15 @@ class SingBoxEngine(private val platform:NativePlatform) {
     fun validate(config:String) { val box=Libcore.newTestSingBoxInstance(config,platform);box.close() }
     fun test(config:String,url:String,timeout:Int,active:()->Boolean={true}):Int {
         if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
-        val box=Libcore.newTestSingBoxInstance(config,platform)
-        tests.add(box)
+        val owned=TestBox(Libcore.newTestSingBoxInstance(config,platform))
+        val box=owned.box
+        tests.add(owned)
         return try {
             if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
             box.start()
             if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
             Libcore.urlTest(box,url,timeout)
-        } finally { tests.remove(box);runCatching { box.close() } }
+        } finally { try {runCatching {owned.close()}} finally {tests.remove(owned)} }
     }
     fun cancelTests() { val snapshot=synchronized(tests) { tests.toList() };snapshot.forEach { runCatching { it.close() } } }
 }

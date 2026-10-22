@@ -34,6 +34,8 @@ import androidx.lifecycle.repeatOnLifecycle
 @Composable internal fun rememberInstalledPackageNames():Set<String>? {
     val context=LocalContext.current
     val lifecycle=androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    // The lifecycle block assigns value after the IO read; lint misses the nested receiver.
+    @android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
     val installed by produceState<Set<String>?>(null,context,lifecycle) {
         lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
             value=withContext(Dispatchers.IO){context.packageManager.getInstalledApplications(0).map{it.packageName}.toSet()}
@@ -60,6 +62,8 @@ private fun loadInstalledAppIcon(context:android.content.Context,packageName:Str
     val context=LocalContext.current
     val sizePx=with(LocalDensity.current){40.dp.roundToPx().coerceAtLeast(1)}
     val cacheKey="$packageName@$sizePx"
+    // Both the cache hit and the IO result assign the producer value.
+    @android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
     val bitmap by produceState<Bitmap?>(installedAppIconCache.get(cacheKey),cacheKey) {
         if(value==null) value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             installedAppIconCache.get(cacheKey) ?: loadInstalledAppIcon(context,packageName,sizePx)?.also { installedAppIconCache.put(cacheKey,it) }
@@ -98,6 +102,8 @@ private fun loadInstalledAppIcon(context:android.content.Context,packageName:Str
     val clipboard=context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? ClipboardManager
     var loading by remember{mutableStateOf(true)}
     var loadError by remember{mutableStateOf("")}
+    // The try block assigns value after loading installed apps; errors preserve the initial list.
+    @android.annotation.SuppressLint("ProduceStateDoesNotAssignValue")
     val apps by produceState<List<InstalledApp>>(emptyList()) {
         try {
             value=withContext(Dispatchers.IO) {
@@ -115,11 +121,13 @@ private fun loadInstalledAppIcon(context:android.content.Context,packageName:Str
     val effective=selected.intersect(eligible)
     val inactive=selected-effective
     val visible=remember(apps,selected,query,showSystem,scopeData){visibleApps(apps,selected,query.trim(),showSystem,scopeData)}
+    val language=LocalUiLanguage.current
+    fun t(source:String,vararg args:Any?)=translateText(source,language,*args)
     val perApp=onMode!=null
     fun add(packages:Set<String>,message:String) {
         val added=packages-selected
         selected=selected+packages
-        note="$message ${added.size} 个应用"
+        note=t("%s · %s 个应用",t(message),added.size)
     }
     val ready=!loading && loadError.isBlank()
     UiPageList(if(perApp)"分应用代理" else title,onDismiss,action={TextButton(onClick={save(selected)},modifier=Modifier.testTag("apps_save")){Text(uiText("保存"))}}) {
@@ -134,10 +142,10 @@ private fun loadInstalledAppIcon(context:android.content.Context,packageName:Str
                     }
                 }
             }
-            UiRow("已选择 ${effective.size} 个应用",if(perApp)"保存名单后，连接时通过“应用修改”生效" else "保存当前应用策略；名单与分应用代理独立",chevron=false,modifier=Modifier.testTag("apps_selection_count"))
+            UiRow(uiText("已选择 %s 个应用",effective.size),if(perApp)"保存名单后，连接时通过“应用修改”生效" else "保存当前应用策略；名单与分应用代理独立",chevron=false,modifier=Modifier.testTag("apps_selection_count"))
             if(scopeData?.bool("perAppEnabled")==true)Text(uiText(if(scopeData.setting("perAppMode","exclude")=="include")"仅可选择分应用白名单中的应用" else "分应用黑名单中的应用不可选择"),Modifier.padding(horizontal=16.dp,vertical=4.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(inactive.isNotEmpty())Text("${inactive.size} 个历史选择因未安装或超出范围暂不生效，已保留",Modifier.padding(horizontal=16.dp,vertical=4.dp).testTag("apps_inactive"),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(note.isNotBlank())Text(note,Modifier.padding(horizontal=16.dp,vertical=8.dp).testTag("apps_note"),style=MaterialTheme.typography.bodySmall)
+            if(inactive.isNotEmpty())Text(uiText("%s 个历史选择因未安装或超出范围暂不生效，已保留",inactive.size),Modifier.padding(horizontal=16.dp,vertical=4.dp).testTag("apps_inactive"),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(note.isNotBlank())Text(uiText(note),Modifier.padding(horizontal=16.dp,vertical=8.dp).testTag("apps_note"),style=MaterialTheme.typography.bodySmall)
         }}
         item(key="apps_search_field"){OutlinedTextField(query,{query=it},placeholder={Text(uiText("搜索应用名称或包名"))},singleLine=true,shape=MaterialTheme.shapes.large,modifier=Modifier.fillMaxWidth().testTag("apps_search"))}
         item(key="apps_actions"){
@@ -150,20 +158,20 @@ private fun loadInstalledAppIcon(context:android.content.Context,packageName:Str
                 }
                 Text(uiText(if(perApp && mode=="exclude")"自动选择常用代理应用以外的应用，作为绕过名单" else "自动勾选 Google、Instagram、Discord、ChatGPT、Grok 等及已安装配套组件"),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick={clipboard?.setPrimaryClip(ClipData.newPlainText("Links-apps",selected.sorted().joinToString("\n")));note="已复制 ${selected.size} 个应用包名"},modifier=Modifier.testTag("apps_copy")){Text(uiText("复制"))}
+                    TextButton(onClick={clipboard?.setPrimaryClip(ClipData.newPlainText("Links-apps",selected.sorted().joinToString("\n")));note=t("已复制 %s 个应用包名",selected.size)},modifier=Modifier.testTag("apps_copy")){Text(uiText("复制"))}
                     TextButton(onClick={
                         val text=clipboard?.primaryClip?.let{clip->if(clip.itemCount>0)clip.getItemAt(0).coerceToText(context).toString() else ""}.orEmpty()
                         val pasted=parseAppPaste(text,installed,scopeData)
                         val added=pasted.accepted-selected
                         selected=selected+pasted.accepted
-                        note="已粘贴选择 ${added.size} 个应用，跳过 ${pasted.skipped} 个无效、未安装或范围外条目"
+                        note=t("已粘贴选择 %s 个应用，跳过 %s 个无效、未安装或范围外条目",added.size,pasted.skipped)
                     },enabled=ready,modifier=Modifier.testTag("apps_import")){Text(uiText("粘贴并选择"))}
                     TextButton(onClick={val packages=visible.map{it.packageName}.toSet();selected=(selected-packages)+(packages-selected)},enabled=ready,modifier=Modifier.testTag("apps_invert")){Text(uiText("反选可见"))}
                 }
             }
         }
         if(loading)item(key="apps_loading"){UiRow("正在加载应用列表",chevron=false)}
-        if(loadError.isNotBlank())item(key="apps_error"){Text(loadError,color=MaterialTheme.colorScheme.error)}
+        if(loadError.isNotBlank())item(key="apps_error"){Text(uiText(loadError),color=MaterialTheme.colorScheme.error)}
         if(ready && visible.isEmpty())item(key="apps_empty"){Text(uiText("没有符合条件的应用"),Modifier.testTag("apps_empty"))}
         items(visible,key={it.packageName}){app->UiCard(Modifier.animateItem()) {InstalledAppRow(app,app.packageName in selected){checked->selected=if(checked)selected+app.packageName else selected-app.packageName}}}
     }

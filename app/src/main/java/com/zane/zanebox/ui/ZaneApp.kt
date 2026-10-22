@@ -62,7 +62,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     val data=remember(savedData,pendingSkin) {
         pendingSkin?.let {savedData.copy(settings=savedData.settings+("uiSkin" to it))} ?: savedData
     }
-    val runtime by remember(vm){homeRuntimeSnapshots(vm.service.snapshot)}.collectAsStateWithLifecycle(initialValue=vm.service.snapshot.value)
+    val runtime by remember(vm){homeRuntimeSnapshots(vm.service.snapshot)}.collectAsStateWithLifecycle(initialValue=remember(vm){vm.service.snapshot.value})
     val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     val testProgress by vm.service.testProgress.collectAsStateWithLifecycle()
     val autoNodeId by vm.service.autoNodeId.collectAsStateWithLifecycle()
@@ -96,16 +96,18 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     var dirty by rememberSaveable { mutableStateOf(false) }
     var selectingNodes by remember { mutableStateOf(false) }
     var selectedNodes by remember { mutableStateOf(emptySet<Long>()) }
+    val language=resolveUiLanguage(data.setting("appLanguage"),java.util.Locale.getDefault().toLanguageTag())
+    fun t(source:String,vararg args:Any?)=translateText(source,language,*args)
     val snackbar=remember { SnackbarHostState() }
     val subpageLists=remember{mutableMapOf<String,androidx.compose.foundation.lazy.LazyListState>()}
     val context=LocalContext.current
-    LaunchedEffect(vm) {
+    LaunchedEffect(vm,language) {
         vm.message.filter { it.isNotBlank() }.collectLatest { message ->
             vm.message.compareAndSet(message,"")
             if(message.contains("应用修改"))dirty=true
             val accessibility=context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
             val timeout=if(android.os.Build.VERSION.SDK_INT>=29)accessibility.getRecommendedTimeoutMillis(1000,android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT).toLong() else 1000L
-            kotlinx.coroutines.withTimeoutOrNull(timeout) { snackbar.showSnackbar(message,duration=SnackbarDuration.Indefinite) }
+            kotlinx.coroutines.withTimeoutOrNull(timeout) { snackbar.showSnackbar(t(message),duration=SnackbarDuration.Indefinite) }
         }
     }
     LaunchedEffect(data.setting("hideFromRecentApps")) {
@@ -186,7 +188,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
         val chains=com.zane.zanebox.subscription.nodeRemovalIds(data.nodes,ids).size-ids.size
         val action={vm.deleteNodes(ids);selectedNodes=emptySet();selectingNodes=false}
         if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete"))action()
-        else confirm=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to action
+        else confirm=(t("删除 %s 个节点？",ids.size)+if(chains>0)t("同时删除依赖它们的 %s 个代理链。",chains) else "") to action
     }
     BackHandler(selectingNodes) { selectingNodes=false;selectedNodes=emptySet() }
     BackHandler(page!=0 && subpage.isBlank()) {page=0}
@@ -264,7 +266,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     when(page) {
                         0->{
                             if(homeGroupId==0L && search.isBlank())item {
-                                UiCard { UiRow("自动选择",data.nodes.firstOrNull{it.id==autoNodeId}?.let { "当前：${it.name} · 每 10 分钟测速" } ?: "选择延迟最低的可用节点 · 每 10 分钟测速",Icons.Outlined.AutoMode,onClick=if(activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})({vm.service.selectAuto()})else null,modifier=Modifier.testTag("home_auto"),chevron=false,trailing={RadioButton(data.bool("homeAutoSelect"),onClick={vm.service.selectAuto()},enabled=activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})}) }
+                                UiCard { UiRow("自动选择",data.nodes.firstOrNull{it.id==autoNodeId}?.let { t("当前：%s · 每 10 分钟测速",it.name) } ?: "选择延迟最低的可用节点 · 每 10 分钟测速",Icons.Outlined.AutoMode,onClick=if(activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})({vm.service.selectAuto()})else null,modifier=Modifier.testTag("home_auto"),chevron=false,trailing={RadioButton(data.bool("homeAutoSelect"),onClick={vm.service.selectAuto()},enabled=activeNodes.any{JSONObject(it.outbound).optString("type")!="custom"})}) }
                             }
                             if(selectingNodes && nodes.isNotEmpty())item {
                                 NodeSelectionBar(selectingNodes,selectedNodes.size,"home",{selectingNodes=!selectingNodes;selectedNodes=emptySet()},{selectedNodes=nodes.map{it.id}.toSet()},{deleteNodes(selectedNodes)})
@@ -285,7 +287,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                     UiMenu(listOf("编辑" to {nodeForm(n)},"测试延迟" to {vm.service.testNodes(listOf(n.id))},"速度测试" to {speedNode=n.id},"分享" to {share(shareText(listOf(n)))},"二维码" to {qr=shareText(listOf(n))},"复制" to {copy(shareText(listOf(n)))},"节点区域" to {form("节点区域",listOf("hk/us/kr/jp/sg/tw（留空自动）" to data.setting("nodeRegion.${n.id}"))){val key="nodeRegion.${n.id}";val region=it[0].trim().lowercase(java.util.Locale.ROOT);validatePreference(key,region);vm.setting(key,region)}},"多选" to {selectingNodes=true;selectedNodes=selectedNodes+n.id},"删除" to {deleteNodes(setOf(n.id))}).filter{enabled || it.first !in listOf("测试延迟","速度测试")},"node_menu_${n.id}")
                                 } }
                             }
-                            if(nodes.isEmpty())item {Box(Modifier.fillMaxWidth().height(220.dp),contentAlignment=Alignment.Center){Text(if(data.nodes.isEmpty())"暂无节点，点右上角添加节点或订阅" else "未找到匹配节点",fontSize=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+                            if(nodes.isEmpty())item {Box(Modifier.fillMaxWidth().height(220.dp),contentAlignment=Alignment.Center){Text(uiText(if(data.nodes.isEmpty())"暂无节点，点右上角添加节点或订阅" else "未找到匹配节点"),fontSize=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
                             if(runtime.error.isNotBlank())item{Text(runtime.error,color=MaterialTheme.colorScheme.error)}
                         }
                         2->{item{SettingsHub(onOpen={subpage=it},clashApi=data.bool("clashApi"))}}
@@ -307,7 +309,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
             if(subpage.isNotBlank())CompositionLocalProvider(LocalUiListState provides subpageLists.getOrPut(subpage){androidx.compose.foundation.lazy.LazyListState()}) {SettingsDestination(subpage.substringAfterLast('>'),data,vm,{subpage=subpage.substringBeforeLast('>',"")},{subpage="$subpage>$it"},::form,
                 backup={scope->backupScope=scope;backupFile.launch("zanebox-backup.zip")},restore={restoreFile.launch(arrayOf("application/zip","application/octet-stream"))},
                 groupEdit=::groupForm,ruleEdit=::ruleForm,mergeEdit=::mergeForm,subscriptionEdit={subscriptionOptions=it},share=::share,copy=::copy,qr=::showQr,exportNodes=::exportNodes,toggle=::toggle)}
-            if(selector)ChoiceDialog("跳转分组",data.browseGroupId.toString(),listOf("0" to "全部分组")+data.groups.map{it.id.toString() to it.name},{selector=false}){vm.setting("browseGroupId",it)}
+            if(selector)ChoiceDialog("跳转分组",data.browseGroupId.toString(),listOf("0" to uiText("全部分组"))+data.groups.map{it.id.toString() to it.name},{selector=false},translateChoices=false){vm.setting("browseGroupId",it)}
             data.groups.firstOrNull{it.id==menuGroupId}?.let {group->
                 val actions=listOf((if(group.enabled)"停用分组" else "启用分组") to {vm.edit{d->d.copy(groups=d.groups.map{if(it.id==group.id)it.copy(enabled=!it.enabled)else it})}})+
                     (if(group.subscriptionUrl.isNotBlank())listOf("更新订阅" to {vm.updateGroup(group)})else emptyList())+
@@ -319,8 +321,8 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
             }
             data.groups.firstOrNull{it.id==proxyGroupId}?.let {group->if(groupProxy.isNotBlank())ChoiceDialog(if(groupProxy=="front")"前置代理" else "后置代理（落地）",
                 (if(groupProxy=="front")group.frontProxy else group.landingProxy).toString(),
-                listOf("0" to "无")+data.nodes.filter { JSONObject(it.outbound).optString("type") !in listOf("chain","custom") }.map{it.id.toString() to it.name},
-                {groupProxy="";proxyGroupId=null}) { id->val front=groupProxy=="front";vm.edit{d->d.copy(groups=d.groups.map{if(it.id!=group.id)it else if(front)it.copy(frontProxy=id.toLong())else it.copy(landingProxy=id.toLong())})};groupProxy="";proxyGroupId=null }
+                listOf("0" to uiText("无"))+data.nodes.filter { JSONObject(it.outbound).optString("type") !in listOf("chain","custom") }.map{it.id.toString() to it.name},
+                {groupProxy="";proxyGroupId=null},translateChoices=false) { id->val front=groupProxy=="front";vm.edit{d->d.copy(groups=d.groups.map{if(it.id!=group.id)it else if(front)it.copy(frontProxy=id.toLong())else it.copy(landingProxy=id.toLong())})};groupProxy="";proxyGroupId=null }
             }
     if(nodeEdit)NodeEditor(editNode,data,initialProtocol=initialProtocol,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@NodeEditor;editorSaving=true;
                 vm.saveNode(value,onSaved={editorSaving=false;nodeEdit=false},onError={editorSaving=false;editorSaveError=it})
@@ -333,7 +335,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
             subscriptionOptions?.let{SubscriptionOptionsDialog(it,vm){subscriptionOptions=null}}
             qr?.let{QrDialog(it,vm){qr=null}}
             speedNode?.let{SpeedDialog(vm,it){speedNode=null}}
-            confirm?.let{(text,action)->UiAlertDialog(onDismissRequest={confirm=null},title={Text(uiText("确认操作"))},text={Text(text)},confirmButton={TextButton(onClick={action();confirm=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirm=null}){Text(uiText("取消"))}})}
+            confirm?.let{(text,action)->UiAlertDialog(onDismissRequest={confirm=null},title={Text(uiText("确认操作"))},text={Text(uiText(text))},confirmButton={TextButton(onClick={action();confirm=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirm=null}){Text(uiText("取消"))}})}
             pending?.let{ImportDialog(it,data,busy || importing,{name,groupId->vm.confirmImport(name,groupId)},vm::cancelImport)}
         }
         }

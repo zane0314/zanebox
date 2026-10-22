@@ -1,16 +1,11 @@
 package com.zane.zanebox.subscription
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import com.zane.zanebox.data.Group
 import com.zane.zanebox.data.ZaneStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
-import java.net.InetAddress
 import java.util.UUID
 
 suspend fun SubscriptionUpdater.update(store:ZaneStore,group:Group,context:Context,connected:Boolean,automatic:Boolean=false):Group = withContext(Dispatchers.IO) {
@@ -23,7 +18,7 @@ suspend fun SubscriptionUpdater.update(store:ZaneStore,group:Group,context:Conte
     val baseline=started.groups.first { it.id==group.id }
     try {
         val fetched=SubscriptionClient.fetch(baseline.subscriptionUrl,options.customUserAgent,started.settings)
-        val parsed=prepare(SubscriptionParser.parse(fetched.body),options,started.bool("ipv6",false),started.setting("dnsStrategyServer",started.setting("domainStrategy"))) { host -> withTimeoutOrNull(10000) { resolve(context,host) } ?: error("节点 DNS 解析超时") }
+        val parsed=prepare(SubscriptionParser.parse(fetched.body),options,started.bool("ipv6",false),started.setting("dnsStrategyServer",started.setting("domainStrategy"))) { host -> com.zane.zanebox.core.SubscriptionDns.lookup(context,host,options.serverDnsResolver,started) }
         store.update { apply(it,baseline,parsed,fetched.userInfo,System.currentTimeMillis()) { store.nextId() } }.groups.first { it.id==group.id }
     } catch(e:CancellationException) {
         store.update { record(it,group.id,"cancelled",System.currentTimeMillis(),nextAttempt=if(automatic)System.currentTimeMillis()+5*60000L else 0,request=request) };throw e
@@ -31,13 +26,6 @@ suspend fun SubscriptionUpdater.update(store:ZaneStore,group:Group,context:Conte
         val stale=e.message?.contains("过期")==true || e.message?.contains("已变更")==true
         store.update { record(it,group.id,if(stale) "stale" else "error",System.currentTimeMillis(),if(stale) "订阅响应已过期" else safeSubscriptionError(e),nextAttempt=if(automatic)System.currentTimeMillis()+5*60000L else 0,request=request) };throw e
     }
-}
-
-private suspend fun resolve(context:Context,host:String):List<String> = withContext(Dispatchers.IO) {
-    val connectivity=context.getSystemService(ConnectivityManager::class.java)
-    val networks=connectivity.allNetworks.filter { network -> connectivity.getNetworkCapabilities(network)?.let { it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && !it.hasTransport(NetworkCapabilities.TRANSPORT_VPN) }==true }
-    val network=networks.firstOrNull { connectivity.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)==true } ?: networks.firstOrNull()
-    (network?.getAllByName(host) ?: InetAddress.getAllByName(host)).mapNotNull { it.hostAddress }
 }
 
 internal fun safeSubscriptionError(error:Exception):String = when(error) {

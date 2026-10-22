@@ -48,7 +48,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):ContextWrapper(owner) {
-    private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
+    private val resources=RuntimeResources()
+    private val scope=resources.scope
     private val access=Mutex()
     private val subscriptionApply=Mutex()
     private val commands=Channel<Pair<RuntimeCommand,String>>(Channel.UNLIMITED)
@@ -62,6 +63,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private val power by lazy {getSystemService(android.os.PowerManager::class.java)}
     private var idle=false
     @Volatile private var subscriptionBusy=false
+    private var subscriptionApplying=false
     private var ruleScheduleSignature=""
     private val ready=CompletableDeferred<Unit>()
     private val visibleClients=ConcurrentHashMap<String,Long>()
@@ -69,9 +71,10 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private var tests:Job?=null
     private val testAccess=Mutex()
     private val testStateLock=Any()
+    private val testEpoch=java.util.UUID.randomUUID().toString()
     private var testSequence=0L
     private var activeTestBatch=0L
-    private var testState=JSONObject().put("batchId",0).put("request","").put("nodes",JSONArray()).put("total",0).put("completed",0).put("running",false).toString()
+    private var testState=JSONObject().put("epoch",testEpoch).put("batchId",0).put("request","").put("nodes",JSONArray()).put("total",0).put("completed",0).put("running",false).toString()
     private var speed:SpeedTestSession?=null
     private var speedJob:Job?=null
     private var ruleUpdates:Job?=null
@@ -89,10 +92,11 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     @Volatile private var cachedSecret:String?=null
     @Volatile private var apiPort=9090
     private var publishedFlags=""
+    private val notificationLock=Any()
     private val notificationEpoch=java.util.concurrent.atomic.AtomicLong()
     private val notificationIconReads=java.util.concurrent.atomic.AtomicLong()
     private var publishedIconRead=0L
-    private var publishedIcon=0
+    private var publishedIcon=skinNotificationIcon("prism")
     private var notificationText=""
     private var notificationTitle=""
     private var notificationBody=""
@@ -102,8 +106,8 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private val wakeReceiver=object:BroadcastReceiver() {
         override fun onReceive(context:Context,intent:Intent) {
             if(intent.action==Intent.ACTION_SCREEN_ON && current.get().connectionState==RuntimeState.CONNECTED)dispatch("wakeReset","")
-            if(intent.action=="$packageName.SUBSCRIPTION_UPDATE")scope.launch {ready.await();checkSubscriptionUpdates()}
-            if(intent.action==android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)scope.launch {ready.await();access.withLock {syncIdle()}}
+            if(intent.action=="$packageName.SUBSCRIPTION_UPDATE")afterReady {checkSubscriptionUpdates()}
+            if(intent.action==android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)afterReady {access.withLock {syncIdle()}}
         }
     }
     private val traffic=RuntimeTraffic({store.snapshot()}) {store.putSetting("trafficData",it)}
@@ -117,7 +121,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     }
     fun create() {
         store=ZaneStore(this,autoLoad=false)
-        platform=NativePlatform(this,vpn) { selector,tag ->
+        platform=NativePlatform(applicationContext,vpn) { selector,tag ->
             if(selector.startsWith("merge-")) {
                 val id=selector.removePrefix("merge-").toLongOrNull();val node=tag.removePrefix("node-").toLongOrNull()
                 if(id!=null && node!=null) scope.launch { store.update { d -> d.copy(merges=d.merges.map { if(it.id==id) it.copy(selectedId=node) else it }) };event("message","分流组选择已更新") }
@@ -125,37 +129,43 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         }
         engine=SingBoxEngine(platform)
         androidx.core.content.ContextCompat.registerReceiver(this,wakeReceiver,IntentFilter(Intent.ACTION_SCREEN_ON).apply{addAction("$packageName.SUBSCRIPTION_UPDATE");addAction(android.os.PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)},androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+        val initialization=resources.initialize {
+            access.withLock {
+                currentCoroutineContext().ensureActive();store.reload();currentCoroutineContext().ensureActive();platform.initialize();currentCoroutineContext().ensureActive()
+                val saved=store.snapshot().setting("trafficData")
+                if(saved.isNotBlank())runCatching {val data=JSONObject(saved);listOf("apps","domains","nodes").forEach {counters.put(it,data.optJSONObject(it) ?: JSONObject())}}
+                ready.complete(Unit)
+            }
+        }
         scope.launch {
             try {
-                access.withLock {
-                ensureActive();store.reload();ensureActive();platform.initialize();ensureActive()
-                val saved=store.snapshot().setting("trafficData")
-                if(saved.isNotBlank())runCatching { val data=JSONObject(saved);listOf("apps","domains","nodes").forEach { counters.put(it,data.optJSONObject(it) ?: JSONObject()) } }
-                ready.complete(Unit)
-                }
+                initialization.await()
+                refreshNotificationIcon()
                 for((action,payload) in commands)execute(action,payload)
             } catch(e:CancellationException) {ready.cancel(e);throw e}
             catch(e:Exception) {ready.completeExceptionally(e);try {failed(e);event("message",safeError(e))} finally {owner.stopSelf()}}
-            finally {if(destroyed)withContext(NonCancellable) {access.withLock {cleanupCore()}}}
         }
     }
     fun bind():IBinder = binder
     fun startCommand(intent:Intent?):Int {
         val stopping=intent?.action=="stop"
-        // Preserve command arrival order; only the cosmetic database read leaves Main.
+        // Every FGS entry owes startForeground, including STOP on a cold or already-bound service.
+        // This path must never wait for SQLite or native initialization.
+        foregroundEntry(if(stopping)"正在断开" else if(current.get().connectionState==RuntimeState.CONNECTED)"已连接" else "正在连接")
+        if(intent?.action=="foreground")intent.getStringExtra("request")?.let {event("foregroundReady",it)}
         if(stopping)dispatch("stop","")
-        val epoch=notificationEpoch.get()
-        scope.launch {
-            notification(if(stopping)"正在断开" else if(current.get().connectionState==RuntimeState.CONNECTED)"已连接" else "正在连接",
-                expectedEpoch=epoch,initial=!stopping,existingOnly=stopping)
+        else {
+            dispatch("refreshNotification","")
+            if(intent?.action!="foreground")dispatch("start","")
         }
-        if(!stopping && intent?.action!="foreground")dispatch("start","")
         return Service.START_STICKY
     }
+    private fun afterReady(action:suspend ()->Unit)=scope.launch {withRuntimeReady(ready,action)}
     private fun dispatch(action:String,payload:String) {
+        if(destroyed)return
         if(action=="stop")notificationEpoch.incrementAndGet()
         if(action=="refreshNotification") {
-            scope.launch { ready.await();runCatching {refreshNotificationIcon()}.onFailure {event("message","通知图标刷新失败")} }
+            afterReady {runCatching {refreshNotificationIcon()}.onFailure {event("message","通知图标刷新失败")}}
             return
         }
         if(action=="uiVisible") {
@@ -164,7 +174,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             if(value=="true")visibleClients[token]=SystemClock.elapsedRealtime() else visibleClients.remove(token)
             return
         }
-        if(action in setOf("ip","validate","logs","systemLogs","connections","panel"))scope.launch {ready.await();RuntimeCommand.fromWire(action)?.let {execute(it,payload)}}
+        if(action in setOf("ip","validate","logs","systemLogs","connections","panel"))afterReady {RuntimeCommand.fromWire(action)?.let {execute(it,payload)}}
         else RuntimeCommand.fromWire(action)?.let {commands.trySend(it to payload)}
     }
     private suspend fun execute(action:RuntimeCommand,payload:String) {
@@ -267,23 +277,33 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         val args=JSONObject(payload);val request=args.getString("request");val id=args.getLong("groupId")
         fun completed(error:String="")=event("subscriptionApplied",JSONObject().put("request",request).put("error",error).toString())
         scope.launch {
-            try {withTimeout(7*60000L) {subscriptionApply.withLock {
+            var applied=false
+            try {subscriptionApply.withLock {
                 var ownedTest:Job?=null
+                val lock=power.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"zanebox:subscription-apply").apply {setReferenceCounted(false);acquire(8*60000L)}
                 try {
-                    ownedTest=access.withLock {
-                        check(reloadCore(automatic=true,subscription=true)) { "订阅已保存，但内核应用失败，原连接已保留" }
-                        val data=store.snapshot()
-                        val ids=data.nodes.filter { it.groupId==id && data.groups.any { g->g.id==id && g.enabled } }.map{it.id}
-                        startTests(JSONArray(ids))
-                    }
-                    // Wait outside the command queue, so stop/select stay responsive.
-                    ownedTest?.join()
-                    completed(if(ownedTest?.isCancelled==true)"订阅已应用，延迟测试被取消" else "")
-                } finally {ownedTest?.takeIf{it.isActive}?.let { job ->
-                    withContext(NonCancellable){cancelTestBatch(job)}
-                }}
-            }}} catch(e:TimeoutCancellationException) {completed("订阅自动应用或测速超时，将自动重试")}
-            catch(e:CancellationException) { throw e } catch(e:Exception) {completed(safeError(e))}
+                    access.withLock {subscriptionApplying=true;syncIdle()}
+                    applyThenMeasure(7*60000L,
+                        apply={access.withLock {check(reloadCore(automatic=true,subscription=true)) {"订阅已保存，但内核应用失败，原连接已保留"}}},
+                        onApplied={completed();applied=true},
+                        measure={
+                            val data=store.snapshot()
+                            val ids=data.nodes.filter {it.groupId==id && data.groups.any {g->g.id==id && g.enabled}}.map {it.id}
+                            ownedTest=startTests(JSONArray(ids))
+                            // The receipt already committed success; measurements remain serialized and cancellable.
+                            ownedTest?.join()
+                            if(ownedTest?.isCancelled==true)event("message","订阅已应用，延迟测试被取消")
+                        },
+                        onMeasurementFailure={event("message",if(it is CancellationException)"订阅已应用，延迟测试已取消或超时" else "订阅已应用，延迟测试失败：${safeError(it)}")})
+                } finally {
+                    try {withContext(NonCancellable) {
+                        ownedTest?.takeIf {it.isActive}?.let {cancelTestBatch(it)}
+                        access.withLock {subscriptionApplying=false;syncIdle()}
+                    }} finally {if(lock.isHeld)lock.release()}
+                }
+            }} catch(e:TimeoutCancellationException) {if(!applied)completed("订阅自动应用超时，将自动重试")}
+            catch(e:CancellationException) {throw e} catch(e:Exception) {if(!applied)completed(safeError(e)) else event("message","订阅已应用，延迟测试收尾失败：${safeError(e)}")}
+            finally {if(applied)event("subscriptionMeasured",JSONObject().put("request",request).toString())}
         }
     }
     private suspend fun reloadCore(automatic:Boolean,subscription:Boolean=false):Boolean {
@@ -327,6 +347,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             apiPort=data.setting("apiPort").toIntOrNull() ?: 9090
         Libcore.setNetworkChangeResetConnections(data.bool("networkReset"))
             engine.start(config)
+            currentCoroutineContext().ensureActive()
             val restoreWarnings=restoreTargetChoices(config)
             applyLiveSettings(data,running=true)
             appliedData=data;appliedConfig=config;syncIdle()
@@ -437,7 +458,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     }
     private fun syncIdle() {
         if(current.get().connectionState!=RuntimeState.CONNECTED && appliedData==null)return
-        val next=SamplingPolicy.pauseCore(power.isDeviceIdleMode,subscriptionBusy,appliedConfig.orEmpty().contains("\"wireguard\""))
+        val next=SamplingPolicy.pauseCore(power.isDeviceIdleMode,subscriptionBusy || subscriptionApplying,appliedConfig.orEmpty().contains("\"wireguard\""))
         if(next)engine.sleep() else engine.wake()
         if(idle!=next)android.util.Log.i("LinksRuntime","idle=$next")
         idle=next
@@ -550,7 +571,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         } finally { connection.disconnect() }
     }
     private fun publishTestState(batchId:Long,request:String,remaining:Collection<Long>,total:Int,completed:Int,running:Boolean,begin:Boolean=false) {
-        testState=JSONObject().put("batchId",batchId).put("request",request).put("nodes",JSONArray(remaining))
+        testState=JSONObject().put("epoch",testEpoch).put("batchId",batchId).put("request",request).put("nodes",JSONArray(remaining))
             .put("total",total).put("completed",completed).put("running",running).put("begin",begin).toString()
         event("testing",testState)
     }
@@ -632,7 +653,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
         return failures.map { "已保存的目标择优未能恢复，$it" }
     }
     private suspend fun startTests(ids:JSONArray,request:String=java.util.UUID.randomUUID().toString(),targetRequest:TargetRequest?=null,quiet:Boolean=false):Job? = testAccess.withLock {
-        require(request.matches(Regex("[0-9a-f-]{36}"))) { "无效测速请求" }
+        require(request.matches(Regex("[0-9a-f-]{36}(:[1-9][0-9]{0,18})?"))) { "无效测速请求" }
         cancelTestsLocked()
         val data=store.snapshot()
         val outbounds=data.nodes.associate { it.id to it.outbound }
@@ -665,7 +686,7 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
                         remaining.remove(update.id);completed++
                         val current=currentNodes[update.id]
                         if(current?.outbound==update.outbound && current.ping==update.ping && current.status==update.status)
-                            event("test",JSONObject().put("batchId",batchId).put("request",request).put("id",update.id).put("ping",update.ping).toString())
+                            event("test",JSONObject().put("epoch",testEpoch).put("batchId",batchId).put("request",request).put("id",update.id).put("ping",update.ping).toString())
                     }
                     publishTestState(batchId,request,remaining,selected.size,completed,true)
                 }
@@ -823,22 +844,28 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             } finally {subscriptionBusy=false;withContext(NonCancellable) {access.withLock {syncIdle()}};armSubscriptionAlarm()}
         }
     }
+    private fun foregroundEntry(text:String) = synchronized(notificationLock) {
+        if(destroyed)return
+        val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if(!channelReady) {manager.createNotificationChannel(NotificationChannel("proxy","Links 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true}
+        val title=notificationTitle.ifBlank {"Links"}
+        owner.startForeground(1,buildNotification(title,text,publishedIcon));inForeground=true
+        notificationTitle=title;notificationBody=text;notificationText="$title|$text|$publishedIcon"
+    }
     /** Status changes always go through startForeground; per-second rate text only re-posts when it actually changed. */
     private fun notification(text:String,rate:Boolean=false,data:AppData=appliedData ?: store.data.value,
-        expectedEpoch:Long=notificationEpoch.get(),initial:Boolean=false,existingOnly:Boolean=false) {
+        expectedEpoch:Long=notificationEpoch.get()) {
         val group=if(data.bool("showGroupInNotification"))data.groups.firstOrNull { it.id==data.selectedGroupId }?.name.orEmpty() else ""
         val title=if(group.isBlank())"Links" else "Links · $group"
-        // Never hold the lifecycle/notification monitor while SQLite opens or waits.
-        val iconRead=readNotificationIcon()
-        synchronized(this) {
-            if(destroyed || expectedEpoch!=notificationEpoch.get() || (initial && inForeground) || (existingOnly && !inForeground))return
-            val icon=notificationIconForPublish(iconRead)
+        synchronized(notificationLock) {
+            if(destroyed || expectedEpoch!=notificationEpoch.get())return
+            val icon=publishedIcon
             val key="$title|$text|$icon"
             if(rate && (!inForeground || key==notificationText)) return
             val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if(!channelReady && Build.VERSION.SDK_INT>=26) { manager.createNotificationChannel(NotificationChannel("proxy","Links 代理",NotificationManager.IMPORTANCE_LOW));channelReady=true }
             val built=buildNotification(title,text,icon)
-            if(rate || existingOnly)manager.notify(1,built) else { owner.startForeground(1,built);inForeground=true }
+            if(rate)manager.notify(1,built) else { owner.startForeground(1,built);inForeground=true }
             notificationText=key;notificationTitle=title;notificationBody=text
         }
     }
@@ -860,9 +887,10 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
     private fun refreshNotificationIcon() {
         val epoch=notificationEpoch.get()
         val iconRead=readNotificationIcon()
-        synchronized(this) {
-            if(destroyed || epoch!=notificationEpoch.get() || !inForeground)return
+        synchronized(notificationLock) {
+            if(destroyed || epoch!=notificationEpoch.get())return
             val icon=notificationIconForPublish(iconRead)
+            if(!inForeground)return
             val key="$notificationTitle|$notificationBody|$icon"
             if(key==notificationText)return
             val manager=getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -870,26 +898,24 @@ class ZaneRuntime(private val owner:Service,private val vpn:VpnService?):Context
             notificationText=key
         }
     }
-    @Synchronized private fun foregroundStop() { notificationEpoch.incrementAndGet();inForeground=false;notificationText="";if(Build.VERSION.SDK_INT>=24)owner.stopForeground(Service.STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") owner.stopForeground(true) }
+    private fun foregroundStop() = synchronized(notificationLock) { notificationEpoch.incrementAndGet();inForeground=false;notificationText="";if(Build.VERSION.SDK_INT>=24)owner.stopForeground(Service.STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") owner.stopForeground(true) }
     fun revoke() { dispatch("stop","") }
     fun destroy() {
-        notificationEpoch.incrementAndGet();destroyed=true
-        cancelSubscriptionAlarm()
-        releaseWakeLock();runCatching { unregisterReceiver(wakeReceiver) }
-        synchronized(testStateLock){activeTestBatch=0L}
-        commands.close();scope.cancel();engine.cancelTests();speed?.cancel()
-        // onDestroy runs on the main thread; a start stuck in native code must not turn into an ANR.
-        val finished=runBlocking(Dispatchers.IO) {withTimeoutOrNull(4000) {access.withLock {cleanupCore()}}}
-        if(finished==null)CoroutineScope(Dispatchers.IO).launch {access.withLock {cleanupCore()}}
-        callbacks.kill()
+        synchronized(notificationLock) {if(destroyed)return;notificationEpoch.incrementAndGet();destroyed=true}
+        runCatching {unregisterReceiver(wakeReceiver)}
+        commands.close();callbacks.kill()
+        // Cancellation and synchronous native close may block; neither runs on onDestroy's caller.
+        resources.close(
+            cancelNative={synchronized(testStateLock) {activeTestBatch=0L};engine.cancelTests();speed?.cancel();cancelSubscriptionAlarm()},
+            cleanup={try {access.withLock {cleanupCore()}} catch(e:Exception) {android.util.Log.e("LinksRuntime","runtime cleanup failed",e);throw e}})
     }
     private fun cleanupCore() {
+        val data=if(ready.isCompleted && !ready.isCancelled)runCatching {store.snapshot()}.getOrNull() else null
+        val selections=data?.let {runCatching {readSelections(it)}.getOrDefault(JSONObject())} ?: JSONObject()
         try {
-            if(ready.isCompleted && !ready.isCancelled)runCatching {
-                val data=store.snapshot();val selections=readSelections(data)
-                recordTraffic(data,engine.close(),selections);traffic.persistTraffic()
-            }
-        } finally {runCatching {engine.close()};runCatching {platform.close()};store.close()}
+            val remaining=engine.close()
+            if(data!=null) {recordTraffic(data,remaining,selections);traffic.persistTraffic()}
+        } finally {releaseWakeLock();runCatching {platform.close()};store.close()}
     }
 
     private fun releaseWakeLock() { wakeLock?.let { if(it.isHeld)it.release() };wakeLock=null }

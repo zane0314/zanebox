@@ -199,7 +199,7 @@ private fun SiteCardsPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
                 candidateIds.isEmpty() -> uiText("没有可用节点")
                 else -> uiText("未检测")
             }
-            UiCard { UiRow(site.name,"${site.category} · ${site.host} · ${uiText("目标")}: ${targetName(target,data)} · ${uiText("规则")}: ${ruleLineCount(ruleText)} · $health",Icons.Outlined.Public,
+            UiCard { UiRow(site.name,"${site.category} · ${site.host} · ${uiText("目标")}: ${targetLabel(target,data)} · ${uiText("规则")}: ${ruleLineCount(ruleText)} · $health",Icons.Outlined.Public,
                 modifier=Modifier.testTag("site_card_${site.key}"),chevron=false,trailing={Text(health,color=if(pings.isNotEmpty())MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)}) }
         }
     }

@@ -60,11 +60,11 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
     val drag=rememberDragSort(policyOrder.map{"smart-policy-$it"},listState){keys->vm.reorderSmartPolicies(keys.map{it.toString().removePrefix("smart-policy-")})}
     LazyColumn(modifier.fillMaxSize().testTag("page_list"),state=listState,contentPadding=PaddingValues(horizontal=16.dp,vertical=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         item(key="smart-rules-section"){UiSection("路由规则")}
-        item(key="smart-rules"){UiCard{UiRow("路由规则","前置 ${data.rules.count{it.prioritize}} · 后置 ${data.rules.count{!it.prioritize}}",Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}}
+        item(key="smart-rules"){UiCard{UiRow("路由规则",uiText("前置 %s · 后置 %s",data.rules.count{it.prioritize},data.rules.count{!it.prioritize}),Icons.Outlined.AccountTree,iconRes=R.drawable.zb_ref_ic_mingcute_route_24,onClick=onRules,modifier=Modifier.testTag("smart_rules"))}}
         item(key="smart-groups-section"){UiSection("分流节点组")}
-        item(key="smart-source"){UiCard{UiRow("自动选择范围","全部启用订阅组 · ${com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,"auto").size} 个可用节点",Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,chevron=false,modifier=Modifier.testTag("smart_source"))}}
-        item(key="smart-update"){UiCard{UiRow("引用规则更新", "自动：${data.setting("rulesUpdateInterval")} · 连接后：${data.setting("rulesUpdateDelay","30s")}",Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
-            Row{IconButton(onClick={vm.updateAllSmartRules()},modifier=Modifier.testTag("smart_update")){Icon(Icons.Outlined.Download,"立即更新规则")};IconButton(onClick={updateChoice="rulesUpdateDelay"}){Icon(Icons.Outlined.Settings,"规则更新设置")}}
+        item(key="smart-source"){UiCard{UiRow("自动选择范围",uiText("全部启用订阅组 · %s 个可用节点",com.zane.zanebox.config.ConfigBuilder.smartTargetNodeIds(data,"auto").size),Icons.Outlined.Router,iconRes=R.drawable.zb_ref_ic_smart_router,chevron=false,modifier=Modifier.testTag("smart_source"))}}
+        item(key="smart-update"){UiCard{UiRow("引用规则更新", uiText("自动：%s · 连接后：%s",data.setting("rulesUpdateInterval"),data.setting("rulesUpdateDelay","30s")),Icons.Outlined.Refresh,onClick={updateChoice="rulesUpdateInterval"},trailing={
+            Row{IconButton(onClick={vm.updateAllSmartRules()},modifier=Modifier.testTag("smart_update")){Icon(Icons.Outlined.Download,uiText("立即更新规则"))};IconButton(onClick={updateChoice="rulesUpdateDelay"}){Icon(Icons.Outlined.Settings,uiText("规则更新设置"))}}
         })}}
         item(key="smart-merges"){UiCard{UiRow("管理节点汇总组","合并多个分组或指定节点为分流目标",Icons.Outlined.Hub,iconRes=R.drawable.zb_ref_ic_mingcute_group_24,onClick=onMerges,modifier=Modifier.testTag("smart_merges"))}}
         item(key="smart-policies-section"){UiSection("应用策略")}
@@ -75,15 +75,15 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
                 val value=smartTarget(data,key)
                 UiCard(Modifier.animateItem(placementSpec=if(drag.dragging==itemKey)null else spring()).then(drag.modifier(itemKey)).testTag("smart_card_$key")) {
                     val node=smartLowestNode(data,value,testing)
-                    SmartPolicyRow(title,when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
-                        node,targetName(value,data),smartLatencyLabel(data,value,testing),key,onClick={expanded=if(expanded==key)"" else key},onLatency={vm.service.testTarget(value,key)},onTarget={target=key})
+                    SmartPolicyRow(if(custom.any{it.first==key})title else uiText(title),when(key){"speed"->Icons.Outlined.Speed;"youtube"->Icons.Outlined.PlayCircle;"telegram"->Icons.Outlined.Send;"spotify","tiktok"->Icons.Outlined.MusicNote;"google"->Icons.Outlined.Public;"ai"->Icons.Outlined.AutoAwesome;else->Icons.Outlined.Apps},
+                        node,targetLabel(value,data),smartLatencyLabel(data,value,testing),key,onClick={expanded=if(expanded==key)"" else key},onLatency={vm.service.testTarget(value,key)},onTarget={target=key})
                     if(expanded==key) {
                         val bundled=remember(key,vm){com.zane.zanebox.config.builtinSmartRuleText(key){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}}
                         val usesBuiltin=key in com.zane.zanebox.config.builtinSmartRuleFiles && data.setting("smartUrl.$key").isBlank() && (!data.settings.containsKey("smartRules.$key") || com.zane.zanebox.config.isBuiltinSmartRuleText(data.setting("smartRules.$key"),bundled))
-                        UiRow("分流目标",targetName(value,data),onClick={target=key},summaryLines=Int.MAX_VALUE,modifier=Modifier.testTag("smart_goal_$key"))
-                        node?.let{UiRow("最低延迟节点",it,chevron=false,summaryLines=Int.MAX_VALUE,modifier=Modifier.testTag("smart_current_$key"))}
-                        UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{if(usesBuiltin)"内置兼容规则组" else "自定义域名规则"},Icons.Outlined.Description,onClick={ruleSource=key})
-                        UiRow("选择应用",if(installedPackages==null)"正在读取应用" else "${com.zane.zanebox.config.effectiveSmartPackages(data,key,installedPackages).size} 个有效应用",Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
+                        UiRow("分流目标",targetLabel(value,data),translateSubtitle=false,onClick={target=key},summaryLines=Int.MAX_VALUE,modifier=Modifier.testTag("smart_goal_$key"))
+                        node?.let{UiRow("最低延迟节点",it,translateSubtitle=false,chevron=false,summaryLines=Int.MAX_VALUE,modifier=Modifier.testTag("smart_current_$key"))}
+                        UiRow("规则来源",data.setting("smartUrl.$key").ifBlank{uiText(if(usesBuiltin)"内置兼容规则组" else "自定义域名规则")},Icons.Outlined.Description,translateSubtitle=false,onClick={ruleSource=key})
+                        UiRow("选择应用",if(installedPackages==null)uiText("正在读取应用") else uiText("%s 个有效应用",com.zane.zanebox.config.effectiveSmartPackages(data,key,installedPackages).size),Icons.Outlined.Apps,onClick={apps=key},modifier=Modifier.testTag("smart_apps_$key"))
                         if(custom.any{it.first==key}) {
                             UiRow("重命名",onClick={form("重命名",listOf("名称" to title)){values->require(values[0].isNotBlank());require((builtIn+custom).none{it.first!=key && it.second==values[0]}){"名称已存在"};vm.setting("smartCustom.$key.name",values[0])}})
                             UiRow("删除应用组",onClick={confirmDelete=key})
@@ -92,8 +92,8 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
                 }
             }
         }
-        item(key="smart-add-custom"){OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};vm.task {val key="custom_${vm.store.nextId()}";vm.store.putSetting("smartCustom.$key.name",v[0]);vm.message.value="已保存"}}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text("添加自定义应用组")}}
-        if(data.setting("serviceMode")!="vpn")item(key="smart-vpn-hint"){Text("智能应用路由依赖 VPN 模式。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)}
+        item(key="smart-add-custom"){OutlinedButton(onClick={form("添加自定义应用组",listOf("名称" to "")){v->require(v[0].isNotBlank()){"请输入名称"};require((builtIn+custom).none{it.second==v[0]}){"名称已存在"};vm.task {val key="custom_${vm.store.nextId()}";vm.store.putSetting("smartCustom.$key.name",v[0]);vm.message.value="已保存"}}},modifier=Modifier.fillMaxWidth().testTag("smart_add_custom")){Icon(Icons.Outlined.Add,null);Text(uiText("添加自定义应用组"))}}
+        if(data.setting("serviceMode")!="vpn")item(key="smart-vpn-hint"){Text(uiText("智能应用路由依赖 VPN 模式。"),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("smart_vpn_hint"))}
     }
     if(target.isNotBlank())TargetPicker("分流目标",smartTarget(data,target),data,{target=""},{vm.selectSmartTarget(target,it)},smart=true)
     if(ruleSource.isNotBlank())RuleSourcePage(ruleSource,data,vm){ruleSource=""}
@@ -101,11 +101,11 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
         if(updateChoice=="rulesUpdateInterval")listOf("off" to "关闭","6h" to "6 小时","12h" to "12 小时","24h" to "24 小时","3d" to "3 天","7d" to "7 天")else listOf("0s" to "立即","15s" to "15 秒","30s" to "30 秒","1m" to "1 分钟","5m" to "5 分钟"),{updateChoice=""}){vm.setting(updateChoice,it)}
     if(apps.isNotBlank()) {
         val appKey=apps
-        AppsEditor(com.zane.zanebox.config.appPackages(data.setting("smartCustom.$appKey.packages")),{apps=""},scopeData=data,title="选择应用 · ${data.setting("smartCustom.$appKey.name").ifBlank{appKey}}") { packages->
+        AppsEditor(com.zane.zanebox.config.appPackages(data.setting("smartCustom.$appKey.packages")),{apps=""},scopeData=data,title=uiText("选择应用 · %s",data.setting("smartCustom.$appKey.name").ifBlank{appKey})) { packages->
             vm.edit(onSaved={apps=""},autoApply=false){it.copy(settings=it.settings+("smartCustom.$appKey.packages" to packages.sorted().joinToString("\n")))}
         }
     }
-    if(confirmDelete.isNotBlank())UiAlertDialog(onDismissRequest={confirmDelete=""},title={Text("删除自定义应用组？")},confirmButton={TextButton(onClick={val key=confirmDelete;vm.edit{d->d.copy(settings=d.settings.filterKeys{!it.startsWith("smartCustom.$key.") && it!="smart.$key.target" && it!="smartUrl.$key" && it!="smartRules.$key"})};confirmDelete=""}){Text("删除")}},dismissButton={TextButton(onClick={confirmDelete=""}){Text("取消")}})
+    if(confirmDelete.isNotBlank())UiAlertDialog(onDismissRequest={confirmDelete=""},title={Text(uiText("删除自定义应用组？"))},confirmButton={TextButton(onClick={val key=confirmDelete;vm.edit{d->d.copy(settings=d.settings.filterKeys{!it.startsWith("smartCustom.$key.") && it!="smart.$key.target" && it!="smartUrl.$key" && it!="smartRules.$key"})};confirmDelete=""}){Text(uiText("删除"))}},dismissButton={TextButton(onClick={confirmDelete=""}){Text(uiText("取消"))}})
 }
 
 /** Two lines: name + group-lowest latency, then the concrete node + the one target button. Names ellipsize, the latency value is always complete; large fonts grow the row. */
@@ -117,17 +117,17 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
             val half=maxWidth*0.5f
             Column(Modifier.fillMaxWidth()) {
                 TitleWithLatency(
-                    title={Text(uiText(title),fontSize=13.sp,lineHeight=18.sp,fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)},
+                    title={Text(title,fontSize=13.sp,lineHeight=18.sp,fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)},
                     latency=latency?.let { label -> {
                         TextButton(onClick=onLatency,modifier=Modifier.defaultMinSize(minHeight=48.dp).testTag("smart_latency_$key"),contentPadding=PaddingValues(horizontal=8.dp)) {
                             LatencyText(uiText(label))
                         }
                     } })
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                    if(node!=null)Text(uiText(node),Modifier.weight(1f).testTag("smart_node_$key"),fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                    if(node!=null)Text(node,Modifier.weight(1f).testTag("smart_node_$key"),fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
                     else Spacer(Modifier.weight(1f))
                     TextButton(onClick=onTarget,modifier=Modifier.widthIn(max=half).testTag("smart_target_$key"),contentPadding=PaddingValues(start=8.dp,end=4.dp)) {
-                        Text(uiText(targetName),fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
+                        Text(targetName,fontSize=12.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
                         Icon(Icons.Outlined.ArrowDropDown,null,Modifier.size(18.dp))
                     }
                 }
@@ -179,6 +179,7 @@ private data class RuleCatalogEntry(val name:String,val url:String,val page:Stri
 
 @Composable
 private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDismiss:()->Unit) {
+    val language=LocalUiLanguage.current
     val initialUrl=data.setting("smartUrl.$serviceKey")
     val initialRules=remember(serviceKey,data.settings) {
         val bundled=com.zane.zanebox.config.builtinSmartRuleText(serviceKey){path->vm.getApplication<android.app.Application>().assets.open(path).bufferedReader().use{it.readText()}}
@@ -288,9 +289,9 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
                         }
                         if(fetching)CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=2.dp)
                     }
-                    val compatibility=remember(serviceKey,rules){com.zane.zanebox.config.ConfigBuilder.ruleCompatibilityWarnings(serviceKey,rules)}
+                    val compatibility=remember(serviceKey,rules,language){com.zane.zanebox.config.ConfigBuilder.ruleCompatibilityWarnings(serviceKey,rules){service,type->translateText("%s：此规则格式暂不支持 %s；该类条目保留但不参与匹配，其余有效规则仍生效",language,service,type)}}
                     if(compatibility.isNotEmpty())Text(compatibility.joinToString("\n"),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_compatibility"))
-                    if(error.isNotBlank())Text(error,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_error"))
+                    if(error.isNotBlank())Text(uiText(error),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_source_error"))
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
                         Button(onClick=::fetchAndReplace,enabled=!busy&&!fetching,modifier=Modifier.testTag("rule_source_replace")){Text(uiText("获取并替换"))}
                     }
@@ -299,8 +300,8 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
             }
         }
         item{UiCard{
-            UiRow("自定义规则","${ruleLines.count{it.isNotBlank() && !it.trim().startsWith('#') && !it.trim().startsWith("//")}} 条",Icons.Outlined.AccountTree,trailing={
-                TextButton(onClick={editDomain(-1)},modifier=Modifier.testTag("rule_domain_add")){Text("添加")}
+            UiRow("自定义规则",uiText("%s 条",ruleLines.count{it.isNotBlank() && !it.trim().startsWith('#') && !it.trim().startsWith("//")}),Icons.Outlined.AccountTree,trailing={
+                TextButton(onClick={editDomain(-1)},modifier=Modifier.testTag("rule_domain_add")){Text(uiText("添加"))}
             })
             UiRow("规则文本 / 批量编辑",if(rawEditor)"收起文本，返回选择式编辑" else "保留注释、IP 规则及其他原始内容",Icons.Outlined.Code,onClick={rawEditor=!rawEditor},modifier=Modifier.testTag("rule_source_raw"))
         }}
@@ -309,17 +310,17 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
                 modifier=Modifier.fillMaxWidth().testTag("rule_source_rules"),minLines=8,maxLines=16)
         } else items(ruleLines.indices.filter{ruleLines[it].isNotBlank() && !ruleLines[it].trim().startsWith('#') && !ruleLines[it].trim().startsWith("//")},key={it}) { index ->
             val line=ruleLines[index];val match=smartDomainRule(line)
-            UiCard{UiRow(match?.second ?: line,domainTypes.firstOrNull{it.first==match?.first}?.second ?: "原始规则 · 在批量编辑中修改",Icons.Outlined.Description,
+            UiCard{UiRow(match?.second ?: line,domainTypes.firstOrNull{it.first==match?.first}?.second ?: "原始规则 · 在批量编辑中修改",Icons.Outlined.Description,translateTitle=false,
                 onClick=if(match!=null)({editDomain(index)})else ({rawEditor=true}),modifier=Modifier.testTag("rule_domain_$index"),summaryLines=2)}
         }
     }
 
     if(typePicker)ChoiceDialog("域名匹配类型",domainType,domainTypes,{typePicker=false}){domainType=it;typePicker=false;domainInput=true}
-    if(domainInput)UiAlertDialog(onDismissRequest={domainInput=false},title={Text(if(domainIndex==-1)"添加域名规则" else "编辑域名规则")},text={
+    if(domainInput)UiAlertDialog(onDismissRequest={domainInput=false},title={Text(uiText(if(domainIndex==-1)"添加域名规则" else "编辑域名规则"))},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             UiRow("匹配类型",domainTypes.first{it.first==domainType}.second,onClick={typePicker=true},modifier=Modifier.testTag("rule_domain_type"))
-            OutlinedTextField(domainValue,{domainValue=it;domainError=""},label={Text(if(domainType=="DOMAIN-KEYWORD")"关键词" else "域名")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("rule_domain_value"))
-            if(domainError.isNotBlank())Text(domainError,color=MaterialTheme.colorScheme.error)
+            OutlinedTextField(domainValue,{domainValue=it;domainError=""},label={Text(uiText(if(domainType=="DOMAIN-KEYWORD")"关键词" else "域名"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("rule_domain_value"))
+            if(domainError.isNotBlank())Text(uiText(domainError),color=MaterialTheme.colorScheme.error)
         }
     },confirmButton={TextButton(onClick={
         val value=domainValue.trim()
@@ -332,14 +333,14 @@ private fun RuleSourcePage(serviceKey:String,data:AppData,vm:AppViewModel,onDism
             if(index in lines.indices)lines[index]=line else lines.add(line)
             rules=lines.joinToString("\n");error="";domainInput=false
         }
-    },modifier=Modifier.testTag("rule_domain_confirm")){Text(if(domainIndex==-1)"添加" else "替换")}},dismissButton={TextButton(onClick={domainInput=false}){Text(uiText("取消"))}})
+    },modifier=Modifier.testTag("rule_domain_confirm")){Text(uiText(if(domainIndex==-1)"添加" else "替换"))}},dismissButton={TextButton(onClick={domainInput=false}){Text(uiText("取消"))}})
 
     if(catalogOpen)UiAlertDialog(onDismissRequest={catalogOpen=false},title={Text(uiText("Karing 在线规则目录"))},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(catalogQuery,{catalogQuery=it},label={Text(uiText("搜索 Karing 规则"))},singleLine=true,
                 modifier=Modifier.fillMaxWidth().testTag("rule_catalog_search"))
             if(catalogLoading)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){CircularProgressIndicator(Modifier.size(28.dp))}
-            if(catalogError.isNotBlank())Text(catalogError,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_catalog_error"))
+            if(catalogError.isNotBlank())Text(uiText(catalogError),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("rule_catalog_error"))
             LazyColumn(Modifier.heightIn(max=420.dp)) {
                 items(filteredCatalog,key={it.url}) { entry ->
                     Row(Modifier.fillMaxWidth().padding(vertical=4.dp).testTag("rule_catalog_item_${entry.name}"),verticalAlignment=Alignment.CenterVertically) {

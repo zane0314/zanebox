@@ -30,7 +30,7 @@ object SubscriptionClient {
             return ""
         }
         val body=fetch(url,settings=settings).body;require(body.isNotBlank()) { "规则源返回为空" }
-        if(ruleSetFormat(url)=="source")org.json.JSONObject(body).getJSONArray("rules")
+        if(ruleSetFormat(url)=="source") { com.zane.zanebox.json.requireJsonDepth(body);org.json.JSONObject(body).getJSONArray("rules") }
         return body
     }
     private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()

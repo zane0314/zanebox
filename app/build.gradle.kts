@@ -32,7 +32,7 @@ android {
     compileSdk = 35
     defaultConfig {
         applicationId = "com.zane.zanebox"
-        minSdk = 23
+        minSdk = 35
         targetSdk = 35
         versionName = identity.getProperty("versionName")
         versionCode = identity.getProperty("versionCode").toInt()

@@ -49,7 +49,8 @@ class AcceptanceTest {
   waitFor("订阅更新及内核应用完成",40000){!vm.busy.value && store.snapshot().groups.single().updatedAt>0 && store.snapshot().nodes.size==2}
   // Subscription changed protocol identity; get current IDs after replacement.
   val nodes=store.snapshot().nodes;val first=nodes[0].id;val second=nodes[1].id
-  store.update{it.copy(nodes=it.nodes.map{n->n.copy(order=if(n.id==second)0 else 1)},settings=it.settings+mapOf("selectedNodeId" to first.toString(),"testUrl" to "http://10.0.2.2:19080/test","sniff" to "false","dnsRemote" to "tcp://10.0.2.2:19087","dnsDirect" to "tcp://10.0.2.2:19087"))}
+  // 受控出口只服务 Probe，避免全 UID 重载中止系统自己的网络验证套接字。
+  store.update{it.copy(nodes=it.nodes.map{n->n.copy(order=if(n.id==second)0 else 1)},settings=it.settings+mapOf("selectedNodeId" to first.toString(),"testUrl" to "http://10.0.2.2:19080/test","sniff" to "false","dnsRemote" to "tcp://10.0.2.2:19087","dnsDirect" to "tcp://10.0.2.2:19087","perAppEnabled" to "true","perAppMode" to "include","perAppPackages" to "com.zane.probe"))}
   Assert.assertEquals(second,store.snapshot().nodes.sortedBy{it.order}.first().id)
   val backup=BackupManager(context);val original=store.snapshot();Assert.assertEquals(original,backup.`import`(backup.export(original)))
   try { store.replace(backup.`import`(byteArrayOf(1,2,3)));Assert.fail("坏备份被接受") }catch(_:Exception){}

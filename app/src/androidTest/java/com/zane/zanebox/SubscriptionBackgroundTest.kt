@@ -104,7 +104,7 @@ class SubscriptionBackgroundTest {
             store.update { it.copy(groups=it.groups.map { group->group.copy(options=options.toString()) }) }
             val request=OneTimeWorkRequestBuilder<SubscriptionUpdateWorker>().setInputData(workDataOf("groupId" to 1L)).build()
             work.enqueueUniqueWork("zanebox-subscription-1",ExistingWorkPolicy.REPLACE,request).result.get(5,TimeUnit.SECONDS)
-            waitFor("允许断开更新的真实后台Worker") { state()=="success" && store.snapshot().groups.single().updatedAt>0 }
+            waitFor("允许断开更新的真实后台Worker") {state()=="success" && store.snapshot().groups.single().updatedAt>0 && work.getWorkInfoById(request.id).get(5,TimeUnit.SECONDS)?.state?.isFinished==true}
             val data=store.snapshot();assertEquals(1,data.nodes.size);assertEquals("fixture A",data.nodes.single().name);assertEquals(data.nodes.single().id,data.selectedNodeId);assertEquals(1L,data.selectedGroupId)
             assertFalse(ServiceClient.isConnected(context));evidence.put("backgroundUpdate",true).put("filterDedup",true).put("defaultSelection",true)
             assertTrue(data.nodes.single().ping>0);evidence.put("latencyTestedWhileDisconnected",true)

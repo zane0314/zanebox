@@ -40,7 +40,8 @@ object ConfigBuilder {
         return when { path.endsWith(".srs",true)->"binary";path.endsWith(".json",true)->"source";else->"" }
     }
     private fun smartServices(data:AppData)=smartPolicyKeys(data)
-    fun ruleCompatibilityWarnings(service:String,rules:String):List<String> = rules.lines().map {it.substringBefore(',').trim().uppercase()}.filter {it in unsupportedSmartRuleTypes}.distinct().map {"$service：此规则格式暂不支持 $it；该类条目保留但不参与匹配，其余有效规则仍生效"}
+    fun ruleCompatibilityWarnings(service:String,rules:String):List<String> = ruleCompatibilityWarnings(service,rules) { key,type -> "$key：此规则格式暂不支持 $type；该类条目保留但不参与匹配，其余有效规则仍生效" }
+    fun ruleCompatibilityWarnings(service:String,rules:String,format:(String,String)->String):List<String> = rules.lines().map {it.substringBefore(',').trim().uppercase()}.filter {it in unsupportedSmartRuleTypes}.distinct().map {format(service,it)}
     fun warnings(data:AppData):List<String> = targetWarnings(data)+smartServices(data).flatMap {ruleCompatibilityWarnings(it,data.setting("smartRules.$it"))}
     fun targetWarnings(data: AppData): List<String> {
         val groups=data.groups.filter {it.enabled && it.subscriptionUrl.isNotBlank()}.map {it.id}.toSet()
@@ -419,7 +420,7 @@ object ConfigBuilder {
         fun split(text:String)=text.split(Regex("[\\s,]+" )).filter { it.isNotBlank() }
         listOf("port","source_port").forEach { key -> (rule.opt(key) as? String)?.let { text ->
             val ports=mutableListOf<Int>();val ranges=mutableListOf<String>()
-            split(text).forEach { value -> if(value.contains(':') || value.contains('-')) { val pair=value.replace('-',':').split(':');require(pair.size==2 && pair.all { it.toIntOrNull() in 1..65535 } && pair[0].toInt()<=pair[1].toInt()) { "端口范围无效" };ranges.add(pair.joinToString(":")) } else ports.add(value.toInt().also { require(it in 1..65535) { "端口范围无效" } }) }
+            split(text).forEach { value -> if(value.contains(':') || value.contains('-')) { val pair=value.replace('-',':').split(':');require(pair.size==2 && pair.all { it.toIntOrNull() in 1..65535 } && pair[0].toInt()<=pair[1].toInt()) { "端口范围无效" };ranges.add(pair.joinToString(":")) } else ports.add(value.toIntOrNull()?.takeIf { it in 1..65535 } ?: error("端口范围无效")) }
             rule.remove(key);if(ports.isNotEmpty()) rule.put(key,JSONArray(ports));if(ranges.isNotEmpty()) rule.put("${key}_range",JSONArray(ranges))
         } }
         listOf("source_ip_cidr","protocol","rule_set","network","domain","domain_suffix","domain_keyword","domain_regex","process_name","process_path","package_name").forEach { key -> (rule.opt(key) as? String)?.let { text -> rule.put(key,JSONArray(if(key=="domain_regex") text.lines().map { it.trim() }.filter { it.isNotBlank() } else split(text))) } }
@@ -502,7 +503,7 @@ object ConfigBuilder {
         listOf("server", "server_port", "peer_public_key", "pre_shared_key", "reserved", "local_address").forEach { result.remove(it) }
         return result
     }
-    private fun port(s: String) = s.toInt().also { require(it in 1..65535) { "端口无效" } }
+    private fun port(s: String) = s.toIntOrNull()?.takeIf { it in 1..65535 } ?: error("端口须为 1–65535 的整数")
     private fun dnsServer(address: String, tag: String, detour: String): JSONObject {
         val obj = JSONObject().put("tag", tag)
         if (address == "local") return obj.put("type", "local")
@@ -534,6 +535,5 @@ object ConfigBuilder {
             rule.optJSONArray("rules")?.let { a -> for(i in 0 until a.length()) checkRule(a.getJSONObject(i)) }
         }
         root.optJSONObject("route")?.optJSONArray("rules")?.let { a -> for(i in 0 until a.length()) checkRule(a.getJSONObject(i)) }
-        root.optJSONArray("inbounds"); root.optJSONObject("dns")?.optJSONArray("servers")
     }
 }

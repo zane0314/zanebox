@@ -1,8 +1,26 @@
 #!/usr/bin/env python3
-"""Compare the saved pre-change builder with current compiled code on public fixtures."""
-import glob, ipaddress, json, pathlib, subprocess, tempfile
+"""Compare saved builder/assets with current code; unchanged helpers use current compiled classes."""
+import argparse, glob, ipaddress, json, pathlib, subprocess, tempfile
 root=pathlib.Path(__file__).resolve().parents[1]
-out=root/'reports/optimization-1.0.16';before=out/'source-before/app/src/main/java/com/zane/zanebox'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--baseline-source',type=pathlib.Path,required=True,help='已核实历史源码根目录（包含 app/src/main/java）')
+parser.add_argument('--output',type=pathlib.Path,required=True,help='本次比较结果目录')
+args=parser.parse_args()
+before=args.baseline_source.resolve()/'app/src/main/java/com/zane/zanebox'
+required=['ConfigBuilder.kt','RouteAssets.kt']
+for name in required:
+    if not (before/'config'/name).is_file(): parser.error(f'基线不完整：缺少 {before/"config"/name}；请从已核实的历史 Git 提交导出源码')
+current=root/'app/src/main/java/com/zane/zanebox'
+if before==current or all((before/'config'/name).read_bytes()==(current/'config'/name).read_bytes() for name in required):
+    parser.error('基线与当前构建源码相同，不能用自己比较自己；请指定真实的变更前源码')
+out=args.output.resolve()
+if out==args.baseline_source.resolve() or args.baseline_source.resolve() in out.parents:
+    parser.error('输出目录必须独立于基线源码')
+classes=root/'app/build/tmp/kotlin-classes/debug'
+built=classes/'com/zane/zanebox/config/ConfigBuilder.class'
+if not built.is_file() or built.stat().st_mtime < (current/'config/ConfigBuilder.kt').stat().st_mtime:
+    parser.error('当前 ConfigBuilder 编译产物缺失或过期；请先构建当前 debug Kotlin classes')
+out.mkdir(parents=True,exist_ok=True)
 cache=pathlib.Path.home()/'.gradle/caches/modules-2/files-2.1'
 def jar(pattern):
     found=glob.glob(str(cache/pattern));assert found,pattern
@@ -14,8 +32,9 @@ libs=[str(classes),std,jar('org.json/json/20240303/*/*.jar'),jar('org.jetbrains.
 java='/opt/homebrew/opt/openjdk@17/bin/java'
 with tempfile.TemporaryDirectory(prefix='links-config-compare-') as tmp:
     tmp=pathlib.Path(tmp);sources=[]
-    for name in ['ConfigBuilder.kt','RouteAssets.kt']:
-        p=tmp/name;p.write_text((before/'config'/name).read_text().replace('package com.zane.zanebox.config','package baseline'));sources.append(str(p))
+    for name in required:
+        package='package baseline'+ ('\n\nimport com.zane.zanebox.config.effectiveSmartPackages' if name=='ConfigBuilder.kt' else '')
+        p=tmp/name;p.write_text((before/'config'/name).read_text().replace('package com.zane.zanebox.config',package));sources.append(str(p))
     harness=tmp/'Bench.kt';harness.write_text('''
 import com.zane.zanebox.data.*
 import org.json.JSONObject

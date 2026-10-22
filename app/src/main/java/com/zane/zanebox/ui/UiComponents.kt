@@ -44,7 +44,7 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
         TextButton(onClick=onMode,modifier=Modifier.testTag(if(selecting)"${tag}_selection_cancel" else "${tag}_multiselect")){Text(uiText(if(selecting)"取消多选" else "多选"))}
         if(selecting) {
             TextButton(onClick=onAll,modifier=Modifier.testTag("${tag}_select_all")){Text(uiText("全选"))}
-            TextButton(onClick=onDelete,enabled=count>0,modifier=Modifier.testTag("${tag}_delete_selected")){Text("删除 ($count)")}
+            TextButton(onClick=onDelete,enabled=count>0,modifier=Modifier.testTag("${tag}_delete_selected")){Text(uiText("删除 (%s)",count))}
         }
     }
 }
@@ -87,13 +87,13 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
 }
 
 @Composable internal fun UiRow(title:String,subtitle:String="",icon:ImageVector?=null,
-    modifier:Modifier=Modifier,onClick:(()->Unit)?=null,trailing:(@Composable ()->Unit)?=null,iconRes:Int=0,minHeight:Dp=68.dp,titleSize:androidx.compose.ui.unit.TextUnit=13.sp,chevron:Boolean=true,reserveIcon:Boolean=false,summaryLines:Int=1,onLongClick:(()->Unit)?=null) {
+    modifier:Modifier=Modifier,onClick:(()->Unit)?=null,trailing:(@Composable ()->Unit)?=null,iconRes:Int=0,minHeight:Dp=68.dp,titleSize:androidx.compose.ui.unit.TextUnit=13.sp,chevron:Boolean=true,reserveIcon:Boolean=false,summaryLines:Int=1,onLongClick:(()->Unit)?=null,translateTitle:Boolean=true,translateSubtitle:Boolean=true) {
     Row(modifier.fillMaxWidth().then(if(onLongClick!=null)Modifier.combinedClickable(onClick=onClick ?: {},onLongClick=onLongClick) else if(onClick==null) Modifier else Modifier.clickable(onClick=onClick))
         .heightIn(min=minHeight).padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
         if(iconRes!=0 || icon!=null) { if(iconRes!=0)Icon(painterResource(iconRes),null,Modifier.size(24.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant) else Icon(icon!!,null,Modifier.size(24.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant);Spacer(Modifier.width(14.dp)) } else if(reserveIcon)Spacer(Modifier.width(38.dp))
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            Text(uiText(title),fontSize=titleSize,lineHeight=18.sp,fontWeight=FontWeight.SemiBold)
-            if(subtitle.isNotBlank()) Text(uiText(subtitle),fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=summaryLines,overflow=TextOverflow.Ellipsis)
+            Text(if(translateTitle)uiText(title)else title,fontSize=titleSize,lineHeight=18.sp,fontWeight=FontWeight.SemiBold)
+            if(subtitle.isNotBlank()) Text(if(translateSubtitle)uiText(subtitle)else subtitle,fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=summaryLines,overflow=TextOverflow.Ellipsis)
         }
         if(trailing!=null)trailing() else if(onClick!=null && chevron)Icon(Icons.Outlined.ChevronRight,null,Modifier.size(20.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -180,11 +180,11 @@ internal val LocalUiReload=staticCompositionLocalOf<(() -> Unit)?> { null }
         confirmButton={CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density){confirmButton()}})
 }
 
-@Composable internal fun ChoiceDialog(title:String,value:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,dismissOnChoose:Boolean=true,onChoose:(String)->Unit) {
-    UiAlertDialog(onDismissRequest=onDismiss,modifier=Modifier.semantics{testTagsAsResourceId=true},title={Text(uiText(title))},text={
+@Composable internal fun ChoiceDialog(title:String,value:String,choices:List<Pair<String,String>>,onDismiss:()->Unit,dismissOnChoose:Boolean=true,translateTitle:Boolean=true,translateChoices:Boolean=true,onChoose:(String)->Unit) {
+    UiAlertDialog(onDismissRequest=onDismiss,modifier=Modifier.semantics{testTagsAsResourceId=true},title={Text(if(translateTitle)uiText(title)else title)},text={
         LazyColumn(Modifier.heightIn(max=440.dp).selectableGroup()) { items(choices.size) {i-> val (key,label)=choices[i]
             Row(Modifier.fillMaxWidth().testTag("choice_$key").selectable(selected=value==key,role=Role.RadioButton) {onChoose(key);if(dismissOnChoose)onDismiss()}.heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically) {
-                RadioButton(selected=value==key,onClick=null);Spacer(Modifier.width(8.dp));Text(uiText(label))
+                RadioButton(selected=value==key,onClick=null);Spacer(Modifier.width(8.dp));Text(if(translateChoices)uiText(label)else label)
             }
         } }
     },confirmButton={TextButton(onClick=onDismiss){Text(uiText("取消"))}})

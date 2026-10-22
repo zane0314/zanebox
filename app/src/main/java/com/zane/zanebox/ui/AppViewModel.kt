@@ -36,6 +36,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val message = MutableStateFlow("")
     val busy = MutableStateFlow(true)
     private var taskCount=0
+    private val reloadRequests=kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
     private var applyJob:kotlinx.coroutines.Job?=null
     private val uiSkinLock=Mutex()
     private val uiSkinChoice=java.util.concurrent.atomic.AtomicLong()
@@ -53,10 +54,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch(e:Exception) {initialized.completeExceptionally(e);message.value=e.message ?: "数据库加载失败"}
             finally {busy.value=false}
         }
-        viewModelScope.launch { SubscriptionScheduler.updates.collect { withContext(Dispatchers.IO) { initialized.await();store.reload() } } }
+        viewModelScope.launch {
+            initialized.await()
+            receiveStoreRefreshes(reloadRequests) {
+                try { withContext(Dispatchers.IO) { store.reload() } }
+                catch(e:kotlinx.coroutines.CancellationException) { throw e }
+                catch(e:Exception) { message.value=e.message ?: "数据库加载失败" }
+            }
+        }
+        viewModelScope.launch { SubscriptionScheduler.updates.collect { reloadRequests.trySend(Unit) } }
         viewModelScope.launch { data.map { value -> value.groups.map { group -> listOf(group.id,group.enabled,group.subscriptionUrl,group.updatedAt,SubscriptionOptions.signature(group.options)) } }.distinctUntilChanged().drop(1).collect { withContext(Dispatchers.IO) { SubscriptionScheduler.reconcile(getApplication(),store.snapshot()) } } }
-        viewModelScope.launch { service.events.collect { message.value = it; withContext(Dispatchers.IO) { initialized.await();store.reload() } } }
-        viewModelScope.launch { service.testResults.collect { withContext(Dispatchers.IO) { initialized.await();store.reload() } } }
+        viewModelScope.launch { service.events.collect { message.value = it;reloadRequests.trySend(Unit) } }
+        viewModelScope.launch { service.testResults.collect { reloadRequests.trySend(Unit) } }
     }
     fun task(onError:(String)->Unit={},block: suspend () -> Unit) { viewModelScope.launch {
         taskCount++; busy.value = true
@@ -264,7 +273,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stageAsset(kind,SubscriptionClient.fetchBytes(url,settings=data.settings,proxy=proxy));message.value="资源已下载，正在校验并应用"
     }
     fun importAsset(kind:String,uri:Uri)=task {
-        val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
+        val bytes=readImportBytes { getApplication<Application>().contentResolver.openInputStream(uri) }
         stageAsset(kind,bytes);message.value="资源已导入，正在校验并应用"
     }
     fun updateSmart(key:String) = task { val d=store.snapshot(); val content=SubscriptionClient.fetchSmartRules(d.setting("smartUrl.$key"),d.settings);store.update { com.zane.zanebox.config.applySmartRuleUpdate(it,key,d,content) };message.value="分流列表已更新，请点击应用修改" }
@@ -284,22 +293,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return d.copy(nodes=remaining,groups=d.groups.map{it.copy(frontProxy=if(it.frontProxy in removed)0 else it.frontProxy,landingProxy=if(it.landingProxy in removed)0 else it.landingProxy)},
             settings=cleanSmartTargets((if(d.selectedNodeId in removed)d.settings+("selectedNodeId" to "0")else d.settings).filterKeys { key -> removed.none { key=="nodeRegion.$it" } },removed.map{"node:$it"}.toSet()),
             rules=d.rules.map{if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in removed)it.copy(outbound="proxy")else it},
-            merges=d.merges.map{it.copy(nodeIds=it.nodeIds.filter{n->n !in removed},selectedId=if(it.selectedId in removed)0 else it.selectedId)}).withEnabledSelection()
+            merges=d.merges.map{it.copy(nodeIds=it.nodeIds.filter{n->n !in removed},selectedId=if(it.selectedId in removed)0 else it.selectedId)}).withoutStaleNodeSettings().withEnabledSelection()
     }
     fun deleteGroup(id:Long) = edit { d ->
         val cleaned=removeNodes(d,d.nodes.filter { it.groupId==id }.map { it.id }.toSet())
         cleaned.copy(groups=cleaned.groups.filter{it.id!=id},
             settings=cleanSmartTargets(cleaned.settings,setOf("group:$id"))+("browseGroupId" to if(d.browseGroupId==id)"0" else d.browseGroupId.toString())+("smartSourceGroupId" to if(d.setting("smartSourceGroupId")==id.toString())"0" else d.setting("smartSourceGroupId","0"))+("selectedGroupId" to if(cleaned.selectedGroupId==id)"0" else cleaned.selectedGroupId.toString()),
             rules=cleaned.rules.map { if(it.outbound=="group:$id")it.copy(outbound="proxy")else it },
-            merges=cleaned.merges.map { it.copy(groupIds=it.groupIds-id) })
+            merges=cleaned.merges.map { it.copy(groupIds=it.groupIds-id) }).withoutStaleNodeSettings()
     }
-    fun deleteMerge(id:Long) = edit { d -> d.copy(settings=cleanSmartTargets(d.settings,setOf("merge:$id"))+("smartSourceMergeId" to if(d.setting("smartSourceMergeId")==id.toString())"0" else d.setting("smartSourceMergeId","0")),merges=d.merges.filter { it.id!=id },rules=d.rules.map { if(it.outbound=="merge:$id")it.copy(outbound="proxy")else it }) }
+    fun deleteMerge(id:Long) = edit { d -> d.copy(settings=cleanSmartTargets(d.settings,setOf("merge:$id"))+("smartSourceMergeId" to if(d.setting("smartSourceMergeId")==id.toString())"0" else d.setting("smartSourceMergeId","0")),merges=d.merges.filter { it.id!=id },rules=d.rules.map { if(it.outbound=="merge:$id")it.copy(outbound="proxy")else it }).withoutStaleNodeSettings() }
     fun readText(uri: Uri) = task {
-        val bytes=getApplication<Application>().contentResolver.openInputStream(uri)!!.use { input -> readLimited(input) }
+        val bytes=readImportBytes { getApplication<Application>().contentResolver.openInputStream(uri) }
         if(isZip(bytes)) stageImport(PendingImport.Backup(BackupManager(getApplication()).`import`(bytes))) else offerTextNow(bytes.toString(Charsets.UTF_8))
     }
     fun restore(uri: Uri) {invalidateUiSkin();task {
-        val bytes = getApplication<Application>().contentResolver.openInputStream(uri)!!.use { readLimited(it) }
+        val bytes = readImportBytes { getApplication<Application>().contentResolver.openInputStream(uri) }
         service.restore(BackupManager(getApplication()).`import`(bytes)); message.value = "备份已验证，正在应用"
     }}
     fun backup(uri: Uri,scope:com.zane.zanebox.backup.BackupScope=com.zane.zanebox.backup.BackupScope()) = task { val bytes=BackupManager(getApplication()).export(com.zane.zanebox.backup.backupSelection(store.snapshot(),scope));getApplication<Application>().contentResolver.openOutputStream(uri)!!.use { it.write(bytes) }; message.value="备份已保存" }
@@ -319,10 +328,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun refreshIp() = service.queryExitIp()
     private fun isZip(bytes:ByteArray)=bytes.size>4 && bytes[0]==80.toByte() && bytes[1]==75.toByte()
-    private fun readLimited(input: java.io.InputStream): ByteArray {
-        val out=java.io.ByteArrayOutputStream(); val buffer=ByteArray(8192)
-        while(true) { val count=input.read(buffer); if(count<0)break; require(out.size()+count<=64*1024*1024) { "文件超过 64 MiB" };out.write(buffer,0,count) };return out.toByteArray()
-    }
     override fun onCleared() { service.close(); store.close(); super.onCleared() }
 }
 

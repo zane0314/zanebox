@@ -21,7 +21,7 @@ object SubscriptionScheduler {
     private val updateEvents=MutableSharedFlow<Long>(extraBufferCapacity=32)
     val updates:SharedFlow<Long> = updateEvents
     internal fun updated(id:Long) { updateEvents.tryEmit(id) }
-    @Volatile var onUpdated:suspend(Context,Long)->Unit = { _,_ -> }
+    @Volatile var onUpdated:suspend(Context,Long,()->Unit)->Unit = { _,_,applied -> applied() }
     private fun name(id:Long)="zanebox-subscription-$id"
     private fun preferences(context:Context)=context.getSharedPreferences("subscription-scheduler",Context.MODE_PRIVATE)
     fun initialize(context:Context) {
@@ -66,11 +66,18 @@ object SubscriptionScheduler {
     internal fun next(context:Context,group:Group) { if(SubscriptionPlan.scheduled(group)) enqueue(context,group,ExistingWorkPolicy.APPEND_OR_REPLACE) }
     suspend fun apply(context:Context,store:ZaneStore,group:Group,automatic:Boolean,schedule:Boolean=true) {
         val id=group.id;val request=JSONObject(group.options).getJSONObject("subscriptionRuntime").getString("request")
+        var applied=false
         try {
-            onUpdated(context,id)
-            store.update { SubscriptionUpdater.record(it,id,"success",System.currentTimeMillis(),request=request) }
-        } catch(e:CancellationException) { throw e } catch(e:Exception) {
-            store.update { SubscriptionUpdater.record(it,id,"apply-error",System.currentTimeMillis(),"订阅已保存，自动应用或延迟测试失败（${e.javaClass.simpleName}）",nextAttempt=System.currentTimeMillis()+retryDelay,request=request) };throw e
+            onUpdated(context,id) {
+                store.update {SubscriptionUpdater.record(it,id,"success",System.currentTimeMillis(),request=request)}
+                applied=true
+            }
+            check(applied) {"订阅配置未确认应用"}
+        } catch(e:CancellationException) {throw e} catch(e:Exception) {
+            if(!applied) {
+                store.update {SubscriptionUpdater.record(it,id,"apply-error",System.currentTimeMillis(),"订阅已保存，自动应用失败（${e.javaClass.simpleName}）",nextAttempt=System.currentTimeMillis()+retryDelay,request=request)}
+                throw e
+            }
         } finally {
             if(schedule)store.snapshot().groups.firstOrNull{it.id==id && SubscriptionPlan.scheduled(it)}?.let { enqueue(context,it,if(automatic)ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE) }
             updated(id)

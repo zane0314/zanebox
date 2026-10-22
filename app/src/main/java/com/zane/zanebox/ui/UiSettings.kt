@@ -56,6 +56,8 @@ import org.json.JSONObject
     form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit,backup:(BackupScope)->Unit,restore:()->Unit,
     groupEdit:(Group?)->Unit,ruleEdit:(RouteRule?)->Unit,mergeEdit:(MergeGroup?)->Unit,subscriptionEdit:(Group)->Unit,share:(String)->Unit,copy:(String)->Unit,qr:(String)->Unit,exportNodes:(Long?)->Unit,toggle:()->Unit) {
     val context=LocalContext.current
+    val language=LocalUiLanguage.current
+    fun t(source:String,vararg args:Any?)=translateText(source,language,*args)
     val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     var confirmation by remember{mutableStateOf<Pair<String,()->Unit>?>(null)}
     var expandedGroups by remember { mutableStateOf(emptySet<Long>()) }
@@ -67,7 +69,7 @@ import org.json.JSONObject
         val chains=com.zane.zanebox.subscription.nodeRemovalIds(data.nodes,ids).size-ids.size
         val action={vm.deleteNodes(ids);selectedNodes=emptySet();selectingGroup=null}
         if(ids.size==1 && chains==0 && !data.bool("confirmProfileDelete"))action()
-        else confirmation=("删除 ${ids.size} 个节点？"+if(chains>0)"同时删除依赖它们的 $chains 个代理链。" else "") to action
+        else confirmation=(t("删除 %s 个节点？",ids.size)+if(chains>0)t("同时删除依赖它们的 %s 个代理链。",chains) else "") to action
     }
     when(page) {
         "general"->PreferencesPage(data,vm,onDismiss,open,form)
@@ -95,12 +97,12 @@ import org.json.JSONObject
             if(data.groups.isEmpty())item{UiRow("暂无分组","点击右上角创建分组")}
             groupDrag.order.mapNotNull{groupsById[it.toString().substringAfterLast('-').toLong()]}.forEach { g->
                 item(key="manage-group-${g.id}") { UiCard(Modifier.animateItem(placementSpec=if(groupDrag.dragging=="manage-group-${g.id}")null else spring()).then(groupDrag.modifier("manage-group-${g.id}"))) {
-                UiRow(g.name,"${data.nodes.count{it.groupId==g.id}} 个节点"+(if(g.subscriptionUrl.isBlank())" · 基础分组" else " · 订阅分组"),Icons.Outlined.Folder,onClick={groupEdit(g)},modifier=Modifier.testTag("manage_group_${g.id}"),trailing={UiSwitch(g.enabled,{enabled->vm.edit{d->d.copy(groups=d.groups.map{if(it.id==g.id)it.copy(enabled=enabled)else it})}})})
+                UiRow(g.name,uiText("%s 个节点 · %s",data.nodes.count{it.groupId==g.id},uiText(if(g.subscriptionUrl.isBlank())"基础分组" else "订阅分组")),Icons.Outlined.Folder,onClick={groupEdit(g)},translateTitle=false,modifier=Modifier.testTag("manage_group_${g.id}"),trailing={UiSwitch(g.enabled,{enabled->vm.edit{d->d.copy(groups=d.groups.map{if(it.id==g.id)it.copy(enabled=enabled)else it})}})})
                 FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
                     TextButton(onClick={expandedGroups=if(g.id in expandedGroups)expandedGroups-g.id else expandedGroups+g.id;selectingGroup=null;selectedNodes=emptySet()},modifier=Modifier.testTag("manage_group_nodes_${g.id}")){Text(uiText(if(g.id in expandedGroups)"收起节点" else "节点"))}
                     TextButton(onClick={subscriptionEdit(g)},modifier=Modifier.testTag("subscription_options_${g.id}")){Text(uiText("订阅选项"))}
                     TextButton(onClick={vm.updateGroup(g)},enabled=g.subscriptionUrl.isNotBlank()){Text(uiText("更新"))}
-                    UiMenu(listOf("分享订阅" to {share(subscriptionShareLink(g).ifBlank{shareText(data.nodes.filter{it.groupId==g.id})})},"复制订阅链接" to {copy(subscriptionShareLink(g))},"订阅二维码" to {qr(subscriptionShareLink(g))},"复制节点配置" to {copy(shareText(data.nodes.filter{it.groupId==g.id}))},"导出节点" to {exportNodes(g.id)},"清空节点" to {confirmation="清空分组 ${g.name} 中的全部节点、依赖代理链？" to {vm.clearGroup(g.id)}},"删除分组" to {if(data.bool("confirmProfileDelete"))confirmation="删除分组 ${g.name} 及其全部节点、依赖代理链？" to {vm.deleteGroup(g.id)}else vm.deleteGroup(g.id)}),"manage_group_menu_${g.id}")
+                    UiMenu(listOf("分享订阅" to {share(subscriptionShareLink(g).ifBlank{shareText(data.nodes.filter{it.groupId==g.id})})},"复制订阅链接" to {copy(subscriptionShareLink(g))},"订阅二维码" to {qr(subscriptionShareLink(g))},"复制节点配置" to {copy(shareText(data.nodes.filter{it.groupId==g.id}))},"导出节点" to {exportNodes(g.id)},"清空节点" to {confirmation=t("清空分组 %s 中的全部节点、依赖代理链？",g.name) to {vm.clearGroup(g.id)}},"删除分组" to {if(data.bool("confirmProfileDelete"))confirmation=t("删除分组 %s 及其全部节点、依赖代理链？",g.name) to {vm.deleteGroup(g.id)}else vm.deleteGroup(g.id)}),"manage_group_menu_${g.id}")
                 }
                 }}
                 if(g.id in expanded) {
@@ -109,7 +111,7 @@ import org.json.JSONObject
                     item(key="manage-actions-${g.id}") { NodeSelectionBar(selectingGroup==g.id,if(selectingGroup==g.id)selectedNodes.size else 0,"manage_${g.id}",{selectingGroup=if(selectingGroup==g.id)null else g.id;selectedNodes=emptySet()},{selectedNodes=nodes.map{it.id}.toSet()},{deleteNodes(selectedNodes)}) }
                     if(nodes.isEmpty())item { UiRow("暂无节点") }
                     items(nodes,key={"manage-node-${it.id}"}) { node -> UiCard(Modifier.animateItem(placementSpec=if(drag.dragging=="manage-node-${node.id}")null else spring()).then(drag.modifier("manage-node-${node.id}"))) {
-                        UiRow(node.name,nodeTestLabel(node),onClick={selectedNodes=if(selectingGroup!=g.id)setOf(node.id)else if(node.id in selectedNodes)selectedNodes-node.id else selectedNodes+node.id;selectingGroup=g.id},modifier=Modifier.testTag("manage_node_${node.id}"),chevron=false,trailing={
+                        UiRow(node.name,nodeTestLabel(node),translateTitle=false,onClick={selectedNodes=if(selectingGroup!=g.id)setOf(node.id)else if(node.id in selectedNodes)selectedNodes-node.id else selectedNodes+node.id;selectingGroup=g.id},modifier=Modifier.testTag("manage_node_${node.id}"),chevron=false,trailing={
                             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
                                 if(selectingGroup==g.id)Checkbox(node.id in selectedNodes,{checked->selectedNodes=if(checked)selectedNodes+node.id else selectedNodes-node.id},modifier=Modifier.testTag("manage_node_check_${node.id}"))
                                 UiMenu(listOf("删除" to {deleteNodes(setOf(node.id))}),"manage_node_menu_${node.id}")
@@ -132,12 +134,12 @@ import org.json.JSONObject
                 item{UiSection(if(front)"前置路由规则" else "后置路由规则")}
             val drag=drags.getValue(front)
             items(drag.order.mapNotNull{rulesById[it.toString().substringAfterLast('-').toLong()]},key={"rule-${it.id}"}){r->UiCard(Modifier.animateItem(placementSpec=if(drag.dragging=="rule-${r.id}")null else spring()).then(drag.modifier("rule-${r.id}"))){
-                UiRow(r.name,targetName(r.outbound,data),Icons.Outlined.AccountTree,onClick={ruleEdit(r)},modifier=Modifier.testTag("rule_${r.id}"),trailing={UiSwitch(r.enabled,{value->vm.edit{d->d.copy(rules=d.rules.map{if(it.id==r.id)it.copy(enabled=value)else it})}})})
+                UiRow(r.name,targetLabel(r.outbound,data),Icons.Outlined.AccountTree,onClick={ruleEdit(r)},translateTitle=false,translateSubtitle=false,modifier=Modifier.testTag("rule_${r.id}"),trailing={UiSwitch(r.enabled,{value->vm.edit{d->d.copy(rules=d.rules.map{if(it.id==r.id)it.copy(enabled=value)else it})}})})
                 Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.End) {
                     UiMenu(listOf(
                         "编辑" to {ruleEdit(r)},
                         "删除" to {
-                            confirmation="删除规则 ${r.name}？" to {
+                            confirmation=t("删除规则 %s？",r.name) to {
                                 vm.edit{d->d.copy(rules=d.rules.filter{it.id!=r.id})}
                             }
                         }
@@ -150,14 +152,14 @@ import org.json.JSONObject
         }
         "merges"->UiPageList("节点汇总组",onDismiss,action={IconButton(onClick={mergeEdit(null)},modifier=Modifier.testTag("add_merge")){Icon(Icons.Outlined.Add,"添加汇总组")}}) {
             if(data.merges.isEmpty())item{UiRow("暂无汇总组","合并多个分组或指定节点为分流目标")}
-            items(data.merges,key={it.id}){m->UiCard{UiRow(m.name,"${m.nodeIds.size} 个指定节点 · ${m.groupIds.size} 个分组 · "+if(m.mode=="urltest")"自动测速" else "手动选择",Icons.Outlined.Hub,onClick={mergeEdit(m)},modifier=Modifier.testTag("merge_${m.id}"),trailing={Row(verticalAlignment=Alignment.CenterVertically) {
+            items(data.merges,key={it.id}){m->UiCard{UiRow(m.name,uiText("%s 个指定节点 · %s 个分组 · %s",m.nodeIds.size,m.groupIds.size,uiText(if(m.mode=="urltest")"自动测速" else "手动选择")),Icons.Outlined.Hub,onClick={mergeEdit(m)},translateTitle=false,modifier=Modifier.testTag("merge_${m.id}"),trailing={Row(verticalAlignment=Alignment.CenterVertically) {
                 targetLatencyLabel(data,"merge:${m.id}",testing)?.let { label->LatencyAction(label,"merge_latency_${m.id}"){vm.service.testTarget("merge:${m.id}")} }
-                UiMenu(listOf("编辑" to {mergeEdit(m)},"删除" to {confirmation="删除汇总组 ${m.name}？" to {vm.deleteMerge(m.id)}}))
+                UiMenu(listOf("编辑" to {mergeEdit(m)},"删除" to {confirmation=t("删除汇总组 %s？",m.name) to {vm.deleteMerge(m.id)}}))
             }})}}
         }
         "backup"->UiPageList("备份与恢复",onDismiss) {item{BackupRows(data,vm,open,backup,restore)}}
         "webdav-settings"->UiPageList("WebDAV 设置",onDismiss) {
-            items(listOf("webdavUrl" to "服务器 URL","webdavUser" to "用户名","webdavPassword" to "密码")){(key,label)->UiCard{UiRow(label,if(key=="webdavPassword")"••••••" else data.setting(key).ifBlank{"未设置"},onClick={form(label,listOf(label to data.setting(key))){vm.setting(key,it[0])}},modifier=Modifier.testTag(key))}}
+            items(listOf("webdavUrl" to "服务器 URL","webdavUser" to "用户名","webdavPassword" to "密码")){(key,label)->UiCard{UiRow(label,if(key=="webdavPassword")"••••••" else data.setting(key).ifBlank{uiText("未设置")},translateSubtitle=false,onClick={form(label,listOf(label to data.setting(key))){vm.setting(key,it[0])}},modifier=Modifier.testTag(key))}}
             item{UiCard{UiRow("测试连接",icon=Icons.Outlined.Link,onClick={vm.listWebdav();open("webdav")})}}
         }
         "webdav"->WebdavDialog(vm,onDismiss)
@@ -193,7 +195,7 @@ import org.json.JSONObject
             item { Text(context.assets.open("licenses/satelite-one.txt").bufferedReader().use{it.readText()},style=MaterialTheme.typography.bodySmall) }
         }
     }
-    confirmation?.let{(title,action)->UiAlertDialog(onDismissRequest={confirmation=null},title={Text(uiText("确认操作"))},text={Text(title)},confirmButton={TextButton(onClick={action();confirmation=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirmation=null}){Text(uiText("取消"))}})}
+    confirmation?.let{(title,action)->UiAlertDialog(onDismissRequest={confirmation=null},title={Text(uiText("确认操作"))},text={Text(uiText(title))},confirmButton={TextButton(onClick={action();confirmation=null}){Text(uiText("确认"))}},dismissButton={TextButton(onClick={confirmation=null}){Text(uiText("取消"))}})}
 }
 
 @Composable private fun PreferencesPage(data:AppData,vm:AppViewModel,onDismiss:()->Unit,open:(String)->Unit,form:(String,List<Pair<String,String>>,(List<String>)->Unit)->Unit) {
@@ -208,13 +210,13 @@ import org.json.JSONObject
                 Column { prefs.forEachIndexed{index,p->
                     val value=when(p.key){"ipv6Mode"->data.setting("dnsStrategy",if(data.bool("ipv6"))"prefer_ipv4" else "ipv4_only");"uiSkin"->resolvedUiSkin(data.setting(p.key,p.default));"testTimeout"->SettingDefaults.testTimeout(data.setting(p.key,p.default)).toString();else->data.setting(p.key,p.default)}
                     val visual=preferenceAppearance[p.key]
-                    val summary=if(p.key=="perAppEnabled")(if(!data.bool("perAppEnabled"))"关闭" else if(data.setting("perAppMode","exclude")=="include")"代理" else "绕过")+" · ${data.setting("perAppPackages").lines().count{it.isNotBlank()}} 个应用" else p.availability.ifBlank{if(p.boolean)visual?.summary.orEmpty() else p.choices.firstOrNull{it.first==value}?.second ?:value.ifBlank{"未设置"}}
+                    val summary=if(p.key=="perAppEnabled")uiText("%s · %s 个应用",uiText(if(!data.bool("perAppEnabled"))"关闭" else if(data.setting("perAppMode","exclude")=="include")"代理" else "绕过"),data.setting("perAppPackages").lines().count{it.isNotBlank()}) else if(p.availability.isNotBlank())uiText(p.availability) else if(p.boolean)uiText(visual?.summary.orEmpty()) else p.choices.firstOrNull{it.first==value}?.second?.let{uiText(it)} ?:value.ifBlank{uiText("未设置")}
                     fun setToggle(enabled:Boolean) {
                         if(p.key=="appendHttpProxy" && enabled && data.bool("disableMixedInbound"))vm.message.value="请先开启本地 mixed 入口"
                         else if(p.key=="disableMixedInbound" && enabled && data.bool("appendHttpProxy"))vm.message.value="请先关闭追加 HTTP 代理"
                         else if(p.key=="statsEnabled")vm.service.setTrafficEnabled(enabled) else vm.setting(p.key,enabled.toString())
                     }
-                    UiRow(if(p.key=="showBottomBar")p.title else visual?.title ?:p.title,summary,modifier=Modifier.testTag("setting_${p.key}"),iconRes=visual?.icon ?:0,reserveIcon=true,minHeight=58.dp,chevron=p.key=="perAppEnabled",summaryLines=2,
+                    UiRow(if(p.key=="showBottomBar")p.title else visual?.title ?:p.title,summary,translateSubtitle=false,modifier=Modifier.testTag("setting_${p.key}"),iconRes=visual?.icon ?:0,reserveIcon=true,minHeight=58.dp,chevron=p.key=="perAppEnabled",summaryLines=2,
                         onClick=if(p.availability.isNotBlank())null else ({if(p.key=="perAppEnabled")open("apps") else if(p.boolean)setToggle(!data.bool(p.key,p.default.toBoolean())) else if(p.choices.isNotEmpty())selecting=p else form(visual?.title ?:p.title,listOf(p.title to value)){v->validatePreference(p.key,v[0]);vm.setting(p.key,v[0])}}),
                         trailing=if(p.key=="perAppEnabled")({UiSwitch(data.bool("perAppEnabled"),null,Modifier.testTag("per_app_indicator"))})else if(p.boolean)({Box(Modifier.size(width=48.dp,height=36.dp),contentAlignment=androidx.compose.ui.Alignment.Center){UiSwitch(data.bool(p.key,p.default.toBoolean()),::setToggle,modifier=Modifier)}})else null)
                     if(index<prefs.lastIndex)HorizontalDivider(Modifier.padding(start=64.dp,end=16.dp),thickness=.5.dp,color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.4f))
@@ -266,7 +268,7 @@ internal fun validatePreference(key:String,value:String) {
         }
         Text(uiText("恢复时会替换全部配置；未勾选的数据不包含在备份中。"),style=MaterialTheme.typography.bodySmall)
         UiSection("WebDAV")
-        UiCard{UiRow("WebDAV 设置",data.setting("webdavUrl").ifBlank{"尚未配置"},Icons.Outlined.Cloud,onClick={open("webdav-settings")});UiRow("备份到 WebDAV","完整应用配置",Icons.Outlined.CloudUpload,onClick=vm::uploadWebdav);UiRow("从 WebDAV 恢复",icon=Icons.Outlined.CloudDownload,onClick={vm.listWebdav();open("webdav")})}
+        UiCard{UiRow("WebDAV 设置",data.setting("webdavUrl").ifBlank{uiText("尚未配置")},Icons.Outlined.Cloud,translateSubtitle=false,onClick={open("webdav-settings")});UiRow("备份到 WebDAV","完整应用配置",Icons.Outlined.CloudUpload,onClick=vm::uploadWebdav);UiRow("从 WebDAV 恢复",icon=Icons.Outlined.CloudDownload,onClick={vm.listWebdav();open("webdav")})}
     }
 }
 
@@ -281,8 +283,8 @@ internal fun validatePreference(key:String,value:String) {
         item{UiCard{UiRow("路由资源更新源",providerPreference.choices.firstOrNull{it.first==data.setting("rulesProvider")}?.second.orEmpty(),onClick={providers=true},modifier=Modifier.testTag("asset_provider"))}}
         items(listOf("geoip" to "GeoIP","geosite" to "Geosite")){(kind,title)->
             UiCard {
-                UiRow(title,if((files[kind] ?:0)>0)"本地资产 · ${bytes(files[kind]!!)}" else "连接时解压内置资产",Icons.Outlined.Storage)
-                UiRow("自定义 URL",data.setting(if(kind=="geoip")"rulesGeoipUrl" else "rulesGeositeUrl"),onClick={val key=if(kind=="geoip")"rulesGeoipUrl" else "rulesGeositeUrl";form("$title URL",listOf("URL" to data.setting(key))){validatePreference(key,it[0]);vm.setting(key,it[0])}})
+                UiRow(title,if((files[kind] ?:0)>0)uiText("本地资产 · %s",bytes(files[kind]!!)) else "连接时解压内置资产",Icons.Outlined.Storage)
+                UiRow("自定义 URL",data.setting(if(kind=="geoip")"rulesGeoipUrl" else "rulesGeositeUrl"),translateSubtitle=false,onClick={val key=if(kind=="geoip")"rulesGeoipUrl" else "rulesGeositeUrl";form("$title URL",listOf("URL" to data.setting(key))){validatePreference(key,it[0]);vm.setting(key,it[0])}})
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
                     TextButton(onClick={importKind=kind;importer.launch(arrayOf("*/*"))},modifier=Modifier.testTag("asset_import_$kind")){Text(uiText("从文件导入"))}
                     TextButton(onClick={vm.downloadAsset(kind)},modifier=Modifier.testTag("asset_download_$kind")){Text(uiText("下载更新"))}

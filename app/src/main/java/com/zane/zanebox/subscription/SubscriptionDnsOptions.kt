@@ -12,12 +12,21 @@ object SubscriptionDnsOptions {
         if(value=="local") return result.put("type","local")
         val uri=URI(if(value.contains("://")) value else "udp://$value")
         require(uri.host!=null && uri.userInfo==null && uri.fragment==null) { "节点 DNS 地址无效" }
-        val type=when(uri.scheme) { "udp","tcp","tls","https","quic" -> uri.scheme;"h3" -> "http3";else -> error("节点 DNS 协议不支持") }
-        result.put("type",type).put("server",uri.host).put("detour","direct")
+        val host=uri.host.removeSurrounding("[","]")
+        val type=when(uri.scheme) { "udp","tcp","tls","https","quic","h3" -> uri.scheme;else -> error("节点 DNS 协议不支持") }
+        result.put("type",type).put("server",host)
         if(uri.port>=0) { require(uri.port in 1..65535);result.put("server_port",uri.port) }
-        if(type in listOf("https","http3")) result.put("path",uri.rawPath.ifBlank { "/dns-query" })
-        if(!uri.host.contains(':') && uri.host.split('.').any { it.toIntOrNull()==null }) result.put("domain_resolver","dns-direct")
+        if(type in listOf("https","h3")) result.put("path",uri.rawPath.ifBlank { "/dns-query" })
+        if(!host.contains(':') && host.split('.').any { it.toIntOrNull()==null }) result.put("domain_resolver","dns-direct")
         return result
+    }
+    internal fun bootstrapped(server:JSONObject,address:String):JSONObject = JSONObject(server.toString()).apply {
+        val host=getString("server")
+        if(optString("type") in listOf("tls","https","quic","h3")) {
+            val tls=optJSONObject("tls") ?: JSONObject().also { put("tls",it) }
+            if(tls.optString("server_name").isBlank())tls.put("server_name",host)
+        }
+        put("server",address);remove("domain_resolver")
     }
     fun apply(root:JSONObject,data:AppData) {
         val resolvers=data.groups.associate { it.id to JSONObject(it.options).optString("serverDnsResolver").trim() }.filterValues { it.isNotBlank() }

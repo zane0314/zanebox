@@ -24,7 +24,7 @@ class QuickTileService:TileService() {
             withContext(Dispatchers.Main.immediate) {
                 if(!connected && target==ZaneVpnService::class.java && VpnService.prepare(this@QuickTileService)!=null) {
                     val intent=Intent(this@QuickTileService,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    if(android.os.Build.VERSION.SDK_INT>=34)startActivityAndCollapse(android.app.PendingIntent.getActivity(this@QuickTileService,0,intent,android.app.PendingIntent.FLAG_IMMUTABLE)) else @Suppress("DEPRECATION") startActivityAndCollapse(intent)
+                    startActivityAndCollapse(android.app.PendingIntent.getActivity(this@QuickTileService,0,intent,android.app.PendingIntent.FLAG_IMMUTABLE))
                     return@withContext
                 }
                 ContextCompat.startForegroundService(this@QuickTileService,Intent(this@QuickTileService,target).setAction(if(connected)"stop" else "start"))

@@ -11,28 +11,53 @@ import org.junit.Rule
 import org.junit.Test
 
 class TargetLatencyUiTest {
+    private var largeSystemFont=false
     @get:Rule(order=0) val systemFont=org.junit.rules.TestRule { base,description ->
         object:org.junit.runners.model.Statement() {
             override fun evaluate() {
-                if(!description.methodName.contains("LargeFont")) {base.evaluate();return}
+                largeSystemFont=description.methodName.contains("LargeFont")
+                if(!largeSystemFont) {base.evaluate();return}
                 val ins=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
                 fun shell(command:String)=ins.uiAutomation.executeShellCommand(command).use {
                     java.io.FileInputStream(it.fileDescriptor).bufferedReader().readText().trim()
                 }
+                fun awaitSystemScale(expected:Float) {
+                    fun readScale():Float {
+                        val config=shell("dumpsys activity processes")
+                        return Regex("""mGlobalConfiguration:\s*\{([0-9.]+)\s""").find(config)?.groupValues?.get(1)?.toFloatOrNull()
+                            ?: error("ActivityManager 未返回全局字体配置")
+                    }
+                    val until=android.os.SystemClock.uptimeMillis()+5000
+                    var actual=readScale()
+                    while(kotlin.math.abs(actual-expected)>=0.01f && android.os.SystemClock.uptimeMillis()<until) {
+                        Thread.sleep(50);actual=readScale()
+                    }
+                    assertEquals("ActivityManager global font scale",expected,actual,0.01f)
+                }
                 val original=shell("settings get system font_scale")
+                val originalScale=original.toFloatOrNull() ?: 1f
+                // Drain the previous restore before writing 2.0; Settings writes precede the asynchronous system configuration.
+                awaitSystemScale(originalScale)
                 try {
                     shell("settings put system font_scale 2.0")
-                    val until=android.os.SystemClock.uptimeMillis()+5000
-                    while(ins.targetContext.resources.configuration.fontScale<1.9f && android.os.SystemClock.uptimeMillis()<until)Thread.sleep(50)
-                    assertEquals("real system font scale",2f,ins.targetContext.resources.configuration.fontScale,0.01f)
+                    awaitSystemScale(2f)
                     base.evaluate()
                 } finally {
                     shell(if(original=="null")"settings delete system font_scale" else "settings put system font_scale $original")
+                    awaitSystemScale(originalScale)
                 }
             }
         }
     }
     @get:Rule(order=1) val compose=createAndroidComposeRule<MainActivity>()
+    @org.junit.Before fun requireAppliedSystemFont() {
+        if(!largeSystemFont)return
+        // The outer rule sets the OS value; the inner rule launches Activity before this checks its applied configuration.
+        compose.waitUntil(5000) {kotlin.math.abs(compose.activity.resources.configuration.fontScale-2f)<0.01f}
+        assertEquals("Activity applied system font scale",2f,compose.activity.resources.configuration.fontScale,0.01f)
+        val text=compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult),useUnmergedTree=true).onFirst()
+        assertEquals("Compose applied system font scale",2f,layout(text).layoutInput.density.fontScale,0.01f)
+    }
     private val vm get()=ViewModelProvider(compose.activity)[AppViewModel::class.java]
     private fun saved()=compose.waitUntil(15000){!vm.busy.value && vm.data.value.nodes.any{it.id==6101L}}
     private fun measured(previousBatch:Long,ids:Set<Long>) {
