@@ -22,21 +22,30 @@ class HomeGroupsTest {
             for(id in listOf(1,2))assertEquals(all.height,compose.onNodeWithTag("group_$id").fetchSemanticsNode().layoutInfo.coordinates.size.height)
             val selected=compose.onNodeWithText("已选：主节点").getUnclippedBoundsInRoot()
             val tab=compose.onNodeWithTag("group_all").getUnclippedBoundsInRoot()
-            assertTrue("顶部留白过大：$selected / $tab",(tab.top-selected.bottom).value<=24f)
+            val chain=compose.onNodeWithTag("home_chain_summary").getUnclippedBoundsInRoot()
+            assertTrue("链路入口应位于已选节点与分组之间",chain.top>=selected.bottom && chain.bottom<=tab.top)
+            assertTrue("入口与分组间留白过大",(tab.top-chain.bottom).value<=24f)
             compose.onNodeWithTag("group_2").performTouchInput{longClick()}
             compose.onNodeWithTag("home_group_menu").assertIsDisplayed();assertEquals(0L,vm.data.value.browseGroupId)
             assertTrue(vm.data.value.groups.all{it.enabled})
             compose.onNodeWithTag("home_group_menu").performScrollToNode(hasText("编辑"));compose.onNodeWithText("编辑").performClick()
             compose.onNodeWithTag("group_name").assertTextContains("本地 B");compose.onNodeWithTag("page_back").performClick()
             compose.onNodeWithTag("group_2").performTouchInput{longClick()}
-            compose.onNodeWithTag("home_group_menu").performScrollToNode(hasText("前置代理"));compose.onNodeWithText("前置代理").performClick()
+            compose.onNodeWithTag("home_group_menu").performScrollToNode(hasText("链式代理"));compose.onNodeWithText("链式代理").performClick()
             compose.runOnIdle {vm.edit{d->d.copy(groups=d.groups.map{if(it.id==2L)it.copy(updatedAt=123456,userInfo="已更新",options="""{"autoUpdateDelay":60}""")else it})}}
             compose.waitUntil(10000){!vm.busy.value && vm.data.value.groups.first{it.id==2L}.updatedAt==123456L}
-            compose.onNode(hasText("主节点") and hasAnyAncestor(isDialog())).performClick();compose.waitUntil(10000){vm.data.value.groups.first{it.id==2L}.frontProxy==1L}
+            compose.onNodeWithTag("chain_front_proxy").performClick()
+            compose.onNode(hasText("订阅 A") and hasAnyAncestor(isDialog())).performClick()
+            compose.onNode(hasText("主节点") and hasAnyAncestor(isDialog())).performClick()
+            val groupCount=vm.data.value.groups.size
+            compose.onNodeWithTag("chain_save").performClick()
+            compose.waitUntil(10000){!vm.busy.value && vm.data.value.groups.size>groupCount}
+            assertEquals(0L,vm.data.value.groups.first{it.id==2L}.frontProxy)
             assertEquals(0L,vm.data.value.groups.first{it.id==1L}.frontProxy)
             assertEquals(123456L,vm.data.value.groups.first{it.id==2L}.updatedAt)
             assertEquals("已更新",vm.data.value.groups.first{it.id==2L}.userInfo)
             assertEquals("""{"autoUpdateDelay":60}""",vm.data.value.groups.first{it.id==2L}.options)
+            assertTrue(vm.data.value.groups.filter{com.zane.zanebox.ui.isChainGroup(it)}.any{com.zane.zanebox.config.groupChainTargets(it).front=="node:1"})
             val ins=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation();val bitmap=ins.uiAutomation.takeScreenshot()!!
             java.io.File(ins.targetContext.getExternalFilesDir(null),"home-groups-$scale.png").outputStream().use{bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
         }

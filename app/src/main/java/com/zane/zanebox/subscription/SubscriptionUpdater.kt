@@ -1,6 +1,9 @@
 package com.zane.zanebox.subscription
 
 import com.zane.zanebox.data.*
+import com.zane.zanebox.config.syncDerivedChains
+import com.zane.zanebox.config.derivedNodeSourceId
+import com.zane.zanebox.config.derivedGroupSourceId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
@@ -59,7 +62,8 @@ object SubscriptionUpdater {
         val group=current.groups.find { it.id==baseline.id } ?: error("订阅组已删除")
         val request=JSONObject(baseline.options).getJSONObject("subscriptionRuntime").getString("request")
         require(group.subscriptionUrl==baseline.subscriptionUrl && group.updatedAt==baseline.updatedAt && SubscriptionOptions.signature(group.options)==SubscriptionOptions.signature(baseline.options) && JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optString("request")==request) { "订阅响应已过期，已保留当前数据" }
-        val previous=current.nodes.filter { it.groupId==group.id }
+        val localChains=current.nodes.filter { it.groupId==group.id && JSONObject(it.outbound).optString("type")=="chain" }
+        val previous=current.nodes.filter { it.groupId==group.id && it !in localChains }
         val remaining=previous.associateBy { it.id }.toMutableMap()
         fun identity(outbound:String,metadata:String)=JSONObject(metadata).optString("subscriptionIdentity").ifBlank { NodeIdentity.key(outbound) }
         val identities=previous.groupBy { identity(it.outbound,it.metadata) }.mapValues { java.util.ArrayDeque(it.value) }
@@ -68,23 +72,25 @@ object SubscriptionUpdater {
         var nextOrder=(previous.maxOfOrNull { it.order } ?: -1)+1
         val fresh=parsed.map { incoming ->
             val match=take(identities[identity(incoming.outbound,incoming.metadata)]) ?: take(links[incoming.shareLink])
-            val meta=JSONObject(match?.metadata ?: "{}");val addition=JSONObject(incoming.metadata);addition.keys().forEach { key -> meta.put(key,addition.get(key)) }
+            val meta=JSONObject(match?.metadata ?: "{}");val addition=JSONObject(incoming.metadata);addition.keys().forEach { key -> if(key !in setOf("chain","chainSourceNodeId","chainSourceName"))meta.put(key,addition.get(key)) }
             (match ?: Node(nextId(),group.id,incoming.name,incoming.outbound,order=nextOrder++)).copy(name=incoming.name,outbound=incoming.outbound,shareLink=incoming.shareLink,metadata=meta.toString())
         }
-        val candidates=current.nodes.filter { it.groupId!=group.id }+fresh
-        val removed=nodeRemovalIds(candidates,remaining.keys)
+        val candidates=current.nodes.filter { it.groupId!=group.id }+localChains+fresh
+        val removed=remaining.keys
         val all=candidates.filter { it.id !in removed }
         val settings=current.settings.filterKeys { key -> removed.none { key=="nodeRegion.$it" } }.mapValues { (key,value) -> if(key.startsWith("smart.") && key.endsWith(".target") && value.startsWith("node:") && value.substringAfter(':').toLongOrNull() in removed) "off" else value }.toMutableMap()
         val enabledGroups=current.groups.filter { it.enabled }.sortedBy { it.order }
         val enabledIds=enabledGroups.map { it.id }.toSet()
-        val selected=all.find { it.id==current.selectedNodeId && it.groupId in enabledIds } ?: enabledGroups.firstNotNullOfOrNull { candidate -> all.filter { it.groupId==candidate.id }.minByOrNull { it.order } }
-        settings["selectedNodeId"]=(selected?.id ?: 0L).toString();settings["selectedGroupId"]=(selected?.groupId ?: 0L).toString()
+        val pinnedDerived=enabledGroups.firstOrNull { it.id==current.selectedGroupId && derivedGroupSourceId(it)>0 }
+        val selected=all.find { it.id==current.selectedNodeId && it.groupId in enabledIds } ?: if(pinnedDerived!=null)all.filter { it.groupId==pinnedDerived.id }.minByOrNull { it.order }
+            else enabledGroups.firstNotNullOfOrNull { candidate -> all.filter { it.groupId==candidate.id }.minByOrNull { it.order } }
+        settings["selectedNodeId"]=(selected?.id ?: 0L).toString();settings["selectedGroupId"]=(pinnedDerived?.id ?: selected?.groupId ?: 0L).toString()
         val disabledTargets=current.groups.filterNot { it.enabled }.map { "group:${it.id}" }.toSet()+all.filter { it.groupId !in enabledIds }.map { "node:${it.id}" }
         settings.entries.forEach { entry -> if(entry.key.startsWith("smart.") && entry.key.endsWith(".target") && entry.value in disabledTargets) entry.setValue("off") }
         return current.copy(nodes=all,settings=settings,
-            groups=current.groups.map { g -> val cleaned=g.copy(frontProxy=if(g.frontProxy in removed)0 else g.frontProxy,landingProxy=if(g.landingProxy in removed)0 else g.landingProxy);if(g.id!=group.id) cleaned else cleaned.copy(updatedAt=now,userInfo=userInfo,options=JSONObject(journal(cleaned.options) { state -> state.put("state","applying").put("lastSuccess",now).put("nextAttempt",now+5*60000L);state.remove("error") }).put("subscriptionLastUpdated",now/1000).toString()) },
+            groups=current.groups.map { g -> if(g.id!=group.id) g else g.copy(updatedAt=now,userInfo=userInfo,options=JSONObject(journal(g.options) { state -> state.put("state","applying").put("lastSuccess",now).put("nextAttempt",now+5*60000L);state.remove("error") }).put("subscriptionLastUpdated",now/1000).toString()) },
             rules=current.rules.map { if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in removed) it.copy(outbound="proxy") else it },
-            merges=current.merges.map { it.copy(nodeIds=it.nodeIds.filter { id -> id !in removed },selectedId=if(it.selectedId in removed)0 else it.selectedId) }).withoutStaleNodeSettings()
+            merges=current.merges.map { it.copy(nodeIds=it.nodeIds.filter { id -> id !in removed },selectedId=if(it.selectedId in removed)0 else it.selectedId) }).syncDerivedChains(allocateId=nextId).withoutStaleNodeSettings()
     }
     fun record(current:AppData,groupId:Long,state:String,now:Long,error:String="",nextAttempt:Long=0,request:String?=null):AppData = current.copy(groups=current.groups.map { group ->
         if(group.id!=groupId || (request!=null && JSONObject(group.options).optJSONObject("subscriptionRuntime")?.optString("request")!=request)) group
@@ -98,7 +104,7 @@ internal fun nodeRemovalIds(nodes:List<Node>,ids:Set<Long>):Set<Long> {
     // ponytail: rescan per chain depth; build a reverse index if large chain graphs make deletion slow.
     while(true) {
         val missing=nodes.filter { n ->
-            n.id !in removed && JSONObject(n.outbound).let { out ->
+            n.id !in removed && derivedNodeSourceId(n)==0L && JSONObject(n.outbound).let { out ->
                 out.optString("type")=="chain" && out.getJSONArray("node_ids").let { hops -> (0 until hops.length()).any { hops.getLong(it) in removed } }
             }
         }.map { it.id }

@@ -58,6 +58,15 @@ class TargetLatencyPlanTest {
         assertTrue(plan.stillValid(base.copy(nodes=base.nodes.map { it.copy(ping=77,status=3) })))
     }
 
+    @Test fun typedChainCandidatesAndNodeOverridesInvalidateTheRound() {
+        val linked=base.copy(groups=base.groups.map {if(it.id==1L)it.copy(options="""{"chain":{"front":"none","landing":"group:2"}}""")else it})
+        val plan=TargetPlan.create(linked,"node:1","")!!
+        assertTrue(plan.stillValid(linked))
+        assertFalse(plan.stillValid(linked.copy(nodes=linked.nodes+node(8,2))))
+        assertFalse(plan.stillValid(linked.copy(nodes=linked.nodes.map {if(it.id==3L)it.copy(outbound="""{"type":"socks","server":"127.0.0.9","server_port":9}""")else it})))
+        assertFalse(plan.stillValid(linked.copy(nodes=linked.nodes.map {if(it.id==1L)it.copy(metadata="""{"chain":{"front":"none","landing":"none"}}""")else it})))
+    }
+
     @Test fun winnerIsStrictLowestSuccessAndIgnoresFailedOrEditedNodes() {
         val plan=TargetPlan.create(base,"merge:10","")!!
         assertEquals(2L to 40,plan.winner(base,mapOf(1L to 500,2L to 40)))

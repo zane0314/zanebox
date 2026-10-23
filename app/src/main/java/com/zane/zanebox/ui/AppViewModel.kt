@@ -6,6 +6,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zane.zanebox.data.*
 import com.zane.zanebox.config.reorderSmartPolicies
+import com.zane.zanebox.config.ChainTargets
+import com.zane.zanebox.config.createDerivedChainNode
+import com.zane.zanebox.config.createDerivedChainGroup
+import com.zane.zanebox.config.derivedGroupSourceId
+import com.zane.zanebox.config.derivedNodeSourceId
+import com.zane.zanebox.config.withChainTargets
+import com.zane.zanebox.config.syncDerivedChains
 import com.zane.zanebox.runtime.ServiceClient
 import com.zane.zanebox.subscription.SubscriptionParser
 import com.zane.zanebox.subscription.ParseReport
@@ -140,17 +147,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun reorderNodes(ids:List<Long>)=task {store.update{it.reorderNodes(ids)};message.value="节点顺序已保存"}
     fun reorderGroups(ids:List<Long>)=task {store.update{it.reorderGroups(ids)};message.value="分组顺序已保存"}
     fun reorderRules(front:Boolean,ids:List<Long>)=edit{it.reorderRules(front,ids)}
+    fun createChainNode(source:Node,name:String,targets:ChainTargets,onSaved:()->Unit={},onError:(String)->Unit={})=task(onError) {
+        val before=store.snapshot()
+        val candidate=before.createDerivedChainNode(source.id,name,targets)
+        val created=candidate.nodes.first { n->before.nodes.none { it.id==n.id } }
+        service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(candidate,com.zane.zanebox.config.Purpose.TEST,created.id))
+        store.update { it.createDerivedChainNode(source.id,name,targets,allocateId=store::nextId) }
+        saved("链式节点已创建")
+        withContext(Dispatchers.Main){onSaved()}
+    }
+    fun createChainGroup(source:Group,name:String,targets:ChainTargets,onSaved:()->Unit={},onError:(String)->Unit={})=task(onError) {
+        val before=store.snapshot()
+        val candidate=before.createDerivedChainGroup(source.id,name,targets)
+        service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(candidate))
+        store.update { it.createDerivedChainGroup(source.id,name,targets,allocateId=store::nextId) }
+        saved("链式分组已创建，随源分组更新")
+        withContext(Dispatchers.Main){onSaved()}
+    }
     fun saveNode(node:Node,onSaved:()->Unit={},onError:(String)->Unit={})=task(onError) {
         val before=store.snapshot()
-        val target=node.groupId.takeIf { id->before.groups.any { it.id==id } } ?: store.nextId()
-        val saved=node.copy(id=node.id.takeIf { it>0 } ?: store.nextId(),groupId=target,
+        val previousNode=before.nodes.firstOrNull { it.id==node.id }
+        if(previousNode!=null && derivedNodeSourceId(previousNode)>0 && before.groups.firstOrNull { it.id==previousNode.groupId }?.let(::derivedGroupSourceId)?.let { it>0 }==true)
+            require(node.outbound==previousNode.outbound) { "自动成员来源由源分组管理，请新建链式节点以更换来源" }
+        val freshChain=node.id<=0 && org.json.JSONObject(node.outbound).optString("type")=="chain"
+        val container=if(freshChain)before.groups.firstOrNull { it.enabled && org.json.JSONObject(it.options).optBoolean("chainNodeContainer") }
+            ?: Group(store.nextId(),"链式节点",order=(before.groups.maxOfOrNull { it.order } ?: -1)+1,options="""{"chainNodeContainer":true}""") else null
+        val target=container?.id ?: node.groupId.takeIf { id->before.groups.any { it.id==id } } ?: store.nextId()
+        val prepared=if(freshChain && !org.json.JSONObject(node.metadata).has("chain"))node.withChainTargets(ChainTargets())else node
+        val saved=prepared.copy(id=node.id.takeIf { it>0 } ?: store.nextId(),groupId=target,
             order=before.nodes.firstOrNull { it.id==node.id }?.order ?: before.nodes.size)
         val outbound=org.json.JSONObject(saved.outbound)
         if(outbound.optString("type") in listOf("vless","vmess","tuic","juicity"))require(outbound.optString("uuid").isNotBlank()) { "UUID 不能为空" }
         if(outbound.optString("type") in listOf("trojan","hysteria2","tuic","juicity","anytls"))require(outbound.optString("password").isNotBlank()) { "密码不能为空" }
-        fun insert(data:AppData)=data.copy(groups=if(data.groups.any { it.id==target })data.groups else data.groups+Group(target,"手动节点"),
+        fun insert(data:AppData)=data.copy(groups=if(data.groups.any { it.id==target })data.groups else data.groups+(container ?: Group(target,"手动节点")),
             nodes=if(data.nodes.any{it.id==saved.id})data.nodes.map{if(it.id==saved.id)saved else it}else data.nodes+saved).withEnabledSelection()
-        service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(insert(before),com.zane.zanebox.config.Purpose.TEST,saved.id))
+        val candidate=insert(before).syncDerivedChains()
+        if(previousNode==null || previousNode.outbound!=saved.outbound || com.zane.zanebox.config.nodeChainTargets(previousNode)!=com.zane.zanebox.config.nodeChainTargets(saved))
+            require(com.zane.zanebox.config.chainUnavailableReason(candidate,saved)==null) { com.zane.zanebox.config.chainUnavailableReason(candidate,saved).orEmpty() }
+        service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(candidate,com.zane.zanebox.config.Purpose.TEST,saved.id))
         store.update(::insert)
         saved("节点已保存")
         withContext(Dispatchers.Main) { onSaved() }
@@ -235,7 +269,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val groups=data.value.groups.filter { it.enabled && it.subscriptionUrl.isNotBlank() }
         if(groups.isEmpty())message.value="没有可更新的订阅" else groups.forEach(::updateGroup)
     }
-    private suspend fun updateGroupNow(group:Group) {
+    private suspend fun updateGroupNow(requested:Group) {
+        val group=if(derivedGroupSourceId(requested)>0)store.snapshot().groups.firstOrNull { it.id==derivedGroupSourceId(requested) } ?: error("源分组已删除，链式分组已保留")else requested
         require(group.subscriptionUrl.isNotBlank()) { "当前分组没有订阅地址" }
         val context=getApplication<Application>()
         val options=SubscriptionOptions.parse(group.options)
@@ -245,10 +280,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         SubscriptionScheduler.apply(context,store,updated,automatic=false)
         message.value="订阅已更新并完成延迟测试"
     }
-    fun saveGroup(inputGroup:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) { val group=inputGroup.copy(id=inputGroup.id.takeIf {it>0} ?: store.nextId());SubscriptionOptions.parse(group.options);store.update { d->
-        val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}")+d.nodes.filter {it.groupId==group.id}.map {"sort_ping_${it.id}"} else emptySet()
-        d.copy(groups=if(d.groups.any{it.id==group.id})d.groups.map{if(it.id==group.id)group else it}else d.groups+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
-    }; saved("组已保存"); withContext(Dispatchers.Main){onSaved()}; if(fetch && group.subscriptionUrl.isNotBlank()) updateGroupNow(group) }
+    fun saveGroup(inputGroup:Group,fetch:Boolean,onSaved:()->Unit={},onError:(String)->Unit={}) = task(onError) {
+        val group=inputGroup.copy(id=inputGroup.id.takeIf {it>0} ?: store.nextId())
+        SubscriptionOptions.parse(group.options)
+        fun insert(d:AppData):AppData {
+            val keys=if(org.json.JSONObject(group.options).has("nodeSortOrder"))setOf("sort_group_${group.id}","sort_mode_group_${group.id}","legacy.preference.anybox_nodes.sort_group_${group.id}")+d.nodes.filter {it.groupId==group.id}.map {"sort_ping_${it.id}"} else emptySet()
+            return d.copy(groups=if(d.groups.any{it.id==group.id})d.groups.map{if(it.id==group.id)group else it}else d.groups+group,settings=d.settings.filterKeys{it !in keys}).withEnabledSelection()
+        }
+        val before=store.snapshot()
+        val previous=before.groups.firstOrNull { it.id==group.id }
+        if(previous?.let { com.zane.zanebox.config.groupChainTargets(it) }!=com.zane.zanebox.config.groupChainTargets(group)) {
+            val candidate=insert(before)
+            candidate.nodes.filter { it.groupId==group.id }.forEach { member->require(com.zane.zanebox.config.chainUnavailableReason(candidate,member)==null) { com.zane.zanebox.config.chainUnavailableReason(candidate,member).orEmpty() } }
+            if(candidate.nodes.any { n->candidate.groups.any { it.id==n.groupId && it.enabled } })
+                service.checkConfig(com.zane.zanebox.config.ConfigBuilder.build(candidate))
+        }
+        store.update(::insert)
+        saved("组已保存")
+        withContext(Dispatchers.Main){onSaved()}
+        if(fetch && group.subscriptionUrl.isNotBlank())updateGroupNow(group)
+    }
     private fun dav():WebDavClient { val d=store.snapshot();return WebDavClient(d.setting("webdavUrl"),d.setting("webdavUser"),d.setting("webdavPassword")) }
     fun listWebdav() = task { webdavEntries.value=dav().list();message.value="WebDAV 连接成功：${webdavEntries.value.size} 个备份" }
     fun uploadWebdav() = task { dav().upload(BackupManager(getApplication()).export(store.snapshot()));webdavEntries.value=dav().list();message.value="云备份已上传" }
@@ -287,16 +338,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteNode(id:Long)=deleteNodes(setOf(id))
     fun deleteNodes(ids:Set<Long>)=edit { removeNodes(it,ids) }
     fun clearGroup(id:Long)=edit { d->removeNodes(d,d.nodes.filter{it.groupId==id}.map{it.id}.toSet()) }
-    private fun removeNodes(d:AppData,ids:Set<Long>):AppData {
+    private fun removeNodes(d:AppData,ids:Set<Long>,allowGenerated:Boolean=false):AppData {
+        if(!allowGenerated)require(d.nodes.none { it.id in ids && derivedNodeSourceId(it)>0 && d.groups.firstOrNull { group->group.id==it.groupId }?.let(::derivedGroupSourceId)?.let { sourceId->sourceId>0 }==true }) { "自动成员随源分组管理，请删除整个链式分组" }
         val removed=com.zane.zanebox.subscription.nodeRemovalIds(d.nodes,ids)
         val remaining=d.nodes.filter{it.id !in removed}
-        return d.copy(nodes=remaining,groups=d.groups.map{it.copy(frontProxy=if(it.frontProxy in removed)0 else it.frontProxy,landingProxy=if(it.landingProxy in removed)0 else it.landingProxy)},
+        return d.copy(nodes=remaining,
             settings=cleanSmartTargets((if(d.selectedNodeId in removed)d.settings+("selectedNodeId" to "0")else d.settings).filterKeys { key -> removed.none { key=="nodeRegion.$it" } },removed.map{"node:$it"}.toSet()),
             rules=d.rules.map{if(it.outbound.startsWith("node:") && it.outbound.substringAfter(':').toLongOrNull() in removed)it.copy(outbound="proxy")else it},
             merges=d.merges.map{it.copy(nodeIds=it.nodeIds.filter{n->n !in removed},selectedId=if(it.selectedId in removed)0 else it.selectedId)}).withoutStaleNodeSettings().withEnabledSelection()
     }
     fun deleteGroup(id:Long) = edit { d ->
-        val cleaned=removeNodes(d,d.nodes.filter { it.groupId==id }.map { it.id }.toSet())
+        val cleaned=removeNodes(d,d.nodes.filter { it.groupId==id }.map { it.id }.toSet(),allowGenerated=true)
         cleaned.copy(groups=cleaned.groups.filter{it.id!=id},
             settings=cleanSmartTargets(cleaned.settings,setOf("group:$id"))+("browseGroupId" to if(d.browseGroupId==id)"0" else d.browseGroupId.toString())+("smartSourceGroupId" to if(d.setting("smartSourceGroupId")==id.toString())"0" else d.setting("smartSourceGroupId","0"))+("selectedGroupId" to if(cleaned.selectedGroupId==id)"0" else cleaned.selectedGroupId.toString()),
             rules=cleaned.rules.map { if(it.outbound=="group:$id")it.copy(outbound="proxy")else it },
@@ -349,15 +401,15 @@ internal fun AppData.withEnabledSelection(): AppData {
     val enabledGroups = groups.filter { it.enabled }.sortedBy { it.order }
     val enabledIds = enabledGroups.map { it.id }.toSet()
     val current = nodes.firstOrNull { it.id == selectedNodeId && it.groupId in enabledIds }
-    val selected = current ?: enabledGroups.firstNotNullOfOrNull { group ->
-        nodes.filter { it.groupId == group.id }.minByOrNull { it.order }
-    }
+    val pinnedDerived=enabledGroups.firstOrNull { it.id==selectedGroupId && derivedGroupSourceId(it)>0 }
+    val selected = current ?: if(pinnedDerived!=null)nodes.filter { it.groupId==pinnedDerived.id }.minByOrNull { it.order }
+        else enabledGroups.firstNotNullOfOrNull { group -> nodes.filter { it.groupId == group.id }.minByOrNull { it.order } }
     val disabledGroups = groups.filterNot { it.enabled }.map { "group:${it.id}" }.toSet()
     val disabledNodes = nodes.filter { it.groupId !in enabledIds }.map { "node:${it.id}" }.toSet()
     var updated = cleanSmartTargets(settings, disabledGroups + disabledNodes)
     if (current == null) updated = updated + mapOf(
         "selectedNodeId" to (selected?.id ?: 0L).toString(),
-        "selectedGroupId" to (selected?.groupId ?: 0L).toString()
+        "selectedGroupId" to (pinnedDerived?.id ?: selected?.groupId ?: 0L).toString()
     )
     return copy(settings = updated)
 }

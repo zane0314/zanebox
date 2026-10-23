@@ -29,7 +29,10 @@ data class AppData(val nodes:List<Node> = emptyList(), val groups:List<Group> = 
         val nodeIds=nodes.map { it.id }.toSet()
         val mergeIds=merges.map { it.id }.toSet()
         nodes.forEach { require(it.groupId in groupIds) { "节点分组不存在" }; if(oldOutbounds[it.id]!=it.outbound) { val value=JSONObject(it.outbound);require(value.optString("type").isNotBlank()) { "节点缺少协议类型" } } }
-        groups.forEach { require((it.frontProxy==0L || it.frontProxy in nodeIds)&&(it.landingProxy==0L || it.landingProxy in nodeIds)) { "前置或落地节点不存在" } }
+        // Keep missing chain references so a subscription refresh cannot silently remove a hop.
+        groups.forEach { require(it.frontProxy>=0 && it.landingProxy>=0) { "前置或落地节点引用无效" } }
+        com.zane.zanebox.config.validateChainTargetSyntax(this)
+        com.zane.zanebox.config.validateDerivedChains(this)
         merges.forEach { require(it.nodeIds.all { id->id in nodeIds }&&it.groupIds.all { id->id in groupIds }) { "合并组成员不存在" };require(it.selectedId==0L || it.selectedId in nodeIds) { "合并组默认节点不存在" } }
         rules.forEach { rule ->
             val target=rule.outbound

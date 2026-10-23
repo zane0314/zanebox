@@ -48,6 +48,7 @@ type URLTest struct {
 	group                        *URLTestGroup
 	checkAccess                  sync.Mutex
 	interruptExternalConnections bool
+	managedTest                  bool
 }
 
 func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.URLTestOutboundOptions) (adapter.Outbound, error) {
@@ -63,6 +64,7 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 		tolerance:                    options.Tolerance,
 		idleTimeout:                  time.Duration(options.IdleTimeout),
 		interruptExternalConnections: options.InterruptExistConnections,
+		managedTest:                  options.ManagedTest,
 	}
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
@@ -83,6 +85,7 @@ func (s *URLTest) Start() error {
 	if err != nil {
 		return err
 	}
+	group.managedTest = s.managedTest
 	s.group = group
 	return nil
 }
@@ -125,7 +128,7 @@ func (s *URLTest) PerformUpdateCheck() {
 
 func (s *URLTest) InterfaceUpdated(ctx context.Context) {
 	group := s.group
-	if group == nil {
+	if group == nil || group.managedTest {
 		return
 	}
 	if group.pause.IsDevicePaused() || group.pause.IsNetworkPaused() {
@@ -218,6 +221,7 @@ type URLTestGroup struct {
 	close                        chan struct{}
 	started                      bool
 	lastActive                   common.TypedValue[time.Time]
+	managedTest                  bool
 }
 
 func NewURLTestGroup(ctx context.Context, outboundManager adapter.OutboundManager, logger log.Logger, outbounds []adapter.Outbound, link string, interval time.Duration, tolerance uint16, idleTimeout time.Duration, interruptExternalConnections bool) (*URLTestGroup, error) {
@@ -255,6 +259,9 @@ func NewURLTestGroup(ctx context.Context, outboundManager adapter.OutboundManage
 }
 
 func (g *URLTestGroup) PostStart() {
+	if g.managedTest {
+		return
+	}
 	g.access.Lock()
 	defer g.access.Unlock()
 	g.started = true
@@ -263,6 +270,9 @@ func (g *URLTestGroup) PostStart() {
 }
 
 func (g *URLTestGroup) Touch() {
+	if g.managedTest {
+		return
+	}
 	g.access.Lock()
 	defer g.access.Unlock()
 	if !g.started {
@@ -293,6 +303,15 @@ func (g *URLTestGroup) Close() error {
 }
 
 func (g *URLTestGroup) Select(network string) (adapter.Outbound, bool) {
+	if g.managedTest {
+		var selected adapter.Outbound
+		if network == N.NetworkTCP {
+			selected = g.selectedOutboundTCP.Load()
+		} else if network == N.NetworkUDP {
+			selected = g.selectedOutboundUDP.Load()
+		}
+		return selected, selected != nil
+	}
 	var minDelay uint16
 	var minOutbound adapter.Outbound
 	switch network {
@@ -371,6 +390,9 @@ func (g *URLTestGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
 }
 
 func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {
+	if g.managedTest {
+		return make(map[string]uint16), nil
+	}
 	if unified, configured := urltest.UnifiedDelayPolicy(g.ctx); configured {
 		ctx = urltest.WithUnifiedDelay(ctx, unified)
 	}
@@ -486,6 +508,9 @@ func (b *urlTestBatch) test(outbounds []adapter.Outbound, link string, interval 
 }
 
 func (g *URLTestGroup) performUpdateCheck() {
+	if g.managedTest {
+		return
+	}
 	g.updateAccess.Lock()
 	defer g.updateAccess.Unlock()
 	var updated bool

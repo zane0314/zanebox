@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zane.zanebox.data.*
-import com.zane.zanebox.config.normalizeSmartTarget
+import com.zane.zanebox.config.*
 import com.zane.zanebox.subscription.SubscriptionOptions
 import org.json.JSONArray
 import org.json.JSONObject
@@ -123,15 +123,24 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
     if(value.isBlank())remove(key) else put(key,if(key=="customRule")JSONObject(value) else value.trim())
 }.toString()
 
-@Composable internal fun NodeEditor(node:Node?,data:AppData,initialProtocol:String="vless",onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onSave:(Node)->Unit) {
-    var name by remember{mutableStateOf(node?.name ?: "")}
+@Composable internal fun NodeEditor(node:Node?,data:AppData,initialProtocol:String="vless",onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onCreateChain:(()->Unit)?=null,onSave:(Node)->Unit) {
+    val newChainName=uiText("新链路")
+    var name by remember{mutableStateOf(node?.name ?: if(initialProtocol=="chain")newChainName else "")}
+    var nameEdited by remember{mutableStateOf(false)}
     var outbound by remember{mutableStateOf(node?.outbound?.let{raw->JSONObject(raw).apply{if(optString("type")=="ssh" && has("username")){if(!has("user"))put("user",get("username"));remove("username")};com.zane.zanebox.config.ConfigBuilder.normalizeTransportHost(this)}.toString()} ?: (if(initialProtocol=="chain")"{\"type\":\"chain\",\"node_ids\":[]}" else "{\"type\":\"vless\",\"server_port\":443}"))}
     var group by remember{mutableLongStateOf(node?.groupId ?: data.browseGroupId.takeIf{id->data.groups.any{it.id==id}} ?: data.groups.firstOrNull{it.enabled}?.id ?:0L)}
     var editing by remember{mutableStateOf<NodeField?>(null)}
     var trojanGo by remember{mutableStateOf(node?.metadata?.let{JSONObject(it).optString("editorProtocol")=="trojan-go"} ?:false)}
+    var chainTargets by remember{mutableStateOf(node?.let(::nodeChainTargets) ?: if(initialProtocol=="chain")ChainTargets()else ChainTargets("inherit","inherit"))}
+    var chainSide by remember{mutableStateOf("")}
+    var chainAdd by remember{mutableStateOf(false)}
     var typeChoice by remember{mutableStateOf(false)};var groupChoice by remember{mutableStateOf(false)}
     var error by remember{mutableStateOf("")}
     val type=JSONObject(outbound).optString("type")
+    val sourceManaged=node?.let{JSONObject(it.metadata).optLong("chainSourceNodeId")>0} ?: false
+    val chainNames=if(type=="chain")JSONObject(outbound).optJSONArray("node_ids")?.let{a->(a.length()-1 downTo 0).mapNotNull{i->data.nodes.firstOrNull{it.id==a.optLong(i)}?.name}} ?: emptyList()else emptyList()
+    val generatedName=if(chainNames.isEmpty())newChainName else uiText("%s 链式代理",chainNameParts(chainNames,chainTargets,data).joinToString(" → "))
+    LaunchedEffect(generatedName,type){if(node==null && type=="chain" && !nameEdited)name=generatedName}
     val protocols=listOf("socks","http","shadowsocks","vmess","vless","trojan","trojan-go","hysteria","hysteria2","tuic","anytls","ssh","wireguard","juicity","snell","shadowtls","ninja","chain","custom")
     fun field(title:String,path:String,kind:String="text",choices:List<String> = emptyList())=NodeField(title,path,kind,choices)
     val fields=buildList {
@@ -199,21 +208,39 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
             } else require(o.optInt("server_port") in 1..65535){"端口须为 1–65535"}}
         }
         val link=if(node?.outbound==outbound)node.shareLink.takeIf{it.isNotBlank()}?.substringBefore('#')?.plus("#"+java.net.URLEncoder.encode(name,"UTF-8").replace("+","%20")) ?: "" else ""
-        val metadata=JSONObject(node?.metadata ?: "{}").apply{if(trojanGo)put("editorProtocol","trojan-go")else remove("editorProtocol")};onSave((node ?:Node(0,group,name,outbound)).copy(name=name,groupId=group,outbound=o.toString(),shareLink=link,metadata=metadata.toString()))}.onFailure{error=it.message ?: "字段无效"}
+        val metadata=JSONObject(node?.metadata ?: "{}").apply{if(trojanGo)put("editorProtocol","trojan-go")else remove("editorProtocol")};val result=(node ?:Node(0,group,name,outbound)).copy(name=name,groupId=group,outbound=o.toString(),shareLink=link,metadata=metadata.toString());onSave(if(type=="chain")result.withChainTargets(chainTargets)else result)}.onFailure{error=it.message ?: "字段无效"}
     },modifier=Modifier.testTag("node_save")){Text(uiText("保存"))}}) {
         item{if(error.isNotBlank() || saveError.isNotBlank())Text(uiText(error.ifBlank{saveError}),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("node_error"))}
-        item{OutlinedTextField(name,{name=it;error=""},label={Text(uiText("节点名称"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_name"))}
-        item{UiCard{UiRow("协议",if(trojanGo)"Trojan-Go · TLS / WS" else type.uppercase(),Icons.Outlined.Cable,onClick=if(node==null)({typeChoice=true})else null);UiRow("分组",data.groups.firstOrNull{it.id==group}?.name ?: uiText("手动节点"),Icons.Outlined.Folder,translateSubtitle=false,onClick={groupChoice=true})}}
+        item{OutlinedTextField(name,{name=it;nameEdited=true;error=""},label={Text(uiText("节点名称"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_name"))}
+        item{UiCard{UiRow("协议",if(trojanGo)"Trojan-Go · TLS / WS" else type.uppercase(),Icons.Outlined.Cable,onClick=if(node==null)({typeChoice=true})else null);UiRow("分组",if(type=="chain")node?.let{data.groups.firstOrNull{g->g.id==it.groupId}?.name} ?: uiText("链式节点")else data.groups.firstOrNull{it.id==group}?.name ?: uiText("手动节点"),Icons.Outlined.Folder,translateSubtitle=false,onClick=if(type=="chain")null else ({groupChoice=true}))}}
         if(type in listOf("shadowsocksr","mieru","naive"))item{Text(uiText("当前内核不提供 ShadowsocksR、Mieru、NaïveProxy 外部插件功能。已有配置可备份和导出，不能作为可用节点保存。"),style=MaterialTheme.typography.bodySmall)}
         if(trojanGo)item{Text(uiText("Trojan-Go 使用原生 TLS / WebSocket；外部插件与额外加密层不可用。"),style=MaterialTheme.typography.bodySmall)}
         if(type=="chain") {
-            item{UiSection("链式节点 · 从出口到前置选择")}
-            items(data.nodes.filter{it.id!=node?.id},key={"chain${it.id}"}){n->
-                val a=JSONObject(outbound).optJSONArray("node_ids") ?:JSONArray()
-                val ids=(0 until a.length()).map{a.getLong(it)}
-                UiCard{UiRow(n.name,translateTitle=false,onClick={outbound=JSONObject(outbound).put("node_ids",JSONArray(if(n.id in ids)ids-n.id else ids+n.id)).toString()},trailing={Checkbox(n.id in ids,{outbound=JSONObject(outbound).put("node_ids",JSONArray(if(it)ids+n.id else ids-n.id)).toString()})})}
+            val ids=JSONObject(outbound).optJSONArray("node_ids")?.let{a->(0 until a.length()).map{a.getLong(it)}.reversed()} ?: emptyList()
+            fun updateChain(values:List<Long>){outbound=JSONObject(outbound).put("node_ids",JSONArray(values.reversed())).toString()}
+            item{UiSection("链式节点 · 本机到出口")}
+            item{Text(uiText("按连接顺序排列，最后一跳为出口。"),style=MaterialTheme.typography.bodySmall)}
+            item{Text(uiText("创建新链保留原节点；链内引用只使用原始连接参数。"),style=MaterialTheme.typography.bodySmall)}
+            items(ids.indices.toList(),key={"chain_step_$it"}){index->
+                val n=data.nodes.firstOrNull{it.id==ids[index]}
+                UiCard{UiRow("${index+1}. ${n?.name ?: uiText("引用已失效")}",translateTitle=false,chevron=false,modifier=Modifier.testTag("chain_step_$index"),trailing=if(sourceManaged)null else ({
+                    Row {
+                        IconButton(enabled=index>0,onClick={updateChain(ids.toMutableList().apply{add(index-1,removeAt(index))})}){Icon(Icons.Outlined.ArrowUpward,uiText("上移"))}
+                        IconButton(enabled=index<ids.lastIndex,onClick={updateChain(ids.toMutableList().apply{add(index+1,removeAt(index))})}){Icon(Icons.Outlined.ArrowDownward,uiText("下移"))}
+                        IconButton(onClick={updateChain(ids.filterIndexed{i,_->i!=index})}){Icon(Icons.Outlined.Close,uiText("移除"))}
+                    }
+                }))}
             }
+            if(sourceManaged)item{Text(uiText("来源节点由原订阅管理，更新时自动同步。"),style=MaterialTheme.typography.bodySmall)}
+            else item{TextButton(onClick={chainAdd=true},modifier=Modifier.testTag("chain_add_step")){Text(uiText("添加一跳"))}}
+
         }
+        if(type=="chain") {
+            item{UiSection("链路设置")}
+            item{ChainTargetRows(chainTargets,data,{chainSide=it},"node")}
+        }
+
+        if(node!=null && type !in listOf("chain","custom"))item{UiCard{UiRow("当前默认链路",chainPathText(data,node.id),translateSubtitle=false,summaryLines=4);if(onCreateChain!=null)UiRow("创建链式副本",onClick=onCreateChain)}}
         if(type=="custom")item{UiCard{UiRow("自定义配置","完整 sing-box 配置",Icons.Outlined.Code,onClick={editing=field("自定义配置","config","json")})}}
         item{UiSection("代理设置")}
         item{UiCard { fields.forEachIndexed{index,f->val value=nodeField(outbound,f.path)
@@ -223,7 +250,12 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         }}}
         item{UiCard{UiRow("高级配置", "编辑完整节点配置",Icons.Outlined.Code,onClick={editing=field("高级配置","","outbound")})}}
     }
-    if(typeChoice)ChoiceDialog("协议",if(trojanGo)"trojan-go" else type,protocols.map{it to when(it){"chain"->"链式代理";"custom"->"自定义配置";"trojan-go"->"Trojan-Go（TLS / WS）";else->it.uppercase()}},{typeChoice=false}){trojanGo=it=="trojan-go";outbound=JSONObject().put("type",if(trojanGo)"trojan" else it).apply{if(trojanGo)put("tls",JSONObject().put("enabled",true));if(it=="custom")put("config",JSONObject()) else if(it=="chain")put("node_ids",JSONArray())else put("server",nodeField(outbound,"server")).put("server_port",when(it){"socks"->1080;"http"->8080;"ssh"->22;"wireguard"->51820;else->443})}.toString()}
+    if(chainAdd) {
+        val ids=JSONObject(outbound).optJSONArray("node_ids")?.let{a->(0 until a.length()).map{a.getLong(it)}.reversed()} ?: emptyList()
+        GroupedChainPicker("添加一跳",data,{chainAdd=false},{target->outbound=JSONObject(outbound).put("node_ids",JSONArray((ids+target.substringAfter(':').toLong()).reversed())).toString();chainAdd=false},allowGroup=false,allowedNodes=data.nodes.filter{it.id!=node?.id && it.id !in ids && JSONObject(it.outbound).optString("type")!="custom"}.map{it.id}.toSet())
+    }
+    if(chainSide.isNotBlank())ChainTargetPicker(if(chainSide=="front")"前置代理" else "后置代理（落地）",if(chainSide=="front")chainTargets.front else chainTargets.landing,data,{chainSide=""},{chainTargets=if(chainSide=="front")chainTargets.copy(front=it)else chainTargets.copy(landing=it)},inherit=true,excludeNodeId=node?.id)
+    if(typeChoice)ChoiceDialog("协议",if(trojanGo)"trojan-go" else type,protocols.map{it to when(it){"chain"->"链式代理";"custom"->"自定义配置";"trojan-go"->"Trojan-Go（TLS / WS）";else->it.uppercase()}},{typeChoice=false}){if(it=="chain")chainTargets=ChainTargets();trojanGo=it=="trojan-go";outbound=JSONObject().put("type",if(trojanGo)"trojan" else it).apply{if(trojanGo)put("tls",JSONObject().put("enabled",true));if(it=="custom")put("config",JSONObject()) else if(it=="chain")put("node_ids",JSONArray())else put("server",nodeField(outbound,"server")).put("server_port",when(it){"socks"->1080;"http"->8080;"ssh"->22;"wireguard"->51820;else->443})}.toString()}
     if(groupChoice)ChoiceDialog("分组",group.toString(),listOf("0" to uiText("手动节点"))+data.groups.map{it.id.toString() to it.name},{groupChoice=false},translateChoices=false){group=it.toLong()}
     editing?.let{f->
         if(f.choices.isNotEmpty())ChoiceDialog(f.title,nodeField(outbound,f.path),f.choices.map{it to it.ifBlank{"无"}},{editing=null}){outbound=updateNodeField(outbound,f.path,it,f.kind)}
@@ -233,15 +265,14 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
     }
 }
 
-@Composable internal fun GroupEditor(group:Group?,data:AppData,onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onSave:(Group)->Unit) {
+@Composable internal fun GroupEditor(group:Group?,data:AppData,onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onCreateChain:(()->Unit)?=null,onSave:(Group)->Unit) {
     val original=remember(group?.id,group?.options){runCatching{JSONObject(group?.options ?: "{}")} .getOrDefault(JSONObject())}
     var name by remember(group?.id){mutableStateOf(group?.name ?: "")}
     var url by remember(group?.id){mutableStateOf(group?.subscriptionUrl ?: "")}
     var groupType by remember(group?.id,group?.options){mutableIntStateOf(original.optInt("type",if(group?.subscriptionUrl.isNullOrBlank())0 else 1))}
     var sortOrder by remember(group?.id,group?.options){mutableIntStateOf(if(group==null)0 else when(nodeSortMode(data,group)){NodeSortMode.NAME->1;NodeSortMode.LATENCY->2;else->0})}
     var selector by remember(group?.id,group?.options){mutableStateOf(original.optBoolean("groupIsSelector",original.optBoolean("isSelector",false)))}
-    var front by remember(group?.id){mutableLongStateOf(group?.frontProxy ?:0)}
-    var landing by remember(group?.id){mutableLongStateOf(group?.landingProxy ?:0)}
+    var chainTargets by remember(group?.id){mutableStateOf(group?.let(::groupChainTargets) ?: ChainTargets("none","none"))}
     var autoUpdate by remember(group?.id,group?.options){mutableStateOf(original.optBoolean("autoUpdate",false))}
     var autoUpdateDelay by remember(group?.id,group?.options){mutableStateOf(original.optInt("autoUpdateDelay",1440).toString())}
     var connectedOnly by remember(group?.id,group?.options){mutableStateOf(original.optBoolean("updateWhenConnectedOnly",false))}
@@ -272,19 +303,24 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
                 .put("deduplication",deduplication).put("forceResolve",forceResolve)
                 .put("serverDnsResolver",serverDnsResolver)
             SubscriptionOptions.parse(options.toString())
-            onSave((group ?:Group(0,name)).copy(name=name,subscriptionUrl=url.trim(),frontProxy=front,landingProxy=landing,options=options.toString()))
+            val result=(group ?:Group(0,name)).copy(name=name,subscriptionUrl=url.trim(),options=options.toString());onSave(if(group!=null && isChainGroup(group))result.withChainTargets(chainTargets)else result)
         }.onFailure{error=it.message ?: "字段无效"}
     }
     UiPageList(if(group==null)"添加订阅" else "编辑分组",{if(!saving)onDismiss()},action={TextButton(enabled=!saving,onClick=::save,modifier=Modifier.testTag("group_save")){Text(uiText("保存"))}}) {
         item{OutlinedTextField(name,{name=it},label={Text(uiText("分组名称"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("group_name"))}
-        item{OutlinedTextField(url,{url=it},label={Text(uiText("订阅 URL"))},supportingText={Text(uiText("基础分组可留空"))},modifier=Modifier.fillMaxWidth().testTag("group_url"))}
+        if(group==null || !isChainGroup(group))item{OutlinedTextField(url,{url=it},label={Text(uiText("订阅 URL"))},supportingText={Text(uiText("基础分组可留空"))},modifier=Modifier.fillMaxWidth().testTag("group_url"))}
         item{UiCard{
             UiRow("分组类型",if(groupType==1)"订阅分组" else "基础分组",Icons.Outlined.Folder,onClick={choice="type"},modifier=Modifier.testTag("group_type"))
             UiRow("节点排序",listOf("原始顺序","按名称","按延迟")[sortOrder.coerceIn(0,2)],onClick={choice="order"},modifier=Modifier.testTag("group_order"))
             UiRow("选择器",if(selector)"启用" else "关闭",Icons.Outlined.Tune,onClick={selector=!selector},trailing={UiSwitch(selector,{selector=it},modifier=Modifier.testTag("group_selector"))},modifier=Modifier.testTag("group_selector_row"))
         }}
-        item{UiSection("链式代理")}
-        item{UiCard{UiRow("前置代理",targetLabel(if(front==0L)"0" else "node:$front",data),onClick={target="front"},translateSubtitle=false,modifier=Modifier.testTag("group_front_proxy"));UiRow("后置代理（落地）",targetLabel(if(landing==0L)"0" else "node:$landing",data),onClick={target="landing"},translateSubtitle=false,modifier=Modifier.testTag("group_landing_proxy"))}}
+        if(group!=null && isChainGroup(group)) {
+            item{Text(uiText("来源：%s，随原订阅更新",data.groups.firstOrNull{it.id==JSONObject(group.options).optLong("chainSourceGroupId")}?.name ?: uiText("引用已失效")),style=MaterialTheme.typography.bodySmall)}
+            item{UiSection("链式代理")}
+            item{ChainTargetRows(chainTargets,data,{target=it},"group")}
+        } else if(group!=null) {
+            item{UiCard{UiRow("链式代理",uiText("前置：%s；后置：%s",chainTargetLabel(chainTargets.front,data),chainTargetLabel(chainTargets.landing,data)),translateSubtitle=false,summaryLines=3);if(onCreateChain!=null)UiRow("创建链式副本",onClick=onCreateChain)}}
+        }
         if(groupType==1 || url.isNotBlank()) {
             item{UiSection("订阅更新")}
             item{UiCard{
@@ -305,7 +341,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         }
         if(error.isNotBlank() || saveError.isNotBlank())item{Text(uiText(error.ifBlank{saveError}),color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("group_error"))}
     }
-    if(target.isNotBlank())ChoiceDialog(if(target=="front")"前置代理" else "落地代理",(if(target=="front")front else landing).toString(),listOf("0" to uiText("无"))+data.nodes.map{it.id.toString() to it.name},{target=""},translateChoices=false){if(target=="front")front=it.toLong()else landing=it.toLong()}
+    if(target.isNotBlank())ChainTargetPicker(if(target=="front")"前置代理" else "后置代理（落地）",if(target=="front")chainTargets.front else chainTargets.landing,data,{target=""},{chainTargets=if(target=="front")chainTargets.copy(front=it)else chainTargets.copy(landing=it)})
     when(choice) {
         "type"->ChoiceDialog("分组类型",groupType.toString(),listOf("0" to "基础分组","1" to "订阅分组"),{choice=""}){groupType=it.toInt();choice=""}
         "order"->ChoiceDialog("节点排序",sortOrder.toString(),listOf("0" to "原始顺序","1" to "按名称","2" to "按延迟"),{choice=""}){sortOrder=it.toInt();choice=""}
@@ -370,6 +406,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
 @Composable internal fun MergeEditor(merge:MergeGroup?,data:AppData,onDismiss:()->Unit,saveError:String="",saving:Boolean=false,onSave:(MergeGroup)->Unit) {
     var name by remember{mutableStateOf(merge?.name ?:"")};var mode by remember{mutableStateOf(merge?.mode ?:"selector")}
     var nodes by remember{mutableStateOf(merge?.nodeIds?.toSet() ?:emptySet())};var groups by remember{mutableStateOf(merge?.groupIds?.toSet() ?:emptySet())}
+    var openGroup by remember{mutableStateOf<Long?>(null)}
     var selected by remember{mutableLongStateOf(merge?.selectedId ?:0L)};var choose by remember{mutableStateOf(false)};var error by remember{mutableStateOf("")}
     UiPageList(if(merge==null)"添加节点汇总组" else "编辑节点汇总组",{if(!saving)onDismiss()},action={TextButton(enabled=!saving,onClick={
         if(name.isBlank())error="请输入汇总组名称" else if(nodes.isEmpty() && groups.isEmpty())error="请选择分组或节点" else onSave(MergeGroup(merge?.id ?:0,name,nodes.toList(),groups.toList(),mode,selected))
@@ -378,12 +415,19 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(mode=="selector",{mode="selector"},label={Text(uiText("手动选择"))});FilterChip(mode=="urltest",{mode="urltest"},label={Text(uiText("自动测速"))})}}
         item{UiCard{UiRow("默认节点",data.nodes.firstOrNull{it.id==selected}?.name ?:uiText("自动选择"),translateSubtitle=false,onClick={choose=true})}}
         item{UiSection("订阅分组")}
-        items(data.groups,key={"g${it.id}"}){g->UiCard{UiRow(g.name,translateTitle=false,modifier=Modifier.testTag("merge_group_${g.id}"),onClick={groups=if(g.id in groups)groups-g.id else groups+g.id},trailing={Checkbox(g.id in groups,{groups=if(it)groups+g.id else groups-g.id})})}}
-        item{UiSection("指定节点")}
-        items(data.nodes,key={"n${it.id}"}){n->UiCard{UiRow(n.name,translateTitle=false,modifier=Modifier.testTag("merge_node_${n.id}"),onClick={nodes=if(n.id in nodes)nodes-n.id else nodes+n.id},trailing={Checkbox(n.id in nodes,{nodes=if(it)nodes+n.id else nodes-n.id})})}}
+        items(data.groups,key={"g${it.id}"}){g->UiCard{UiRow(g.name,if(g.id in groups)uiText("整个分组")else uiText("已选择 %s 个节点",data.nodes.count{it.groupId==g.id && it.id in nodes}),translateTitle=false,translateSubtitle=false,modifier=Modifier.testTag("merge_group_${g.id}"),onClick={openGroup=g.id},trailing={Row {
+            Checkbox(g.id in groups,{groups=if(it)groups+g.id else groups-g.id},modifier=Modifier.testTag("merge_group_check_${g.id}"))
+            IconButton(onClick={openGroup=g.id},modifier=Modifier.testTag("merge_group_open_${g.id}")){Icon(Icons.Outlined.ChevronRight,uiText("选择节点"))}
+        }})}}
         if(error.isNotBlank() || saveError.isNotBlank())item{Text(uiText(error.ifBlank{saveError}),color=MaterialTheme.colorScheme.error)}
     }
-    if(choose)ChoiceDialog("默认节点",selected.toString(),listOf("0" to uiText("自动选择"))+data.nodes.filter{it.id in nodes || it.groupId in groups}.map{it.id.toString() to it.name},{choose=false},translateChoices=false){selected=it.toLong()}
+    data.groups.firstOrNull{it.id==openGroup}?.let{g->
+        UiPageList(g.name,{openGroup=null},action={TextButton(onClick={openGroup=null},modifier=Modifier.testTag("merge_members_done")){Text(uiText("完成"))}}) {
+            item{UiCard{UiRow("整个分组",onClick={groups=if(g.id in groups)groups-g.id else groups+g.id},trailing={Checkbox(g.id in groups,{groups=if(it)groups+g.id else groups-g.id})},modifier=Modifier.testTag("merge_members_group"))}}
+            items(data.nodes.filter{it.groupId==g.id},key={"member${it.id}"}){n->UiCard{UiRow(n.name,translateTitle=false,modifier=Modifier.testTag("merge_node_${n.id}"),onClick={nodes=if(n.id in nodes)nodes-n.id else nodes+n.id},trailing={Checkbox(n.id in nodes,{nodes=if(it)nodes+n.id else nodes-n.id})})}}
+        }
+    }
+    if(choose)GroupedChainPicker("默认节点",data,{choose=false},{selected=if(it=="auto")0 else it.substringAfter(':').toLong()},allowGroup=false,extras=listOf("auto" to uiText("自动选择")),allowedNodes=data.nodes.filter{it.id in nodes || it.groupId in groups}.map{it.id}.toSet())
 }
 
 @Composable internal fun NodeInfo(node:Node,data:AppData,vm:AppViewModel,onDismiss:()->Unit) {

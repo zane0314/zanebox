@@ -28,7 +28,7 @@ object SubscriptionDnsOptions {
         }
         put("server",address);remove("domain_resolver")
     }
-    fun apply(root:JSONObject,data:AppData) {
+    fun apply(root:JSONObject,data:AppData,sourceNodeIds:Map<String,Long> = emptyMap()) {
         val resolvers=data.groups.associate { it.id to JSONObject(it.options).optString("serverDnsResolver").trim() }.filterValues { it.isNotBlank() }
         val definitions=mutableMapOf<Long,JSONObject>()
         if(resolvers.isEmpty()) return
@@ -36,7 +36,8 @@ object SubscriptionDnsOptions {
         val servers=dns.optJSONArray("servers") ?: JSONArray().also { dns.put("servers",it) }
         val used=mutableSetOf<Long>()
         listOfNotNull(root.optJSONArray("outbounds"),root.optJSONArray("endpoints")).forEach { array -> for(i in 0 until array.length()) {
-            val outbound=array.getJSONObject(i);val id=Regex("node-([0-9]+)(?:-.*)?").matchEntire(outbound.optString("tag"))?.groupValues?.get(1)?.toLongOrNull() ?: continue
+            val outbound=array.getJSONObject(i);val tag=outbound.optString("tag")
+            val id=sourceNodeIds[tag] ?: Regex("node-([0-9]+)(?:-.*)?").matchEntire(tag)?.groupValues?.get(1)?.toLongOrNull() ?: continue
             val groupId=data.nodes.find { it.id==id }?.groupId ?: continue
             if(groupId !in resolvers) continue
             val host=outbound.optString("server")

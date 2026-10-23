@@ -18,10 +18,10 @@ class LatencyConfigPreparationTest {
         metadata=JSONObject().apply { if(source.isNotEmpty())put("sourceTag",source) }.toString())
 
     private val data=AppData(
-        nodes=listOf(socks(1,detour="source",source="first"),socks(2,source="source"),socks(3,2),socks(4,2),
-            Node(5,1,"chain","""{"type":"chain","node_ids":[1,6]}"""),
+        nodes=listOf(socks(1,source="first"),socks(2,source="source"),socks(3,2),socks(4,2),
+            Node(5,1,"chain","""{"type":"chain","node_ids":[1,6]}""",metadata="""{"chain":{"front":"none","landing":"none"}}"""),
             Node(6,2,"nested","""{"type":"chain","node_ids":[2,3]}""")),
-        groups=listOf(Group(1,"g",frontProxy=3,landingProxy=4),Group(2,"other",enabled=false)),
+        groups=listOf(Group(1,"g",frontProxy=3,landingProxy=4),Group(2,"other")),
         settings=mapOf("globalAllowInsecure" to "true"))
 
     // Sort only object keys: array order is part of the generated configuration.
@@ -38,16 +38,18 @@ class LatencyConfigPreparationTest {
         val root=JSONObject(prepared.build(1))
         val out=root.getJSONArray("outbounds")
         val tags=(0 until out.length()).map { out.getJSONObject(it).getString("tag") }
-        assertTrue(tags.containsAll(listOf("node-1","node-1-hop","node-2","node-3","node-4")))
+        assertTrue(tags.containsAll(listOf("node-1","node-1-hop","node-3")))
     }
 
     @Test fun sourceDetourAndCustomAndWireguardRemainEquivalent() {
         val wg=Node(7,2,"wg","""{"type":"wireguard","server":"example.com","server_port":51820,"local_address":["10.0.0.2/32"],"private_key":"private","peer_public_key":"public"}""")
         val custom=Node(8,2,"custom","""{"type":"custom","config":{"inbounds":[{"type":"socks","listen_port":1234}],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"},"experimental":{"clash_api":{"external_controller":"127.0.0.1:9999"}}}}""")
-        val plain=data.copy(nodes=data.nodes+wg+custom,groups=data.groups.map { it.copy(frontProxy=0,landingProxy=0) })
+        val plain=data.copy(nodes=data.nodes.map { if(it.id==1L)socks(1,detour="source",source="first") else it }+wg+custom,groups=data.groups.map { it.copy(frontProxy=0,landingProxy=0) })
         val prepared=ConfigBuilder.prepareTestBatch(plain)
         listOf(1L,7L,8L).forEach { assertEquivalent(ConfigBuilder.build(plain,Purpose.TEST,it),prepared.build(it)) }
-        assertEquals("node-2",JSONObject(prepared.build(1)).getJSONArray("outbounds").getJSONObject(0).getString("detour"))
+        val sourceOut=JSONObject(prepared.build(1)).getJSONArray("outbounds")
+        val nodeOne=(0 until sourceOut.length()).map { sourceOut.getJSONObject(it) }.single { it.getString("tag")=="node-1" }
+        assertEquals("node-1-source-1",nodeOne.getString("detour"))
         assertEquals(1,JSONObject(prepared.build(7)).getJSONArray("endpoints").length())
         assertEquals(0,JSONObject(prepared.build(8)).getJSONArray("inbounds").length())
     }

@@ -44,6 +44,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
     private val state=MutableStateFlow(RuntimeSnapshot())
     val snapshot:StateFlow<RuntimeSnapshot> = state
     val autoNodeId=MutableStateFlow(0L)
+    private val chainSelectionState=MutableStateFlow("{}");val chainSelections:StateFlow<String> = chainSelectionState
     private val switchGate=SwitchTestGate()
     private val event=MutableSharedFlow<String>(extraBufferCapacity=32)
     val events:SharedFlow<String> = event
@@ -97,6 +98,7 @@ class ServiceClient(context:Context,private val targetClass:Class<*>?=null) {
         override fun onEvent(kind:String,payload:String) {synchronized(bindingLock) {if(epoch!=bindingEpoch.get())return;when(kind) {
             "foregroundReady" -> foregroundAwaiter?.takeIf {it.first==payload}?.second?.complete(Unit)
             "autoSelection" -> autoNodeId.value=payload.toLongOrNull() ?: 0L
+            "chainSelections" -> chainSelectionState.value=payload
             "selected" -> runCatching { val o=JSONObject(payload);if(switchGate.accept(o.optString("token")) && o.optBoolean("changed") && o.optBoolean("autoTest",true))testSwitchedNode(o.getLong("id")) }
             "test" -> synchronized(testLock) {
                 val o=JSONObject(payload)

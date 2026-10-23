@@ -53,7 +53,8 @@ class ConfigSubscriptionTest {
         val rules=root.getJSONObject("route").getJSONArray("rules")
         assertEquals(443,rules.getJSONObject(2).getJSONArray("port").getInt(0));assertEquals("proxy",rules.getJSONObject(3).getString("outbound"))
         assertEquals("last.example",rules.getJSONObject(4).getJSONArray("domain_suffix").getString(0))
-        try { ConfigBuilder.build(data.copy(groups=listOf(Group(1,"环",frontProxy=2),Group(2,"环",frontProxy=1))));fail("cycle must fail") } catch (_: IllegalArgumentException) {}
+        // Referenced members use their raw connection; their own group wrappers do not recurse.
+        ConfigBuilder.build(data.copy(groups=listOf(Group(1,"原始引用",frontProxy=2),Group(2,"原始引用",frontProxy=1))))
     }
     @Test fun boundedRedirectFetchAndCancellation() = runBlocking {
         val server=MockWebServer()
@@ -124,7 +125,7 @@ class ConfigSubscriptionTest {
         assertEquals("ipv4_only",dns.getString("strategy"));assertTrue(dns.toString().contains("predefined"))
         try { ConfigBuilder.build(data.copy(groups=data.groups.map { it.copy(enabled=false) }));fail("all disabled") } catch(_:IllegalArgumentException) {}
         val dependency=data.copy(groups=listOf(Group(1,"停用",enabled=false),Group(2,"启用",frontProxy=1)))
-        val dependent=JSONObject(ConfigBuilder.build(dependency));val depOuts=dependent.getJSONArray("outbounds");assertTrue((0 until depOuts.length()).any { depOuts.getJSONObject(it).optString("tag")=="node-1" })
+        assertTrue(runCatching { ConfigBuilder.build(dependency) }.isFailure)
         val one=JSONObject();SubscriptionParser.applyHysteriaPorts(one,"443");assertEquals(443,one.getInt("server_port"));assertFalse(one.has("server_ports"))
         SubscriptionParser.applyHysteriaPorts(one,"443,500-600");assertEquals("443:443",one.getJSONArray("server_ports").getString(0));assertEquals("500:600",one.getJSONArray("server_ports").getString(1))
         try { SubscriptionParser.applyHysteriaPorts(one,"+443");fail("invalid positive sign") } catch(_:IllegalArgumentException) {}

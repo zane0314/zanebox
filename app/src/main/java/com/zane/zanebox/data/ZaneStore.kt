@@ -1,5 +1,6 @@
 package com.zane.zanebox.data
 
+import com.zane.zanebox.config.syncDerivedChains
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -86,7 +87,10 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
         val next:Cache
         try {
             val current=load(db)
-            val result=transform(current.merged).validate(current.merged)
+            val transformed=transform(current.merged)
+            val largest=(transformed.nodes.map { it.id }+transformed.groups.map { it.id }+transformed.rules.map { it.id }+transformed.merges.map { it.id }).maxOrNull() ?: 0
+            db.execSQL("UPDATE sequence SET value=MAX(value,?) WHERE id=1",arrayOf(largest))
+            val result=transformed.syncDerivedChains(allocateId=this::nextId).validate(current.merged)
             val (base,status,kv)=split(result)
             val baseJson=if(base==current.base)current.baseJson else base.toJson()
             var revision=current.revision;var statusRevision=current.statusRevision;var kvRevision=current.kvRevision
@@ -103,8 +107,6 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
                 kv.forEach { (key,value) -> if(current.kv[key]!=value) writeKv(db,key,value,kvRevision) }
                 db.execSQL("UPDATE state SET kv_revision=? WHERE id=1",arrayOf(kvRevision))
             }
-            val largest=(result.nodes.map { it.id }+result.groups.map { it.id }+result.rules.map { it.id }+result.merges.map { it.id }).maxOrNull() ?: 0
-            db.execSQL("UPDATE sequence SET value=MAX(value,?) WHERE id=1",arrayOf(largest))
             db.setTransactionSuccessful()
             next=Cache(revision,statusRevision,kvRevision,base,baseJson,status,kv,result)
         } finally { db.endTransaction() }
@@ -113,7 +115,7 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
     }
     fun replace(data:AppData):AppData = update { data }
     /** Automatic results retain the pre-test sort ping in kv; manual results release it. Both commit atomically. */
-    @Synchronized fun updateNodeStatus(updates:List<NodeStatusUpdate>,preserveSort:Boolean=false):Int {
+    @Synchronized fun updateNodeStatus(updates:List<NodeStatusUpdate>,preserveSort:Boolean=false,validate:(AppData,NodeStatusUpdate)->Boolean={_,_->true}):Int {
         if(updates.isEmpty()) return 0
         val db=writableDatabase;db.beginTransaction()
         var next:Cache?=null;var changed=0
@@ -122,7 +124,7 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
             val status=HashMap(current.status)
             val kv=HashMap(current.kv)
             updates.forEach { update ->
-                if(nodes[update.id]?.outbound!=update.outbound) return@forEach
+                if(nodes[update.id]?.outbound!=update.outbound || !validate(current.merged,update)) return@forEach
                 val previous=status[update.id] ?: DEFAULT;val value=previous.copy(ping=update.ping,status=update.status)
                 val sortKey="sort_ping_${update.id}"
                 if(preserveSort) { if(value!=previous && sortKey !in kv)kv[sortKey]=previous.ping.toString() }

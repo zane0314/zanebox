@@ -42,7 +42,7 @@ object ConfigBuilder {
     private fun smartServices(data:AppData)=smartPolicyKeys(data)
     fun ruleCompatibilityWarnings(service:String,rules:String):List<String> = ruleCompatibilityWarnings(service,rules) { key,type -> "$key：此规则格式暂不支持 $type；该类条目保留但不参与匹配，其余有效规则仍生效" }
     fun ruleCompatibilityWarnings(service:String,rules:String,format:(String,String)->String):List<String> = rules.lines().map {it.substringBefore(',').trim().uppercase()}.filter {it in unsupportedSmartRuleTypes}.distinct().map {format(service,it)}
-    fun warnings(data:AppData):List<String> = targetWarnings(data)+smartServices(data).flatMap {ruleCompatibilityWarnings(it,data.setting("smartRules.$it"))}
+    fun warnings(data:AppData):List<String> = data.nodes.mapNotNull { node->chainUnavailableReason(data,node)?.let { "${node.name}：$it" } }+targetWarnings(data)+smartServices(data).flatMap {ruleCompatibilityWarnings(it,data.setting("smartRules.$it"))}
     fun targetWarnings(data: AppData): List<String> {
         val groups=data.groups.filter {it.enabled && it.subscriptionUrl.isNotBlank()}.map {it.id}.toSet()
         val empty=!data.nodes.any {it.groupId in groups && JSONObject(it.outbound).optString("type")!="custom"}
@@ -72,6 +72,7 @@ object ConfigBuilder {
 
     private fun build(inputs:Inputs,purpose:Purpose,testNodeId:Long,runtimeSecret:String,installedPackages:Set<String>?):String {
         val data=inputs.data
+        validateChainTargetSyntax(data)
         val testing = purpose == Purpose.TEST
         val nodesById=inputs.nodesById
         val groupsById=inputs.groupsById
@@ -81,6 +82,9 @@ object ConfigBuilder {
         val mode=data.setting("routeMode"); require(mode in listOf("rule","global","direct")) { "路由模式无效" }
         val serviceMode=data.setting("serviceMode");require(serviceMode in listOf("vpn","proxy")) { "服务模式无效" }
         val fakeDns=!testing && mode!="direct" && data.bool("fakeDns",data.bool("fakeDNS", true))
+        if(!testing)groupsById[data.selectedGroupId]?.takeIf { it.enabled && derivedGroupSourceId(it)>0 }?.let { group->
+            require(data.nodes.any { it.groupId==group.id }) { "当前链式分组没有可用成员，请修复源分组" }
+        }
         val eligible=if(testing) data.nodes else data.nodes.filter { n -> groupsById[n.groupId]?.enabled==true }
         require(eligible.isNotEmpty()) { "没有启用分组中的可用节点" }
         val eligibleByGroup=eligible.groupBy {it.groupId}
@@ -89,12 +93,10 @@ object ConfigBuilder {
         require(homeEligible.isNotEmpty()) { "没有可自动选择的节点" }
         val chosen=if(testing) nodesById[testNodeId] ?: error("测速节点不存在") else homeEligible.find { it.id==data.selectedNodeId } ?: homeEligible.find { it.groupId==data.selectedGroupId } ?: homeEligible.first()
         if(beans.getValue(chosen.id).optString("type")=="custom") return customConfig(beans.getValue(chosen.id).getJSONObject("config"),data,purpose,runtimeSecret)
-        val required = mutableSetOf<Long>()
-        fun include(id: Long) { if (!required.add(id)) return; val n=nodesById[id] ?: error("代理链引用不存在的节点 $id"); val bean=beans.getValue(n.id);if(bean.optString("type")=="chain") { val ids=bean.getJSONArray("node_ids");for(i in 0 until ids.length()) include(ids.getLong(i)) }; if(bean.has("detour")) { val tag=bean.getString("detour");sources[n.groupId to tag]?.let { include(it.id) } }; val g=groupsById[n.groupId]; if(g!=null) { if(g.frontProxy>0) include(g.frontProxy); if(g.landingProxy>0) include(g.landingProxy) } }
-        if(testing) include(testNodeId) else eligible.forEach { include(it.id) }
-        val nodes = data.nodes.filter { it.id in required && beans.getValue(it.id).optString("type")!="custom" }
+        val nodes = (if(testing) listOf(chosen) else eligible).filter { beans.getValue(it.id).optString("type")!="custom" }
         require(nodes.isNotEmpty()) { "没有可用节点" }
-        require(!testing || nodes.any { it.id == testNodeId }) { "测速节点不存在" }
+        var dynamicChains=false
+        val dynamicChainTags=mutableSetOf<String>()
         val out = JSONArray()
         val endpoints = JSONArray()
         fun addOutbound(item: JSONObject) {
@@ -116,33 +118,85 @@ object ConfigBuilder {
             }
             if(item.optString("type")=="wireguard") endpoints.put(wireguardEndpoint(item)) else out.put(item)
         }
-        fun flatten(id:Long, active:MutableSet<Long> = mutableSetOf()):List<JSONObject> {
-            require(active.size<64 && active.add(id)) { "代理链引用循环或过深" }
-            val node=nodesById[id] ?: error("代理链节点不存在: $id");val bean=beans.getValue(node.id)
-            val result=if(bean.optString("type")=="chain") { val ids=bean.getJSONArray("node_ids");require(ids.length()>0) { "代理链为空" };(0 until ids.length()).flatMap { flatten(ids.getLong(it),active) } } else { require(bean.optString("type")!="custom") { "完整自定义配置不能嵌入代理链" };listOf(JSONObject(bean.toString())) }
-            active.remove(id);return result
-        }
-        nodes.forEach { n ->
-            if(beans.getValue(n.id).optString("type")=="chain") {
-                val g=groupsById[n.groupId]?.takeUnless { n.id==it.frontProxy || n.id==it.landingProxy };val chain=flatten(n.id).toMutableList()
-                if(g!=null && g.landingProxy>0) chain.add(0,flatten(g.landingProxy).first().also { require(beans.getValue(g.landingProxy).optString("type")!="chain") { "落地代理不能是链" } })
-                chain.forEachIndexed { index,item ->
-                    item.put("tag",if(index==0) "node-${n.id}" else "node-${n.id}-chain-$index")
-                    if(index<chain.lastIndex) item.put("detour","node-${n.id}-chain-${index+1}") else if(g!=null && g.frontProxy>0) item.put("detour","node-${g.frontProxy}")
-                    addOutbound(item)
+        val emitted=mutableSetOf<String>()
+        val sourceNodeIds=mutableMapOf<String,Long>()
+        val rawPaths=mutableMapOf<Long,List<Long>>()
+        fun rawPath(id:Long)=rawPaths.getOrPut(id) { rawChainIds(data,id,nodesById=nodesById) }
+        fun emitPath(ids:List<Long>,tag:String,upstream:String?=null,active:MutableSet<Long> = mutableSetOf()):String {
+            require(ids.isNotEmpty() && ids.distinct().size==ids.size) { "代理链为空或节点重复" }
+            if(tag in emitted)return tag
+            var previous=upstream
+            ids.forEachIndexed { index,id->
+                require(active.size<64 && active.add(id)) { "代理链引用循环或过深" }
+                val n=nodesById[id] ?: error("代理链节点不存在: $id")
+                val item=JSONObject(beans.getValue(id).toString())
+                val current=if(index==ids.lastIndex)tag else "$tag-chain-${ids.lastIndex-index}"
+                if(previous!=null) {
+                    require(!item.has("detour")) { "代理链与节点原有 detour 冲突" }
+                    item.put("detour",previous)
+                } else if(item.has("detour") && item.optString("detour")!="direct") {
+                    val source=sources[n.groupId to item.getString("detour")] ?: error("代理链原始 detour 目标不存在")
+                    val dependency="$tag-source-$id"
+                    emitPath(rawPath(source.id),dependency,null,active)
+                    item.put("detour",dependency)
                 }
+                addOutbound(item.put("tag",current));emitted.add(current);sourceNodeIds[current]=id
+                active.remove(id);previous=current
+            }
+            return tag
+        }
+        fun targetPaths(target:String)=chainTargetNodes(data,target).map { rawPath(it.id) }
+        fun automaticChain(tag:String,nodeId:Long,candidates:List<String>) {
+            dynamicChainTags.add(tag)
+            require(purpose!=Purpose.EXPORT) { "自动链路需要 Links 运行时按接入位置测速，请导出固定节点链路" }
+            val unavailable="chain-$nodeId-unavailable"
+            if(emitted.add(unavailable))out.put(JSONObject().put("type","block").put("tag",unavailable))
+            out.put(JSONObject().put("type","selector").put("tag",tag).put("outbounds",JSONArray(candidates+unavailable)).put("default",unavailable).put("restore_cache",false))
+        }
+
+        nodes.forEach { n ->
+            validateChainNodeSettings(data,n,nodesById)
+            if(chainUnavailableReason(data,n)!=null) {
+                out.put(JSONObject().put("type","block").put("tag","node-${n.id}"));emitted.add("node-${n.id}")
                 return@forEach
             }
-            val g=groupsById[n.groupId]?.takeUnless { n.id==it.frontProxy || n.id==it.landingProxy }
-            val item=JSONObject(beans.getValue(n.id).toString()).put("tag", "node-${n.id}")
-            if(item.has("detour")) { val original=item.getString("detour"); val ref=sources[n.groupId to original]; if(ref!=null) item.put("detour", "node-${ref.id}") }
-            if(g!=null && g.frontProxy>0) { require(g.frontProxy!=n.id) { "前置代理不能引用自身" }; item.put("detour", "node-${g.frontProxy}") }
-            if(g!=null && g.landingProxy>0) {
-                require(g.landingProxy!=n.id) { "落地代理不能引用自身" }
-                val landing=nodesById[g.landingProxy] ?: error("落地代理不存在")
-                item.put("tag", "node-${n.id}-hop"); addOutbound(item)
-                addOutbound(JSONObject(beans.getValue(landing.id).toString()).put("tag", "node-${n.id}").put("detour", "node-${n.id}-hop"))
-            } else addOutbound(item)
+            val targets=effectiveChainTargets(data,n)
+            val body=rawPath(n.id)
+            val fronts=targetPaths(targets.front)
+            val landings=targetPaths(targets.landing)
+            val frontIds=fronts.flatMap { rawRouteIds(data,it,nodesById=nodesById) }.toSet()
+            val landingIds=landings.flatten().toSet()
+            val bodyIds=if(frontIds.isEmpty())rawRouteIds(data,body,nodesById=nodesById)else body
+            require(bodyIds.none { it in frontIds || it in landingIds } && frontIds.intersect(landingIds).isEmpty()) { "代理链不能引用自身或重复节点" }
+            val front=when {
+                targets.front=="none"->null
+                targets.front.startsWith("group:")-> {
+                    dynamicChains=true
+                    val tag="chain-${n.id}-front"
+                    val refs=chainTargetNodes(data,targets.front)
+                    val candidates=fronts.mapIndexed { i,path->emitPath(path,"$tag-${refs[i].id}") }
+                    automaticChain(tag,n.id,candidates)
+                    tag
+                }
+                else-> {
+                    val ref=chainTargetNodes(data,targets.front).single()
+                    // Reuse a plain public outbound only when it is already the raw connection.
+                    val tag=if(effectiveChainTargets(data,ref)==ChainTargets())"node-${ref.id}" else "chain-${n.id}-front-${ref.id}"
+                    emitPath(fronts.single(),tag)
+                }
+            }
+            if(targets.landing.startsWith("group:")) {
+                dynamicChains=true
+                val hop=emitPath(body,"node-${n.id}-hop",front)
+                val candidates=chainTargetNodes(data,targets.landing).mapIndexed { i,candidate->
+                    emitPath(landings[i],"chain-${n.id}-landing-${candidate.id}",hop)
+                }
+                automaticChain("node-${n.id}",n.id,candidates)
+                emitted.add("node-${n.id}")
+            } else if(landings.isNotEmpty()) {
+                val hop=emitPath(body,"node-${n.id}-hop",front)
+                emitPath(landings.single(),"node-${n.id}",hop)
+            } else emitPath(body,"node-${n.id}",front)
         }
         out.put(JSONObject().put("type", "direct").put("tag", "direct"))
         val tags = nodes.map { "node-${it.id}" }.toMutableSet().apply { add("direct") }
@@ -393,7 +447,7 @@ object ConfigBuilder {
             }
             if(serviceMode=="proxy" || !data.bool("disableMixedInbound")) inbound.put(JSONObject().put("type", "mixed").put("tag", "mixed-in").put("listen", if (data.bool("allowLan")) "0.0.0.0" else "127.0.0.1").put("listen_port", port(data.setting("mixedPort"))))
             if (data.bool("shareEnabled")) inbound.put(JSONObject().put("type", "mixed").put("tag", "share-in").put("listen", "0.0.0.0").put("listen_port", port(data.setting("sharePort"))))
-            if (data.bool("clashApi") || data.bool("statsEnabled") || auto) {
+            if (data.bool("clashApi") || data.bool("statsEnabled") || auto || dynamicChains) {
                 val api = JSONObject().put("external_controller", "127.0.0.1:${port(data.setting("apiPort"))}")
                 if (purpose == Purpose.MAIN && runtimeSecret.isNotBlank()) api.put("secret", runtimeSecret)
                 root.put("experimental", JSONObject().put("clash_api", api))
@@ -406,9 +460,27 @@ object ConfigBuilder {
         }
         if (endpoints.length() > 0) root.put("endpoints", endpoints)
         root.put("inbounds", inbound)
-        SubscriptionDnsOptions.apply(root,data)
+        SubscriptionDnsOptions.apply(root,data,sourceNodeIds)
         if(!testing && data.setting("globalCustomConfig").isNotBlank()) mergeJson(root,JSONObject(data.setting("globalCustomConfig")))
         chosen.let { inputs.metadata.getValue(it.id).optJSONObject("customConfig")?.let { custom -> mergeJson(root,JSONObject(custom.toString())) } }
+        if(purpose==Purpose.MAIN && dynamicChainTags.isNotEmpty()) {
+            val generated=root.getJSONArray("outbounds")
+            val graph=(0 until generated.length()).map { generated.getJSONObject(it) }.associateBy { it.getString("tag") }.toMutableMap()
+            root.optJSONArray("endpoints")?.let { values->for(i in 0 until values.length()) { val value=values.getJSONObject(i);graph[value.getString("tag")]=value } }
+            val dependencies=mutableMapOf<String,Boolean>()
+            fun usesDynamicChain(tag:String,active:MutableSet<String> = mutableSetOf()):Boolean {
+                if(tag in dynamicChainTags)return true
+                dependencies[tag]?.let { return it }
+                if(!active.add(tag))return false
+                val item=graph[tag]
+                val refs=item?.optJSONArray("outbounds")
+                val members=if(refs==null)emptyList() else (0 until refs.length()).map { refs.getString(it) }
+                val result=(members+listOfNotNull(item?.optString("detour")?.takeIf { it.isNotBlank() })).any { usesDynamicChain(it,active) }
+                active.remove(tag);dependencies[tag]=result
+                return result
+            }
+            graph.values.filter { it.optString("type")=="urltest" && usesDynamicChain(it.getString("tag")) }.forEach { it.put("managed_test",true) }
+        }
         return sanitizeRuntime(root,data,purpose,runtimeSecret)
     }
     private fun urlTestOptions(item:JSONObject,data:AppData):JSONObject {

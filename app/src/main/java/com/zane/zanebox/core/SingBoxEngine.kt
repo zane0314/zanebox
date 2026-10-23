@@ -22,6 +22,9 @@ class SingBoxEngine(private val platform:NativePlatform) {
             val outbounds=root.optJSONArray("outbounds") ?: org.json.JSONArray()
             configuredProxyDefault=(0 until outbounds.length()).map { outbounds.getJSONObject(it) }.firstOrNull { it.optString("tag")=="proxy" && it.optString("type")=="selector" }?.optString("default").orEmpty()
             next.setV2rayStats(trackedTags.joinToString("\n"));next.setAsMain();next.start()
+            com.zane.zanebox.runtime.ChainProbePlan.read(config).flatMap {listOfNotNull(it.front,it.landing)}.forEach {
+                check(next.selectGroupOutbound(it.tag,it.unavailable)) { "代理链初始阻断无法应用" }
+            }
             if(configuredProxyDefault.isNotBlank())check(next.selectOutbound(configuredProxyDefault)) { "默认节点无法应用" }
             main=next
         }
@@ -45,15 +48,48 @@ class SingBoxEngine(private val platform:NativePlatform) {
     fun sleep() { main?.sleep() }
     fun wake() { main?.wake() }
     fun validate(config:String) { val box=Libcore.newTestSingBoxInstance(config,platform);box.close() }
-    fun test(config:String,url:String,timeout:Int,active:()->Boolean={true}):Int {
+    fun resolvedTestConfig(config:String,url:String,timeout:Int,active:()->Boolean={true}):String {
+        if(com.zane.zanebox.runtime.ChainProbePlan.read(config).isEmpty())return config
+        var resolved=config
+        test(config,url,timeout,prepared={ resolved=it },active=active)
+        return resolved
+    }
+    fun test(config:String,url:String,timeout:Int,prepared:(String)->Unit={},frontDelays:MutableMap<String,Int>?=null,active:()->Boolean={true}):Int {
         if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
-        val owned=TestBox(Libcore.newTestSingBoxInstance(config,platform))
+        val root=org.json.JSONObject(config)
+        val plans=com.zane.zanebox.runtime.ChainProbePlan.read(config)
+        val frontKeys=if(frontDelays!=null)com.zane.zanebox.runtime.chainProbeKeys(config)else emptyMap()
+        val outbounds=root.optJSONArray("outbounds") ?: org.json.JSONArray()
+        val proxy=(0 until outbounds.length()).map { outbounds.getJSONObject(it) }.firstOrNull { it.optString("tag")=="proxy" && it.optString("type")=="selector" }
+        val original=proxy?.optString("default").orEmpty()
+        if(plans.isNotEmpty()) {
+            check(proxy!=null && original.isNotBlank()) { "代理链测速缺少默认选择器" }
+            root.getJSONObject("route").put("final","proxy")
+            val members=proxy.getJSONArray("outbounds")
+            plans.flatMap { listOfNotNull(it.front,it.landing).flatMap { p->p.candidates } }.distinct().forEach { members.put(it) }
+        }
+        val owned=TestBox(Libcore.newTestSingBoxInstance(root.toString(),platform))
         val box=owned.box
         tests.add(owned)
         return try {
             if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
             box.start()
             if(!active())throw kotlinx.coroutines.CancellationException("测速已取消")
+            for(plan in plans) {
+                for(probe in listOfNotNull(plan.front,plan.landing)) {
+                    val winner=com.zane.zanebox.runtime.chooseChainProbe(probe,{ tag->
+                        check(box.selectOutbound(tag)) { "代理链测速候选无法选择" }
+                        fun measure()=try { Libcore.urlTest(box,url,timeout) } catch(e:Exception) { if(!active())throw kotlinx.coroutines.CancellationException("测速已取消");-1 }
+                        if(probe==plan.front && frontDelays!=null) synchronized(frontDelays) {
+                            frontDelays.getOrPut(frontKeys.getValue(tag)) { measure() }
+                        } else measure()
+                    },{group,tag->box.selectGroupOutbound(group,tag)},active)
+                    if(winner==probe.unavailable)throw IllegalStateException("代理链候选全部不可用")
+                    (0 until outbounds.length()).map { outbounds.getJSONObject(it) }.first { it.optString("tag")==probe.tag }.put("default",winner)
+                }
+            }
+            if(plans.isNotEmpty())check(box.selectOutbound(original)) { "代理链测速默认节点无法恢复" }
+            prepared(root.toString())
             Libcore.urlTest(box,url,timeout)
         } finally { try {runCatching {owned.close()}} finally {tests.remove(owned)} }
     }

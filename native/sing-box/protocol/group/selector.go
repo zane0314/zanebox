@@ -37,6 +37,7 @@ type Selector struct {
 	logger                       logger.ContextLogger
 	tags                         []string
 	defaultTag                   string
+	restoreCache                 bool
 	outbounds                    map[string]adapter.Outbound
 	selected                     common.TypedValue[adapter.Outbound]
 	history                      *urltest.HistoryStorage
@@ -53,6 +54,7 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		logger:                       logger,
 		tags:                         options.Outbounds,
 		defaultTag:                   options.Default,
+		restoreCache:                 options.RestoreCache == nil || *options.RestoreCache,
 		outbounds:                    make(map[string]adapter.Outbound),
 		history:                      service.PtrFromContext[urltest.HistoryStorage](ctx),
 		interruptGroup:               interrupt.NewGroup(),
@@ -81,7 +83,7 @@ func (s *Selector) Start() error {
 		s.outbounds[tag] = detour
 	}
 
-	if s.Tag() != "" {
+	if s.restoreCache && s.Tag() != "" {
 		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
 		if cacheFile != nil {
 			selected := cacheFile.LoadSelected(s.Tag())

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zane.zanebox.data.*
+import com.zane.zanebox.config.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.collectLatest
@@ -66,6 +67,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     val testing by vm.service.testingNodes.collectAsStateWithLifecycle()
     val testProgress by vm.service.testProgress.collectAsStateWithLifecycle()
     val autoNodeId by vm.service.autoNodeId.collectAsStateWithLifecycle()
+    val chainSelections by vm.service.chainSelections.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val pending by vm.pendingImport.collectAsStateWithLifecycle()
     val importing by vm.importing.collectAsStateWithLifecycle()
@@ -81,8 +83,9 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     var backupScope by remember{mutableStateOf(com.zane.zanebox.backup.BackupScope())}
     var info by remember{mutableStateOf<Node?>(null)}
     var initialProtocol by remember { mutableStateOf("vless") }
-    var groupProxy by remember { mutableStateOf("") }
-    var proxyGroupId by remember { mutableStateOf<Long?>(null) }
+    var chainsOpen by remember{mutableStateOf(false)}
+    var chainNode by remember{mutableStateOf<Node?>(null)}
+    var chainGroup by remember{mutableStateOf<Group?>(null)}
     var menuGroupId by remember { mutableStateOf<Long?>(null) }
     var nodeEdit by remember { mutableStateOf(false) };var editNode by remember { mutableStateOf<Node?>(null) }
     var groupEdit by remember { mutableStateOf(false) };var editGroup by remember { mutableStateOf<Group?>(null) }
@@ -146,14 +149,13 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
     val restoreFile=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){it?.let {uri->confirm="恢复备份将替换当前全部配置，是否继续？" to {vm.restore(uri)}}}
     val addActions=listOf("扫码导入" to {scan.launch(com.journeyapps.barcodescanner.ScanOptions().setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE).setPrompt("扫描节点二维码").setBeepEnabled(false))},
         "从剪贴板导入" to {val cb=context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager;vm.importText(cb.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty(),data.browseGroupId)},
-        "从文件导入" to {importFile.launch(arrayOf("*/*"))},"手动添加" to {nodeForm()},"创建链式代理" to {nodeForm(protocol="chain")},
+        "从文件导入" to {importFile.launch(arrayOf("*/*"))},"手动添加" to {nodeForm()},
         "导入文本" to {form("导入文本",listOf("链接 / Base64 / Clash / sing-box" to "")){vm.importText(it[0],data.browseGroupId)}})
     val currentGroup=data.groups.firstOrNull{it.id==data.browseGroupId}
     val enabledIds=remember(data.groups){data.groups.filter{it.enabled}.map{it.id}.toSet()}
     val activeNodes=remember(data.nodes,enabledIds){data.nodes.filter{it.groupId in enabledIds}}
-    fun proxyActions(group:Group):List<Pair<String,()->Unit>> =listOf("前置代理" to {proxyGroupId=group.id;groupProxy="front"},"后置代理（落地）" to {proxyGroupId=group.id;groupProxy="landing"})
-    val groupActions=currentGroup?.let(::proxyActions).orEmpty()
-    val moreActions:List<Pair<String,()->Unit>> =groupActions+listOf("更新当前订阅" to {if(currentGroup==null)vm.message.value="请先选择订阅分组" else vm.updateGroup(currentGroup)},
+    fun proxyActions(group:Group):List<Pair<String,()->Unit>> =listOf("链式代理" to {chainGroup=group;editorSaveError=""})
+    val moreActions:List<Pair<String,()->Unit>> =listOf("链式代理" to {chainsOpen=true})+listOf("更新当前订阅" to {if(currentGroup==null)vm.message.value="请先选择订阅分组" else vm.updateGroup(currentGroup)},
         "测试当前分组延迟" to {vm.service.testNodes(activeNodes.filter{currentGroup==null || it.groupId==currentGroup.id}.map{it.id})},
         "全部更新（全部订阅）" to vm::updateAllGroups,
         "全部测速（全部分组）" to {vm.service.testNodes(data.nodes.filter{n->data.groups.any{it.id==n.groupId && it.enabled}}.map{it.id})},"取消测速" to {vm.service.cancelTests()},
@@ -235,6 +237,8 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                 selectedNode?.let{runCatching{JSONObject(it.outbound).optString("type").uppercase()}.getOrDefault("")}.orEmpty(),runtime.state,data.setting("serviceMode"),data.setting("routeMode"),::toggle)
                             Spacer(Modifier.height(12.dp))
                         }
+                        UiCard {UiRow("当前默认链路",chainPathText(data,if(data.bool("homeAutoSelect"))autoNodeId else data.selectedNodeId,if(runtime.state==2)chainSelections else "{}"),Icons.Outlined.AccountTree,translateSubtitle=false,summaryLines=2,minHeight=58.dp,modifier=Modifier.testTag("home_chain_summary"))}
+                        Spacer(Modifier.height(8.dp))
                         if(searching) {
                             OutlinedTextField(search,{search=it},label={Text(uiText("搜索节点"))},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("node_search"),trailingIcon={IconButton(onClick={search="";searching=false}){Icon(Icons.Outlined.Close,"关闭搜索")}})
                             Spacer(Modifier.height(10.dp))
@@ -284,7 +288,7 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                                     }
                                     Text(uiText(if(n.id in testing)"测试中" else nodeTestLabel(n)),fontFamily=if(skinPalette.name=="supabase")androidx.compose.ui.text.font.FontFamily.Monospace else androidx.compose.ui.text.font.FontFamily.Default,fontSize=if(linearUi)12.sp else 11.sp,color=MaterialTheme.colorScheme.primary,modifier=Modifier.testTag("node_latency_${n.id}").clickable(enabled=enabled){vm.service.testNodes(listOf(n.id))})
                                     IconButton(onClick={info=n},modifier=Modifier.testTag("node_info_${n.id}")){Icon(painterResource(R.drawable.zb_ref_ic_baseline_info_24),"节点详情")}
-                                    UiMenu(listOf("编辑" to {nodeForm(n)},"测试延迟" to {vm.service.testNodes(listOf(n.id))},"速度测试" to {speedNode=n.id},"分享" to {share(shareText(listOf(n)))},"二维码" to {qr=shareText(listOf(n))},"复制" to {copy(shareText(listOf(n)))},"节点区域" to {form("节点区域",listOf("hk/us/kr/jp/sg/tw（留空自动）" to data.setting("nodeRegion.${n.id}"))){val key="nodeRegion.${n.id}";val region=it[0].trim().lowercase(java.util.Locale.ROOT);validatePreference(key,region);vm.setting(key,region)}},"多选" to {selectingNodes=true;selectedNodes=selectedNodes+n.id},"删除" to {deleteNodes(setOf(n.id))}).filter{enabled || it.first !in listOf("测试延迟","速度测试")},"node_menu_${n.id}")
+                                    UiMenu(listOf("链式代理" to {chainNode=n;editorSaveError=""},"编辑" to {nodeForm(n)},"测试延迟" to {vm.service.testNodes(listOf(n.id))},"速度测试" to {speedNode=n.id},"分享" to {share(shareText(listOf(n)))},"二维码" to {qr=shareText(listOf(n))},"复制" to {copy(shareText(listOf(n)))},"节点区域" to {form("节点区域",listOf("hk/us/kr/jp/sg/tw（留空自动）" to data.setting("nodeRegion.${n.id}"))){val key="nodeRegion.${n.id}";val region=it[0].trim().lowercase(java.util.Locale.ROOT);validatePreference(key,region);vm.setting(key,region)}},"多选" to {selectingNodes=true;selectedNodes=selectedNodes+n.id},"删除" to {deleteNodes(setOf(n.id))}).filter{enabled || it.first !in listOf("测试延迟","速度测试")},"node_menu_${n.id}")
                                 } }
                             }
                             if(nodes.isEmpty())item {Box(Modifier.fillMaxWidth().height(220.dp),contentAlignment=Alignment.Center){Text(uiText(if(data.nodes.isEmpty())"暂无节点，点右上角添加节点或订阅" else "未找到匹配节点"),fontSize=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
@@ -319,15 +323,21 @@ internal fun homeRuntimeSnapshots(source:Flow<RuntimeSnapshot>)=source.distinctU
                     items(actions,key={it.first}){(label,action)->TextButton(onClick={menuGroupId=null;action()},modifier=Modifier.fillMaxWidth()){Text(uiText(label))}}
                 }},confirmButton={TextButton(onClick={menuGroupId=null}){Text(uiText("取消"))}})
             }
-            data.groups.firstOrNull{it.id==proxyGroupId}?.let {group->if(groupProxy.isNotBlank())ChoiceDialog(if(groupProxy=="front")"前置代理" else "后置代理（落地）",
-                (if(groupProxy=="front")group.frontProxy else group.landingProxy).toString(),
-                listOf("0" to uiText("无"))+data.nodes.filter { JSONObject(it.outbound).optString("type") !in listOf("chain","custom") }.map{it.id.toString() to it.name},
-                {groupProxy="";proxyGroupId=null},translateChoices=false) { id->val front=groupProxy=="front";vm.edit{d->d.copy(groups=d.groups.map{if(it.id!=group.id)it else if(front)it.copy(frontProxy=id.toLong())else it.copy(landingProxy=id.toLong())})};groupProxy="";proxyGroupId=null }
-            }
-    if(nodeEdit)NodeEditor(editNode,data,initialProtocol=initialProtocol,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@NodeEditor;editorSaving=true;
+    if(chainsOpen)ChainSettingsPage(data,{chainsOpen=false},{chainGroup=it;editorSaveError=""},{chainNode=it;editorSaveError=""}, {nodeForm(protocol="chain")})
+    if(chainNode!=null || chainGroup!=null)ChainRouteEditor(chainNode,chainGroup,data,{if(!editorSaving){chainNode=null;chainGroup=null}},editorSaving,editorSaveError) {name,targets->
+        if(!editorSaving) {
+            editorSaving=true
+            val saved={editorSaving=false;chainNode=null;chainGroup=null}
+            val failed:(String)->Unit={editorSaving=false;editorSaveError=it}
+            chainNode?.let{if(isChainNode(it))vm.saveNode(it.copy(name=name).withChainTargets(targets),onSaved=saved,onError=failed)else vm.createChainNode(it,name,targets,onSaved=saved,onError=failed)}
+                ?: chainGroup?.let{if(isChainGroup(it))vm.saveGroup(it.copy(name=name).withChainTargets(targets),false,onSaved=saved,onError=failed)else vm.createChainGroup(it,name,targets,onSaved=saved,onError=failed)}
+        }
+    }
+
+    if(nodeEdit)NodeEditor(editNode,data,initialProtocol=initialProtocol,{nodeEdit=false},saveError=editorSaveError,saving=editorSaving,onCreateChain={chainNode=editNode;nodeEdit=false;editorSaveError=""}){value->if(editorSaving)return@NodeEditor;editorSaving=true;
                 vm.saveNode(value,onSaved={editorSaving=false;nodeEdit=false},onError={editorSaving=false;editorSaveError=it})
             }
-            if(groupEdit)GroupEditor(editGroup,data,{groupEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@GroupEditor;editorSaving=true;val g=value.copy(id=editGroup?.id ?: 0,order=editGroup?.order ?: data.groups.size);vm.saveGroup(g,g.subscriptionUrl.isNotBlank() && (editGroup==null || editGroup?.subscriptionUrl!=g.subscriptionUrl),onSaved={editorSaving=false;groupEdit=false},onError={editorSaving=false;editorSaveError=it})}
+            if(groupEdit)GroupEditor(editGroup,data,{groupEdit=false},saveError=editorSaveError,saving=editorSaving,onCreateChain={chainGroup=editGroup;groupEdit=false;editorSaveError=""}){value->if(editorSaving)return@GroupEditor;editorSaving=true;val g=value.copy(id=editGroup?.id ?: 0,order=editGroup?.order ?: data.groups.size);vm.saveGroup(g,g.subscriptionUrl.isNotBlank() && (editGroup==null || editGroup?.subscriptionUrl!=g.subscriptionUrl),onSaved={editorSaving=false;groupEdit=false},onError={editorSaving=false;editorSaveError=it})}
             if(ruleEdit)RuleEditor(editRule,data,{ruleEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@RuleEditor;editorSaving=true;vm.edit(onSaved={editorSaving=false;ruleEdit=false},onError={editorSaving=false;editorSaveError=it}){d->val r=value.copy(id=editRule?.id ?: vm.store.nextId(),order=editRule?.order ?: d.rules.size);d.copy(rules=d.rules.filter{it.id!=r.id}+r)}}
             if(mergeEdit)MergeEditor(editMerge,data,{mergeEdit=false},saveError=editorSaveError,saving=editorSaving){value->if(editorSaving)return@MergeEditor;editorSaving=true;vm.edit(onSaved={editorSaving=false;mergeEdit=false},onError={editorSaving=false;editorSaveError=it}){d->val m=value.copy(id=editMerge?.id ?: vm.store.nextId());d.copy(merges=d.merges.filter{it.id!=m.id}+m)}}
             editor?.let{TextEditPage(it,{editor=null})}

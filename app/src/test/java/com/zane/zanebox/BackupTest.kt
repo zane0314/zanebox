@@ -22,6 +22,13 @@ class BackupTest {
         val original=AppData(nodes=listOf(Node(1,2,"测试","{\"type\":\"socks\",\"server\":\"example.org\",\"server_port\":1080}",metadata="{\"raw\":1}")),groups=listOf(Group(2,"分组",options="{\"opaque\":true}")),rules=listOf(RouteRule(3,"规则",advanced="{\"port\":\"443\"}",prioritize=true)),settings=mapOf("typed" to "[1,2]"))
         assertEquals(original.toJson(),manager.`import`(manager.export(original)).toJson())
     }
+    @Test fun chainPoliciesAndMissingReferencesSurviveBackupWithoutShortening() {
+        val original=AppData(nodes=listOf(Node(1,2,"主体","""{"type":"socks","server":"example.org","server_port":1080}""",metadata="""{"chain":{"front":"inherit","landing":"none"}}"""),Node(3,2,"丢失落地的链","""{"type":"chain","node_ids":[99,1]}""")),groups=listOf(Group(2,"链路组",frontProxy=99,options="""{"chain":{"front":"node:99","landing":"group:88"},"opaque":true}""")))
+        val restored=manager.`import`(manager.export(original))
+        assertEquals(original.toJson(),restored.toJson())
+        val out=JSONObject(ConfigBuilder.build(restored)).getJSONArray("outbounds")
+        assertEquals("block",(0 until out.length()).map {out.getJSONObject(it)}.single {it.getString("tag")=="node-3"}.getString("type"))
+    }
     @Test fun traversalAndUnknownAndTruncatedRejected() {
         reject { manager.`import`(zip("../data.json" to byteArrayOf())) }
         reject { manager.`import`(zip("data.json" to "{}".toByteArray())) }

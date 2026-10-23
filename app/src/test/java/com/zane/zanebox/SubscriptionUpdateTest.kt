@@ -12,6 +12,31 @@ import okhttp3.mockwebserver.MockResponse
 class SubscriptionUpdateTest {
     private val outbound="{\"type\":\"trojan\",\"server\":\"edge.example\",\"server_port\":443,\"password\":\"pw\",\"tls\":{\"enabled\":true}}"
     private val group=Group(1,"订阅","https://subscription.example/list",options="{\"future\":\"preserve\"}")
+    @Test fun localChainPolicySurvivesSubscriptionRefreshAndMissingLanding() {
+        val member=Node(10,1,"机场",outbound,metadata="""{"chain":{"front":"inherit","landing":"node:20"}}""")
+        val landing=Node(20,2,"落地",outbound.replace("edge.example","landing.example"))
+        val localChain=Node(30,1,"固定链","""{"type":"chain","node_ids":[20,10]}""")
+        val initial=AppData(nodes=listOf(member,landing,localChain),groups=listOf(group,Group(2,"落地组","https://landing.example/sub",landingProxy=20)))
+        val started=SubscriptionUpdater.begin(initial,group,"chain-refresh",1000)
+        val updated=SubscriptionUpdater.apply(started,started.groups.first(),listOf(ParsedNode("机场新名",outbound,metadata="""{"chain":{"front":"none","landing":"none"}}""")),"",2000) { 99 }
+        assertEquals("node:20",JSONObject(updated.nodes.first { it.id==10L }.metadata).getJSONObject("chain").getString("landing"))
+        assertTrue("手动建立的链不应被同组订阅更新删除",updated.nodes.any { it.id==30L })
+        val landingGroup=updated.groups.first { it.id==2L }
+        val next=SubscriptionUpdater.begin(updated,landingGroup,"remove-landing",3000)
+        val removed=SubscriptionUpdater.apply(next,next.groups.first { it.id==2L },listOf(ParsedNode("新落地",outbound.replace("edge.example","new.example"))),"",4000) { 99 }
+        assertEquals(20L,removed.groups.first { it.id==2L }.landingProxy)
+        assertTrue("丢失依赖的独立链必须保留供修复",removed.nodes.any { it.id==30L })
+        assertEquals("node:20",JSONObject(removed.nodes.first { it.id==10L }.metadata).getJSONObject("chain").getString("landing"))
+        assertTrue(JSONObject(removed.toJson()).similar(JSONObject(AppData.fromJson(removed.toJson()).toJson())))
+    }
+    @Test fun clonedChainHopsUseTheirSourceGroupsServerDns() {
+        val root=JSONObject("""{"outbounds":[{"type":"trojan","tag":"node-10","server":"landing.example"},{"type":"trojan","tag":"chain-10-front-20","server":"front.example"}],"dns":{"servers":[]}}""")
+        val data=AppData(nodes=listOf(Node(10,1,"主体",outbound),Node(20,2,"附加",outbound)),groups=listOf(group.copy(options="""{"serverDnsResolver":"tcp://192.0.2.1"}"""),Group(2,"附加组",options="""{"serverDnsResolver":"tcp://192.0.2.2"}""")))
+        SubscriptionDnsOptions.apply(root,data,mapOf("node-10" to 20L,"chain-10-front-20" to 20L))
+        val outs=root.getJSONArray("outbounds")
+        repeat(outs.length()) { assertEquals("subscription-dns-2",outs.getJSONObject(it).getString("domain_resolver")) }
+        assertEquals(1,root.getJSONObject("dns").getJSONArray("servers").length())
+    }
     @Test fun automaticUpdateCannotOverwriteAnInflightLeaseOrNewerData() {
         val initial=AppData(groups=listOf(group))
         val first=SubscriptionUpdater.begin(initial,group,"automatic-a",1000,automatic=true)

@@ -3,6 +3,7 @@ package com.zane.zanebox.runtime
 import com.zane.zanebox.config.ConfigBuilder
 import com.zane.zanebox.config.normalizeSmartTarget
 import com.zane.zanebox.config.smartTarget
+import com.zane.zanebox.config.effectiveChainTargets
 import com.zane.zanebox.data.AppData
 import org.json.JSONObject
 
@@ -93,7 +94,19 @@ internal class TargetPlan private constructor(
                 }
                 groups[node.groupId]?.let { group ->
                     usedGroups.add(group.id)
-                    listOf(group.frontProxy,group.landingProxy).filter { it>0 }.forEach { queue.add(it) }
+                    val targets=effectiveChainTargets(data,node)
+                    listOf(targets.front,targets.landing).forEach { target ->
+                        val targetId=target.substringAfter(':').toLongOrNull()
+                        when {
+                            target.startsWith("node:") && targetId!=null -> queue.add(targetId)
+                            target.startsWith("group:") && targetId!=null -> {
+                                usedGroups.add(targetId)
+                                val candidates=data.nodes.filter { it.groupId==targetId }
+                                lookups.add("chain/$target="+candidates.map { it.id }.sorted().joinToString(","))
+                                candidates.forEach { queue.add(it.id) }
+                            }
+                        }
+                    }
                 }
             }
             return listOf(seen.map { id -> nodes[id]?.let { listOf(it.id,it.groupId,it.outbound,it.metadata) } },
