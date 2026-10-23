@@ -95,7 +95,7 @@ object SubscriptionParser {
         val uri = ShareUri.parse(raw); val q = uri.query; val type = when (scheme) { "hy2", "hysteria2" -> "hysteria2"; "socks", "socks4", "socks4a", "socks5" -> "socks"; "https" -> "http"; else -> scheme }
         require(type in listOf("vless", "trojan", "hysteria", "hysteria2", "tuic", "socks", "http", "ssh", "anytls", "shadowtls", "juicity", "snell")) { "暂不支持分享协议 $scheme；可导入完整 sing-box JSON" }
         val o = JSONObject().put("type", type).put("server", uri.host).put("server_port", if (uri.port > 0) uri.port else when(type) { "socks"->1080;"ssh"->22;"http"->if(scheme=="https")443 else 80;else->443 })
-        val user = decoded(uri.rawUserInfo.orEmpty()); val parts = user.split(':', limit = 2)
+        val user = if(scheme in listOf("socks", "socks5")) ShareUri.socksUserInfo(uri.rawUserInfo) else decoded(uri.rawUserInfo.orEmpty()); val parts = user.split(':', limit = 2)
         when (type) {
             "vless" -> { require(user.isNotBlank()) { "VLESS 缺少 UUID" }; o.put("uuid", user); q["flow"]?.takeIf { it.isNotBlank() }?.let { o.put("flow", it) } }
             "shadowtls" -> { o.put("password", user).put("version", (q["version"] ?: "3").toInt()) }

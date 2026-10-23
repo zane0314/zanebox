@@ -1,6 +1,7 @@
 package com.zane.zanebox.data
 
 import com.zane.zanebox.config.syncDerivedChains
+import com.zane.zanebox.subscription.repairLegacySocksCredentials
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -63,21 +64,31 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
         val (revision,statusRevision,kvRevision)=db.rawQuery("SELECT revision,status_revision,kv_revision FROM state WHERE id=1",null).use { require(it.moveToFirst());Triple(it.getLong(0),it.getLong(1),it.getLong(2)) }
         val old=cache
         if(old!=null && old.revision==revision && old.statusRevision==statusRevision && old.kvRevision==kvRevision) return old
+        var loadedRevision=revision
         val baseJson:String;val base:AppData
         if(old!=null && old.revision==revision) { baseJson=old.baseJson;base=old.base }
-        else { baseJson=db.rawQuery("SELECT payload FROM state WHERE id=1",null).use { require(it.moveToFirst());it.getString(0) };base=AppData.fromJson(baseJson) }
+        else {
+            val raw=db.rawQuery("SELECT payload FROM state WHERE id=1",null).use { require(it.moveToFirst());it.getString(0) }
+            val parsed=AppData.fromJson(raw);base=repairSocks(parsed)
+            baseJson=if(base==parsed)raw else base.toJson()
+            if(baseJson!=raw) {
+                db.execSQL("UPDATE state SET payload=?,revision=revision+1 WHERE id=1",arrayOf(baseJson))
+                loadedRevision++
+            }
+        }
         val status=if(old!=null && old.statusRevision==statusRevision) old.status else HashMap<Long,NodeState>().also { map ->
             db.rawQuery("SELECT node_id,ping,status,tx,rx FROM node_status",null).use { c -> while(c.moveToNext()) map[c.getLong(0)]=NodeState(c.getInt(1),c.getInt(2),c.getLong(3),c.getLong(4)) }
         }
         val kv=if(old!=null && old.kvRevision==kvRevision) old.kv else HashMap(old?.kv ?: emptyMap()).also { map ->
             db.rawQuery("SELECT key,value FROM kv WHERE revision>?",arrayOf((old?.kvRevision ?: -1L).toString())).use { c -> while(c.moveToNext()) { if(c.isNull(1)) map.remove(c.getString(0)) else map[c.getString(0)]=c.getString(1) } }
         }
-        return Cache(revision,statusRevision,kvRevision,base,baseJson,status,kv).also { cache=it }
+        // A repair can still roll back with its caller; do not cache its uncommitted revision.
+        return Cache(loadedRevision,statusRevision,kvRevision,base,baseJson,status,kv).also { if(loadedRevision==revision)cache=it }
     }
     @Synchronized fun snapshot():AppData {
         val db=readableDatabase
         db.beginTransactionNonExclusive()
-        return try { load(db).merged } finally {db.endTransaction()}
+        return try { load(db).merged.also { db.setTransactionSuccessful() } } finally {db.endTransaction()}
     }
     /** Startup mode/boot flags do not need a complete AppData snapshot. Call off the main thread. */
     @Synchronized fun readSetting(key:String,default:String=""):String = readableDatabase.rawQuery("SELECT value FROM kv WHERE key=?",arrayOf(key)).use { if(it.moveToFirst() && !it.isNull(0))it.getString(0) else default }
@@ -87,7 +98,7 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
         val next:Cache
         try {
             val current=load(db)
-            val transformed=transform(current.merged)
+            val transformed=repairSocks(transform(current.merged))
             val largest=(transformed.nodes.map { it.id }+transformed.groups.map { it.id }+transformed.rules.map { it.id }+transformed.merges.map { it.id }).maxOrNull() ?: 0
             db.execSQL("UPDATE sequence SET value=MAX(value,?) WHERE id=1",arrayOf(largest))
             val result=transformed.syncDerivedChains(allocateId=this::nextId).validate(current.merged)
@@ -176,6 +187,10 @@ class ZaneStore(context:Context,databaseName:String="zanebox.db",autoLoad:Boolea
     }
     private companion object {
         val DEFAULT=NodeState()
+        fun repairSocks(data:AppData):AppData {
+            val nodes=data.nodes.map(::repairLegacySocksCredentials)
+            return if(nodes==data.nodes)data else data.copy(nodes=nodes)
+        }
         fun split(data:AppData):Triple<AppData,Map<Long,NodeState>,Map<String,String>> {
             val status=HashMap<Long,NodeState>()
             val nodes=data.nodes.map { n -> val value=NodeState(n.ping,n.status,n.tx,n.rx);if(value==DEFAULT) n else { status[n.id]=value;n.copy(ping=-1,status=0,tx=0,rx=0) } }

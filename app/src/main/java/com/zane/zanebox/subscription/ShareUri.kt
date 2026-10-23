@@ -1,6 +1,9 @@
 package com.zane.zanebox.subscription
 
 import java.net.URLDecoder
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
+import java.util.Base64
 
 /**
  * Share links in the wild often carry raw spaces, emoji, '%' or '|' that java.net.URI rejects.
@@ -36,6 +39,19 @@ internal data class ShareUri(val scheme:String,val rawUserInfo:String?,val host:
             return ShareUri(scheme,userInfo,host,port,path,query,fragment)
         }
         fun decode(value:String):String = try { URLDecoder.decode(value.replace("+","%2B"),"UTF-8") } catch(_:IllegalArgumentException) { value }
+        fun socksUserInfo(raw:String?):String {
+            val value=decode(raw.orEmpty())
+            if(value.contains(':') || value.isEmpty()) return value
+            return runCatching {
+                require(value.matches(Regex("[A-Za-z0-9+/_-]+={0,2}")))
+                val normalized=value.replace('-', '+').replace('_', '/')
+                val bytes=Base64.getDecoder().decode(normalized)
+                require(Base64.getEncoder().encodeToString(bytes).trimEnd('=')==normalized.trimEnd('='))
+                val decoded=Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
+                require(decoded.contains(':') && decoded.none { it.isISOControl() })
+                decoded
+            }.getOrDefault(value)
+        }
         fun parseQuery(raw:String?):Map<String,String> = raw.orEmpty().split('&').filter { it.isNotEmpty() }.associate { decode(it.substringBefore('=')) to decode(it.substringAfter('=',"")) }
     }
 }
