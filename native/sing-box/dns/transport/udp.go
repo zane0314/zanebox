@@ -70,8 +70,10 @@ func NewUDPRaw(logger logger.ContextLogger, adapter dns.TransportAdapter, dialer
 			}
 			return conn, nil
 		},
-		write:    t.writeQuery,
-		readNext: t.readResponse,
+		write:          t.writeQuery,
+		readNext:       t.readResponse,
+		retryReadError: true,
+		probeReuse:     true,
 	})
 	return t
 }

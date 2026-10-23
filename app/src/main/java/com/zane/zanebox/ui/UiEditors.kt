@@ -132,7 +132,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
     var typeChoice by remember{mutableStateOf(false)};var groupChoice by remember{mutableStateOf(false)}
     var error by remember{mutableStateOf("")}
     val type=JSONObject(outbound).optString("type")
-    val protocols=listOf("socks","http","shadowsocks","vmess","vless","trojan","trojan-go","hysteria","hysteria2","tuic","anytls","ssh","wireguard","juicity","snell","shadowtls","chain","custom")
+    val protocols=listOf("socks","http","shadowsocks","vmess","vless","trojan","trojan-go","hysteria","hysteria2","tuic","anytls","ssh","wireguard","juicity","snell","shadowtls","ninja","chain","custom")
     fun field(title:String,path:String,kind:String="text",choices:List<String> = emptyList())=NodeField(title,path,kind,choices)
     val fields=buildList {
         if(type in listOf("chain","custom"))return@buildList
@@ -140,7 +140,7 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         if(type in listOf("vmess","vless","tuic","juicity"))add(field("UUID","uuid"))
         if(type in listOf("socks","http","naive","mieru"))add(field("用户名","username"))
         if(type=="ssh")add(field("用户名","user"))
-        if(type in listOf("shadowsocks","shadowsocksr","trojan","hysteria2","tuic","anytls","socks","http","ssh","naive","mieru","juicity","shadowtls"))add(field("密码","password","password"))
+        if(type in listOf("shadowsocks","shadowsocksr","trojan","hysteria2","tuic","anytls","socks","http","ssh","naive","mieru","juicity","shadowtls","ninja"))add(field("密码","password","password"))
         if(type in listOf("shadowsocks","shadowsocksr"))add(field("加密方法","method",choices=listOf("2022-blake3-aes-128-gcm","2022-blake3-aes-256-gcm","aes-128-gcm","aes-256-gcm","chacha20-ietf-poly1305","none")))
         if(type=="vmess"){add(field("加密方式","security",choices=listOf("auto","aes-128-gcm","chacha20-poly1305","none","zero")));add(field("Alter ID","alter_id","number"))}
         if(type=="vless")add(field("Flow","flow",choices=listOf("","xtls-rprx-vision")))
@@ -154,6 +154,13 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
         if(type=="wireguard"){add(field("本机地址","local_address","list"));add(field("私钥","private_key","password"));add(field("对端公钥","peer_public_key"));add(field("预共享密钥","pre_shared_key","password"));add(field("MTU","mtu","number"));add(field("保留字节","reserved","reserved"))}
         if(type=="shadowsocksr"){add(field("协议","protocol"));add(field("协议参数","protocol_param"));add(field("混淆","obfs"));add(field("混淆参数","obfs_param"))}
         if(type=="snell"){add(field("PSK","psk","password"));add(field("版本","version","number"))}
+        if(type=="ninja"){
+            add(field("加密方法","method",choices=listOf("aes-128-gcm")));add(field("节点密码","node_password","password"));add(field("启用 pass","pass","bool"))
+            if(nodeField(outbound,"pass")=="true"){
+                add(field("Pass 加密方法","pass_options.method",choices=listOf("aes-128-gcm")));add(field("Pass 密码","pass_options.password","password"))
+                add(field("填充最小值","pass_options.padding_min","number"));add(field("填充模式","pass_options.padding_mode"));add(field("填充随机最大值","pass_options.padding_random_max","number"))
+            }
+        }
         if(type=="shadowtls")add(field("版本","version","number"))
         if(type in listOf("vmess","vless","trojan")) {
             add(field("传输协议","transport.type",choices=listOf("","ws","http","httpupgrade","grpc","xhttp")))
@@ -162,6 +169,10 @@ internal fun updateRuleField(text:String,key:String,value:String):String=JSONObj
                 "http"->{add(field("Host","transport.host","list"));add(field("路径","transport.path"))}
                 "grpc"->add(field("服务名称","transport.service_name"))
             }
+        }
+        if(type=="ninja") {
+            add(field("传输协议","transport.type",choices=listOf("","ws")))
+            if(nodeField(outbound,"transport.type")=="ws"){add(field("路径","transport.path"));add(field("Host","transport.headers.Host"))}
         }
         if(type !in listOf("wireguard","shadowsocksr","snell","ssh")) {
             add(field("启用 TLS","tls.enabled","bool"))

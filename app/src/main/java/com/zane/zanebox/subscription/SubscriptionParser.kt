@@ -237,10 +237,16 @@ object SubscriptionParser {
             else -> transport(o, mapOf("type" to network, "path" to (firstString(opts["path"]) ?: "/"), "host" to (firstString(headers["Host"]) ?: "")))
         }
     }
+    private fun clashInteger(value: Any?, name: String): Int {
+        val number = value as? Number ?: error("$name 须为整数")
+        val decimal = number.toDouble()
+        require(decimal.isFinite() && decimal % 1.0 == 0.0 && decimal >= Int.MIN_VALUE.toDouble() && decimal <= Int.MAX_VALUE.toDouble()) { "$name 须为整数" }
+        return decimal.toInt()
+    }
     private fun clash(m: Map<*, *>): ParsedNode {
         fun s(key: String, fallback: String = "") = m[key]?.toString() ?: fallback
         val type = when (s("type")) { "ss" -> "shadowsocks"; "socks5" -> "socks"; else -> s("type") }
-        require(type in listOf("shadowsocks", "vmess", "vless", "trojan", "socks", "http", "hysteria", "hysteria2", "tuic", "anytls", "wireguard", "ssh", "snell", "juicity")) { "Clash 协议 $type 暂不兼容；请使用 sing-box JSON" }
+        require(type in listOf("shadowsocks", "vmess", "vless", "trojan", "socks", "http", "hysteria", "hysteria2", "tuic", "anytls", "wireguard", "ssh", "snell", "juicity", "ninja")) { "Clash 协议 $type 暂不兼容；请使用 sing-box JSON" }
         val o = JSONObject().put("type", type).put("server", s("server")).put("server_port", s("port", s("server-port")).toInt())
         val keys = mapOf("password" to "password", "uuid" to "uuid", "flow" to "flow", "username" to if(type=="ssh")"user" else "username", "udp-relay-mode" to "udp_relay_mode", "congestion-controller" to "congestion_control")
         keys.forEach { (from, to) -> m[from]?.let { o.put(to, it) } }
@@ -269,6 +275,40 @@ object SubscriptionParser {
             val peer=JSONObject().put("address", s("server")).put("port", s("port").toInt()).put("public_key", s("public-key")).put("allowed_ips", JSONArray(listOf("0.0.0.0/0", "::/0")))
             m["pre-shared-key"]?.let { peer.put("pre_shared_key", it) }; (m["reserved"] as? List<*>)?.let { peer.put("reserved", JSONArray(it)) }
             o.put("peers", JSONArray().put(peer)); o.remove("server"); o.remove("server_port"); m["mtu"]?.let { o.put("mtu", it) }
+        }
+        if (type == "ninja") {
+            require(s("server").isNotBlank()) { "Ninja 节点缺少服务器" }
+            require(m["tls"] == true) { "Ninja 仅支持 TLS" }
+            val network = m["network"]?.toString() ?: "tcp"
+            require(network in listOf("tcp", "ws")) { "Ninja 仅支持 tcp/ws 传输" }
+            val method = s("method"); val password = s("password"); val nodePassword = s("node_password")
+            require(method.isNotBlank()) { "Ninja 节点缺少加密方法" }
+            require(password.isNotBlank()) { "Ninja 节点缺少密码" }
+            require(nodePassword.isNotBlank()) { "Ninja 节点缺少节点密码" }
+            val pass = m["pass"]
+            require(pass is Boolean) { "Ninja pass 须为布尔值" }
+            o.put("method", method).put("password", password).put("node_password", nodePassword).put("pass", pass)
+            if (pass) {
+                val opts = m["pass-opts"] as? Map<*, *> ?: error("Ninja pass 缺少 pass-opts")
+                val passMethod = opts["method"]?.toString().orEmpty(); val passPassword = opts["password"]?.toString().orEmpty()
+                require(passMethod.isNotBlank()) { "Ninja pass 缺少加密方法" }
+                require(passPassword.isNotBlank()) { "Ninja pass 缺少密码" }
+                val paddingMin = clashInteger(opts["padding_min"], "Ninja pass padding_min")
+                val paddingMax = clashInteger(opts["padding_random_max"], "Ninja pass padding_random_max")
+                require(paddingMin in 0..65535 && paddingMax in 0..65535) { "Ninja pass 填充值超出范围" }
+                require(paddingMin + paddingMax <= 65535) { "Ninja pass 填充总量超限" }
+                val paddingMode = opts["padding_mode"]?.toString().orEmpty()
+                require(paddingMode in listOf("min", "random", "min_random")) { "Ninja pass 填充模式无效" }
+                o.put("pass_options", JSONObject().put("method", passMethod).put("password", passPassword).put("padding_min", paddingMin).put("padding_random_max", paddingMax).put("padding_mode", paddingMode))
+            }
+            val udpOverTcp = m["udp-over-tcp"]; val udp = m["udp"]
+            require(udpOverTcp == null || udpOverTcp is Boolean) { "Ninja udp-over-tcp 须为布尔值" }
+            require(udp == null || udp is Boolean) { "Ninja udp 须为布尔值" }
+            if (udpOverTcp == true && udp != false) {
+                val version = if (!m.containsKey("udp-over-tcp-version")) 2 else clashInteger(m["udp-over-tcp-version"], "Ninja UDP over TCP 版本")
+                require(version == 2) { "Ninja 仅支持 UDP over TCP 版本 2" }
+                o.put("udp_over_tcp", JSONObject().put("enabled", true).put("version", version))
+            }
         }
         if(type in listOf("hysteria","hysteria2")) {
             (m["ports"] ?: m["mport"] ?: m["server_ports"])?.toString()?.let { applyHysteriaPorts(o,it) }
