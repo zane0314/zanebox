@@ -32,6 +32,11 @@ type V2RayTransportOptions struct {
 	XHTTPOptions xhttp.V2RayXHTTPOptions `json:"-"`
 }
 
+func (o *V2RayTransportOptions) DownloadServerIsDomain() bool {
+	return o != nil && o.Type == xhttp.V2RayTransportTypeXHTTP && o.XHTTPOptions.Download != nil &&
+		o.XHTTPOptions.Download.Detour == "" && o.XHTTPOptions.Download.ServerIsDomain()
+}
+
 func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
 	var raw struct {
 		Type string `json:"type"`
@@ -95,7 +100,7 @@ type Outbound struct {
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options VLESSOutboundOptions) (adapter.Outbound, error) {
-	outboundDialer, err := dialer.New(ctx, options.DialerOptions, options.ServerIsDomain())
+	outboundDialer, err := dialer.New(ctx, options.DialerOptions, options.ServerIsDomain() || options.Transport.DownloadServerIsDomain())
 	if err != nil {
 		return nil, err
 	}

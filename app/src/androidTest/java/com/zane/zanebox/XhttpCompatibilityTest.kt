@@ -39,8 +39,12 @@ class XhttpCompatibilityTest {
     @Test fun importedXhttpOptionsReachTheRealNativeDecoder() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val extra = """{"xPaddingBytes":0,"noGRPCHeader":true,"scMaxEachPostBytes":65536,"scMinPostsIntervalMs":"10-20","xmux":{"maxConcurrency":2,"hMaxRequestTimes":100}}"""
+        val split = """{"downloadSettings":{"address":"127.0.0.1","port":18443,"network":"xhttp","xhttpSettings":{"host":"down.example.test","path":"/down","mode":"packet-up"}}}"""
+        val splitTls = JSONObject(split).apply { getJSONObject("downloadSettings").put("security", "tls").put("tlsSettings", JSONObject("""{"serverName":"down-sni.example.test","alpn":["http/1.1"],"fingerprint":"firefox"}""")) }.toString()
         val samples = listOf(
             "vless://11111111-1111-4111-8111-111111111111@127.0.0.1:443?security=tls&sni=example.test&alpn=h2&type=xhttp&mode=packet-up&host=example.test&path=%2Fxhttp&extra=${URLEncoder.encode(extra, "UTF-8")}",
+            "vless://11111111-1111-4111-8111-111111111111@127.0.0.1:443?security=tls&sni=example.test&alpn=h2&type=xhttp&mode=packet-up&extra=${URLEncoder.encode(split, "UTF-8")}",
+            "vless://11111111-1111-4111-8111-111111111111@127.0.0.1:443?security=tls&sni=example.test&alpn=h2&type=xhttp&mode=stream-up&extra=${URLEncoder.encode(splitTls, "UTF-8")}",
             """proxies:
               - {name: fixture, type: vless, server: 127.0.0.1, port: 443, uuid: 11111111-1111-4111-8111-111111111111, tls: true, servername: example.test, alpn: [h2], network: xhttp, xhttp-opts: {host: example.test, path: /xhttp, mode: stream-up, extra: {noGRPCHeader: true, scMaxEachPostBytes: 65536, xmux: {maxConcurrency: 2}}}}
             """.trimIndent()
@@ -59,5 +63,25 @@ class XhttpCompatibilityTest {
                 assertEquals("原生拒绝导入结果 $key", "", client.validationResults.value[key])
             }
         } finally { client.close() }
+    }
+
+    @Test fun suppliedSplitSubscriptionParsesAndValidatesAllFiveNodes() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("xhttpSplitSource") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val report = SubscriptionParser.parseReport(File(context.filesDir, "xhttp-split-source.txt").readText())
+        assertEquals(5, report.nodes.size); assertEquals(0, report.skipped)
+        report.nodes.forEach { parsed ->
+            val o = JSONObject(parsed.outbound); val tr = o.getJSONObject("transport"); val down = tr.getJSONObject("download")
+            assertTrue(o.getString("server").contains(':')); assertTrue(o.getJSONObject("tls").getBoolean("enabled"))
+            assertEquals("h2", o.getJSONObject("tls").getJSONArray("alpn").getString(0))
+            assertEquals(18443, down.getInt("server_port")); assertEquals(tr.getString("path"), down.getString("path"))
+            assertEquals(tr.getString("host"), down.getString("host")); assertFalse(down.has("tls"))
+        }
+        val data = AppData(nodes = report.nodes.mapIndexed { i, n -> Node((i + 1).toLong(), 1, n.name, n.outbound, n.shareLink) }, groups = listOf(Group(1, "split-source")), settings = mapOf("ipv6" to "true"))
+        val platform = NativePlatform(context, null) { _, _ -> }
+        platform.initialize()
+        try { SingBoxEngine(platform).validate(ConfigBuilder.build(data, Purpose.TEST, 1)) }
+        finally { platform.close() }
+        File(context.filesDir, "xhttp-split-appdata.json").writeText(data.toJson())
     }
 }

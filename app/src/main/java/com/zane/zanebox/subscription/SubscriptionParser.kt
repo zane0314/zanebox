@@ -176,6 +176,96 @@ object SubscriptionParser {
     }
     private fun firstString(value: Any?): String? = when (value) { null -> null; is List<*> -> value.firstOrNull()?.toString(); else -> value.toString() }
     private fun stringList(value: Any?): List<String> = when (value) { null -> emptyList(); is List<*> -> value.mapNotNull { it?.toString() }; else -> splitHosts(value.toString()) }
+    private fun xhttpDownload(source: JSONObject): JSONObject {
+        fun keys(obj: JSONObject, allowed: Set<String>, scope: String) {
+            obj.keys().asSequence().firstOrNull { it !in allowed }?.let { error("XHTTP $scope 暂不支持字段 $it") }
+        }
+        fun text(obj: JSONObject, key: String, fallback: String = ""): String {
+            if (!obj.has(key)) return fallback
+            val value = obj.get(key)
+            require(value is String) { "XHTTP downloadSettings.$key 必须是字符串" }
+            return value
+        }
+        fun range(value: Any): Boolean {
+            val ends = when (value) {
+                is String -> value.split('-').let { parts -> if (parts.size !in 1..2) return false else listOf(parts.first().toIntOrNull(), parts.last().toIntOrNull()) }
+                is JSONObject -> {
+                    if (value.keys().asSequence().any { it !in setOf("from", "to") }) return false
+                    listOf("from", "to").map { key -> if (!value.has(key)) 0 else value.get(key).let { if (it is Number) it.toString().toIntOrNull() else null } }
+                }
+                else -> return false
+            }
+            return ends[0] != null && ends[1] != null && ends[0]!! <= ends[1]!!
+        }
+        fun values(obj: JSONObject, ranges: Set<String>) {
+            obj.keys().asSequence().forEach { key ->
+                val value = obj.get(key)
+                val valid = when (key) {
+                    in ranges -> range(value)
+                    "headers" -> value is JSONObject && value.keys().asSequence().all { value.get(it) is String }
+                    "xmux" -> value is JSONObject
+                    "no_grpc_header", "no_sse_header" -> value is Boolean
+                    "sc_max_buffered_posts", "h_keep_alive_period" -> value is Number && value.toString().toLongOrNull() != null
+                    else -> value is String
+                }
+                require(valid) { "XHTTP downloadSettings.$key 格式无效" }
+            }
+        }
+        keys(source, setOf("address", "port", "network", "security", "tlsSettings", "realitySettings", "xhttpSettings"), "downloadSettings")
+        require(text(source, "network") in listOf("xhttp", "splithttp")) { "XHTTP downloadSettings.network 必须为 xhttp" }
+        val address = text(source, "address")
+        require(address.isNotBlank()) { "XHTTP downloadSettings.address 不能为空" }
+        val port = source.opt("port")?.toString()?.toIntOrNull()
+        require(port != null && port in 1..65535) { "XHTTP downloadSettings.port 无效" }
+        val settings = if (source.has("xhttpSettings")) source.getJSONObject("xhttpSettings") else JSONObject()
+        val extra = if (settings.has("extra")) settings.getJSONObject("extra") else JSONObject()
+        val fields = mutableMapOf<String, String>()
+        settings.keys().asSequence().filter { it != "extra" }.forEach { key ->
+            if (key in listOf("host", "path", "mode")) fields[key] = text(settings, key)
+            else if (!extra.has(key)) extra.put(key, settings.get(key))
+        }
+        require(!extra.has("downloadSettings") && !extra.has("download")) { "XHTTP downloadSettings 不允许嵌套下行" }
+        require(!extra.has("type")) { "XHTTP downloadSettings.xhttpSettings 暂不支持字段 type" }
+        listOf("host", "path", "mode").filter { it !in fields && extra.has(it) }.forEach { text(extra, it) }
+        val down = xhttpTransport(extra, fields).apply { remove("type") }
+        keys(down, setOf("host", "path", "mode", "headers", "domain_strategy", "x_padding_bytes", "no_grpc_header", "no_sse_header", "sc_max_each_post_bytes", "sc_min_posts_interval_ms", "sc_max_buffered_posts", "sc_stream_up_server_secs", "xmux"), "downloadSettings.xhttpSettings")
+        values(down, setOf("x_padding_bytes", "sc_max_each_post_bytes", "sc_min_posts_interval_ms", "sc_stream_up_server_secs"))
+        require(down.getString("mode").trim() in listOf("", "auto", "packet-up", "stream-up", "stream-one")) { "XHTTP downloadSettings.mode 无效" }
+        down.optJSONObject("xmux")?.let {
+            keys(it, setOf("max_concurrency", "max_connections", "c_max_reuse_times", "h_max_request_times", "h_max_reusable_secs", "h_keep_alive_period"), "downloadSettings.xmux")
+            values(it, setOf("max_concurrency", "max_connections", "c_max_reuse_times", "h_max_request_times", "h_max_reusable_secs"))
+        }
+        down.put("server", address).put("server_port", port)
+        val security = text(source, "security", "none")
+        require(security in listOf("", "none", "tls", "reality")) { "XHTTP downloadSettings.security 暂不支持" }
+        listOf("tls", "reality").filter { it != security }.forEach { unused ->
+            require(!source.has("${unused}Settings")) { "XHTTP downloadSettings.${unused}Settings 与 security 不符" }
+        }
+        if (security == "tls" || security == "reality") {
+            val key = "${security}Settings"
+            val tlsSettings = if (source.has(key)) source.getJSONObject(key) else JSONObject()
+            keys(tlsSettings, if (security == "tls") setOf("serverName", "allowInsecure", "alpn", "fingerprint") else setOf("serverName", "fingerprint", "publicKey", "shortId"), "downloadSettings.$key")
+            val tls = JSONObject().put("enabled", true).put("server_name", text(tlsSettings, "serverName").ifBlank { address })
+            if (tlsSettings.has("allowInsecure")) {
+                val insecure = tlsSettings.get("allowInsecure")
+                require(insecure is Boolean) { "XHTTP downloadSettings.allowInsecure 必须是布尔值" }
+                tls.put("insecure", insecure)
+            }
+            if (tlsSettings.has("alpn")) {
+                val alpn = tlsSettings.getJSONArray("alpn")
+                require((0 until alpn.length()).all { alpn.get(it) is String }) { "XHTTP downloadSettings.alpn 必须是字符串列表" }
+                tls.put("alpn", alpn)
+            }
+            if (security == "reality") {
+                val publicKey = text(tlsSettings, "publicKey")
+                require(publicKey.isNotBlank()) { "XHTTP downloadSettings.publicKey 不能为空" }
+                tls.put("reality", JSONObject().put("enabled", true).put("public_key", publicKey).put("short_id", text(tlsSettings, "shortId")))
+            }
+            utls(tls, text(tlsSettings, "fingerprint"))
+            down.put("tls", tls)
+        }
+        return down
+    }
     private fun xhttpTransport(extra: JSONObject, fields: Map<String, String>): JSONObject {
         // Only rename known XHTTP options; headers and their values are opaque.
         fun aliases(obj: JSONObject, keys: Map<String, String>, ranges: Set<String>) {
@@ -198,11 +288,16 @@ object SubscriptionParser {
                 "hMaxRequestTimes" to "h_max_request_times", "hMaxReusableSecs" to "h_max_reusable_secs", "hKeepAlivePeriod" to "h_keep_alive_period"
             ), setOf("max_concurrency", "max_connections", "c_max_reuse_times", "h_max_request_times", "h_max_reusable_secs"))
         }
-        require(!extra.has("downloadSettings")) { "XHTTP downloadSettings 暂不兼容；请使用含 transport.download 的 sing-box JSON" }
         extra.put("type", "xhttp")
         listOf("path" to "/", "host" to "", "mode" to "auto").forEach { (key, fallback) ->
             extra.put(key, fields[key] ?: extra.optString(key, fallback))
         }
+        if (extra.has("downloadSettings")) {
+            require(!extra.has("download")) { "XHTTP downloadSettings 与 download 不能同时使用" }
+            extra.put("download", xhttpDownload(extra.getJSONObject("downloadSettings")))
+            extra.remove("downloadSettings")
+        }
+        if (extra.has("download")) require(extra.getString("mode").trim() in listOf("", "auto", "packet-up", "stream-up")) { "XHTTP 独立下行不能使用 stream-one 或未知 mode" }
         return extra
     }
     private fun clashTransport(o: JSONObject, m: Map<*, *>) {
